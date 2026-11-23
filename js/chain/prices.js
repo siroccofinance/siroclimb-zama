@@ -35,7 +35,7 @@ export async function pythFor(market) {
  * A bounded public price for `market` to ride along with startRun (0 when the last checkpoint is
  * fresh enough), clamped to the oracle's +/-0.5 % so the push cannot be refused for its size.
  */
-export async function fallbackFor(market, fresh = 15) {
+export async function fallbackFor(market, fresh = 0) {
   const [, ts, last] = await oracle.latest(market);
   if (Date.now() / 1000 - Number(ts) < fresh) return 0n;
   const ref = feed.refPrice(market);

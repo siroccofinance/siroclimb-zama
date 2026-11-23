@@ -10,7 +10,7 @@
 import { BrowserProvider, Contract, JsonRpcProvider, Wallet, getBytes, keccak256, parseEther, formatEther, toUtf8Bytes } from '../vendor/ethers-6.17.0.min.js';
 import { ABI, ADDR, CHAIN_HEX, CHAIN_ID, RPC_URL, SESSION_FUND_ETH, SESSION_MIN_ETH } from './config.js';
 
-export const rpc = new JsonRpcProvider(RPC_URL, CHAIN_ID, { staticNetwork: true, batchMaxCount: 1, cacheTimeout: -1 });
+export const rpc = new JsonRpcProvider(RPC_URL, CHAIN_ID, { staticNetwork: true, batchMaxCount: 1, cacheTimeout: -1, pollingInterval: 1000 });
 export const game = new Contract(ADDR.Siroclimb, ABI.Siroclimb, rpc);
 export const oracle = new Contract(ADDR.ClimbPriceOracle, ABI.ClimbPriceOracle, rpc);
 export const token = new Contract(ADDR.StakeToken, ABI.ERC7984, rpc);
