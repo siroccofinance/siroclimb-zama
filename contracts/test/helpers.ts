@@ -7,34 +7,24 @@ import type {
   ClimbLadder,
   ClimbPriceOracle,
   ConfidentialTokenWrapper,
-  MintableERC20Mock,
+  MirrorToken,
   MockPyth,
   Siroclimb,
 } from "../types";
 
-/** Market order on chain: real world assets first (stocks, gold, FX), then crypto. */
-export const MARKETS = ["TSLAx", "NVDAx", "AAPLx", "XAUt", "tGBP", "ETH", "BTC"] as const;
-export const [TSLA, NVDA, AAPL, XAUT, GBP, ETH, BTC] = [0, 1, 2, 3, 4, 5, 6];
-/** Pyth feeds (vs USD): Equity.US.TSLA/NVDA/AAPL, XAUT, FX.GBP, ETH, WBTC. */
+/** Market order on chain: stocks and real world assets. */
+export const MARKETS = ["TSLAx", "NVDAx", "AAPLx", "XAUt", "tGBP"] as const;
+export const [TSLA, NVDA, AAPL, XAUT, GBP] = [0, 1, 2, 3, 4];
+/** Pyth feeds (vs USD): Equity.US.TSLA / NVDA / AAPL, Crypto.XAUT, FX.GBP. */
 export const PYTH_FEEDS = [
   "0x16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1",
   "0xb1073854ed24cbc755dc527418f52b7d271f6cc967bbf8d8129112b18860a593",
   "0x49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688",
   "0x44465e17d2e9d390e70c999d5a11fda4f092847fcd2e3e5aa089d96c98a30e67",
   "0x84c2dde9633d93d1bcad84e7dc41c9d56578b7ec52fabedc1f335d673df0a7c1",
-  "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
-  "0xc9d8b075a5c69303365ae23633d4e085199bf5c520a3b90fed1322a0342ffc33",
 ];
-/** 10-decimal prices: TSLA 386, NVDA 165, AAPL 268, XAUt 3626, GBP 1.30, ETH 1722, BTC 61400. */
-export const BASE = [
-  3_860_000_000_000n,
-  1_650_000_000_000n,
-  2_680_000_000_000n,
-  36_260_000_000_000n,
-  13_000_000_000n,
-  17_220_000_000_000n,
-  614_000_000_000_000n,
-];
+/** 10-decimal prices: TSLA 386, NVDA 165, AAPL 350, XAUt 3626, GBP 1.30. */
+export const BASE = [3_860_000_000_000n, 1_650_000_000_000n, 3_500_000_000_000n, 36_260_000_000_000n, 13_000_000_000n];
 
 export const USDC = 1_000_000n;
 export const SCALE = 1_000_000n;
@@ -42,7 +32,7 @@ export const MOVE_SCALE = 25n;
 export const ENTRY = 10n * USDC;
 export const JOIN_SECONDS = 45;
 export const RUN_SECONDS = 60;
-export const ROUND_MARKETS = [TSLA, ETH, BTC];
+export const ROUND_MARKETS = [TSLA, NVDA, AAPL, XAUT, GBP];
 export const FAUCET_AMOUNT = 1000n * USDC;
 
 export interface Fixture {
@@ -51,7 +41,7 @@ export interface Fixture {
   alice: HardhatEthersSigner;
   bob: HardhatEthersSigner;
   carol: HardhatEthersSigner;
-  usdc: MintableERC20Mock;
+  usdc: MirrorToken;
   token: ConfidentialTokenWrapper;
   faucet: ClimbFaucet;
   pyth: MockPyth;
@@ -64,10 +54,10 @@ export interface Fixture {
 
 export async function deployFixture(opts: { fund?: number } = {}): Promise<Fixture> {
   const [deployer, ...players] = await ethers.getSigners();
-  const usdc = (await (await ethers.getContractFactory("MintableERC20Mock")).deploy("USDCMock", "USDCMock", 6)) as MintableERC20Mock;
+  const usdc = (await (await ethers.getContractFactory("MirrorToken")).deploy("Test USDC", "USDC", 6)) as MirrorToken;
   const token = (await (
     await ethers.getContractFactory("ConfidentialTokenWrapper")
-  ).deploy(await usdc.getAddress(), "Confidential USDC (Mock)", "cUSDCMock")) as ConfidentialTokenWrapper;
+  ).deploy(await usdc.getAddress(), "Confidential USDC", "cUSDC")) as ConfidentialTokenWrapper;
   const faucet = (await (await ethers.getContractFactory("ClimbFaucet")).deploy(await token.getAddress(), FAUCET_AMOUNT, 600)) as ClimbFaucet;
   const pyth = (await (await ethers.getContractFactory("MockPyth")).deploy(120, 1)) as MockPyth;
   const oracle = (await (await ethers.getContractFactory("ClimbPriceOracle")).deploy(
@@ -85,7 +75,7 @@ export async function deployFixture(opts: { fund?: number } = {}): Promise<Fixtu
     ROUND_MARKETS,
   )) as Siroclimb;
   await oracle.setUpdater(deployer.address, true);
-  await oracle.pushPrices([0, 1, 2, 3, 4, 5, 6], BASE);
+  await oracle.pushPrices([0, 1, 2, 3, 4], BASE);
 
   const gameAddress = await game.getAddress();
   const tokenAddress = await token.getAddress();
