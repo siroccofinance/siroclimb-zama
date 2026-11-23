@@ -2,7 +2,7 @@
  * Verifies the Sepolia deployments on Sourcify (API v2, no key needed).
  * Usage: npm run verify:sourcify
  */
-import { readFileSync, readdirSync } from "fs";
+import { existsSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
 
 const CHAIN_ID = 11155111;
@@ -29,17 +29,22 @@ function sourceOf(contractName: string) {
 const artifactOf = (name: string) => (name.endsWith("Mirror") ? "MirrorToken" : name.startsWith("c") && name !== "cUSDC" ? "ConfidentialTokenWrapper" : name);
 
 async function main() {
-  for (const f of readdirSync(depDir).filter((x) => x.endsWith(".json"))) {
+  const only = process.argv.slice(2);
+  for (const f of readdirSync(depDir).filter((x) => x.endsWith(".json") && (!only.length || only.includes(x.replace(".json", ""))))) {
     const dep = JSON.parse(readFileSync(join(depDir, f), "utf8"));
     const name = f.replace(".json", "");
     const contractName = artifactOf(name);
     const { file, info } = sourceOf(contractName);
+    // the exact compiler input of this deployment (hardhat-deploy keeps it), not the latest build
+    const inputFile = join(depDir, "solcInputs", `${dep.solcInputHash}.json`);
+    const stdJsonInput = dep.solcInputHash && existsSync(inputFile) ? JSON.parse(readFileSync(inputFile, "utf8")) : info.input;
+    const compilerVersion = dep.metadata ? `v${JSON.parse(dep.metadata).compiler.version}` : info.solcLongVersion;
     const res = await fetch(`https://sourcify.dev/server/v2/verify/${CHAIN_ID}/${dep.address}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        stdJsonInput: info.input,
-        compilerVersion: info.solcLongVersion,
+        stdJsonInput,
+        compilerVersion: compilerVersion.replace(/^v/, ""),
         contractIdentifier: `${file}:${contractName}`,
         creationTransactionHash: dep.transactionHash,
       }),
