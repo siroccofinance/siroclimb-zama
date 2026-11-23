@@ -1,0 +1,5 @@
+{
+  "functions": {
+    "api/*.js": { "includeFiles": "js/chain/markets.json", "maxDuration": 10 }
+  }
+}
