@@ -122,6 +122,26 @@ describe("Siroclimb: solo runs", function () {
     await expect(f.game.settleRun(id)).to.be.revertedWithCustomError(f.game, "WrongRunStatus");
   });
 
+  it("a checkpoint later in the block of a cash out does not change the recorded path", async function () {
+    await price(f, AAPL, BASE[AAPL]);
+    const id = await startRun(f, f.alice, AAPL, true, 10n * USDC);
+    const run = await f.game.getRun(id);
+    await at(run.startAt, 10);
+    await price(f, AAPL, (BASE[AAPL] * 10_010n) / 10_000n);
+    // cash out, then another checkpoint in the same block
+    await ethers.provider.send("evm_setAutomine", [false]);
+    const tx1 = await f.game.connect(f.alice).cashOut(id, [], { gasLimit: 8_000_000 });
+    const tx2 = await f.oracle.pushPrices([AAPL], [(BASE[AAPL] * 9_900n) / 10_000n], { gasLimit: 500_000 });
+    await ethers.provider.send("evm_mine", []);
+    await ethers.provider.send("evm_setAutomine", [true]);
+    expect((await tx1.wait())!.blockNumber).to.eq((await tx2.wait())!.blockNumber);
+    const end = await f.game.getRun(id);
+    expect(end.exitIndex).to.eq(end.entryIndex + 1n);
+    const [l, s] = await f.ladder.multipliers(AAPL, end.entryIndex, end.exitIndex, end.startAt, 6);
+    expect([l, s]).to.deep.eq([end.multLong, end.multShort]);
+    expect(end.multLong).to.be.gt(SCALE);
+  });
+
   it("only the player (or their session) cashes out", async function () {
     const id = await startRun(f, f.alice, AAPL, true, 10n * USDC);
     await expect(f.game.connect(f.bob).cashOut(id, [])).to.be.revertedWithCustomError(f.game, "NotPlayer");

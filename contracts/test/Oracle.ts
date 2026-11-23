@@ -112,11 +112,11 @@ describe("ClimbPriceOracle and ClimbLadder", function () {
         pts.push({ t, p });
       }
       const exp = model(pts);
-      const [l, s, exit] = await f.ladder.multipliers(NVDA, i0, t0, t0 + t, 6);
+      const [l, s, exit] = await f.ladder.multipliers(NVDA, i0, i0 + 6n, t0, 6);
       expect([l, s]).to.deep.eq([exp.long, exp.short]);
       expect(exit).to.eq(p);
       const capped = model(pts, 2);
-      const [lc, sc] = await f.ladder.multipliers(NVDA, i0, t0, t0 + t, 2);
+      const [lc, sc] = await f.ladder.multipliers(NVDA, i0, i0 + 6n, t0, 2);
       expect([lc, sc]).to.deep.eq([capped.long, capped.short]);
     }
     expect(await f.ladder.ladder()).to.deep.eq([10n, 15n, 20n, 25n, 30n, 35n, 40n]);
