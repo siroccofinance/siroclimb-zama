@@ -12,7 +12,7 @@ import { ADDR, JOIN_SECONDS, LADDER, MARKETS, MAX_STAKE, MOVE_SCALE, PRICE_DECIM
 import * as feed from './feed.js';
 import { encryptRun, hasGrant, publicDecrypt, userDecrypt, warmUp } from './fhe.js';
 import * as W from './wallet.js';
-import { pushIfStale, pythFor } from './prices.js';
+import { fallbackFor, pythFor } from './prices.js';
 import * as autopilot from './autopilot.js';
 import * as bots from './bots.js';
 
@@ -85,6 +85,7 @@ function afterConnect() {
   autopilot.start(api);
   if (hasGrant(a)) refreshBalance().catch(() => {});
   game.nameOf(a).then(n => n && names.set(a.toLowerCase(), n)).catch(() => {});
+  setTimeout(() => bots.prepareAll(), 4000);       // practice bots ready before the first round
 }
 
 export function disconnect() { W.disconnectWallet(); ready = false; setBal(null); autopilot.stop(); }
@@ -170,12 +171,12 @@ export async function startRun({ mode = 'solo', assetId, side = 'long', stake })
   const s = await session();
   status({ kind: 'fhe', text: 'Encrypting your side and stake…' });
   const enc = await encryptRun(s.address, side === 'long', Math.round(stake * USDC));
-  // entry price: a fresh signed Pyth price rides along, or the bounded fallback is refreshed first
+  // entry price, in the same transaction: a fresh signed Pyth price, or a bounded public one
   const pyth = await pythFor(m);
-  if (!pyth) { status({ kind: 'chain', text: 'Refreshing the price checkpoint…' }); await pushIfStale(s, m, 20); }
+  const fallback = pyth ? 0n : await fallbackFor(m);
   status({ kind: 'chain', text: 'Sealing your run on Sepolia…' });
   let rc;
-  try { rc = await s.send(game, 'startRun', [m, enc.handles[0], enc.handles[1], enc.proof, false, pyth ? pyth.updateData : []], pyth ? pyth.fee : 0n, 'startRun'); }
+  try { rc = await s.send(game, 'startRun', [m, enc.handles[0], enc.handles[1], enc.proof, false, pyth ? pyth.updateData : [], fallback], pyth ? pyth.fee : 0n, 'startRun'); }
   catch (e) { status(null); throw new Error(friendly(e)); }
   status(null);
   const ev = parseEvent(rc, 'RunStarted');

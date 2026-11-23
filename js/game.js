@@ -261,7 +261,7 @@ function renderGo() {
   if (r.joined) { go.disabled = true; go.textContent = `Starts in ${mmss((r.startsAt - now) / 1000)}`; meta.textContent = `You are in. ${pot}`; }
   else if (r.virtual) {
     go.disabled = busy; go.textContent = busy ? 'Opening…' : !canPay(r.entry) ? 'Get test cUSDC' : `Open a round for ${r.entry} cUSDC`;
-    meta.textContent = `Next round on ${byId[r.assetId].ticker}: you open it, then 45 s for others to join. Practice bots fill empty seats.`;
+    meta.textContent = `Next round on ${byId[r.assetId].ticker}: you open it, then 60 s for others to join. Practice bots fill empty seats.`;
   }
   else if (r.status === 'open' && !r.late) {
     go.disabled = busy; go.textContent = busy ? 'Joining…' : !canPay(r.entry) ? 'Get test cUSDC' : `Join for ${r.entry} cUSDC`;

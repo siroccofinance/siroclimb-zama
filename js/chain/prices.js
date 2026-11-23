@@ -31,6 +31,19 @@ export async function pythFor(market) {
   return { updateData: b.updateData, fee, price: p.price };
 }
 
+/**
+ * A bounded public price for `market` to ride along with startRun (0 when the last checkpoint is
+ * fresh enough), clamped to the oracle's +/-0.5 % so the push cannot be refused for its size.
+ */
+export async function fallbackFor(market, fresh = 0) {
+  const [, ts, last] = await oracle.latest(market);
+  if (Date.now() / 1000 - Number(ts) < fresh) return 0n;
+  const ref = feed.refPrice(market);
+  if (!(ref > 0)) return 0n;
+  const lastP = Number(last) / 10 ** PRICE_DECIMALS;
+  return BigInt(Math.round(Math.min(lastP * (1 + MAX_MOVE), Math.max(lastP * (1 - MAX_MOVE), ref)) * 10 ** PRICE_DECIMALS));
+}
+
 /** Writes a checkpoint for `market` if the last one is older than `maxAge` seconds. Returns the source used or null. */
 export async function pushIfStale(sender, market, maxAge = 12) {
   const [, ts, last] = await oracle.latest(market);

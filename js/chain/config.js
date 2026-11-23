@@ -26,7 +26,7 @@ export const RUN_SECONDS = 60;
 export const MOVE_SCALE = 25;
 export const MAX_STAKE = 100;
 export const ROUND_ENTRY = 10;
-export const JOIN_SECONDS = 45;
+export const JOIN_SECONDS = 60;
 export const PRIZE_SPLIT = [0.5, 0.3, 0.2];
 /** Gas sent once from the wallet to the browser's session key (it pays every game transaction). */
 export const SESSION_FUND_ETH = '0.03';

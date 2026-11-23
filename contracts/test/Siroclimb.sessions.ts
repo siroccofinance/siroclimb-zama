@@ -29,7 +29,7 @@ describe("Siroclimb: sessions and packs", function () {
     await price(f, NVDA, BASE[NVDA]);
     // inputs are encrypted for the session (the transaction sender); funds move from the player
     const { handles, proof } = await encrypt(f, session.address, true, 50n * USDC);
-    await f.game.connect(session).startRun(NVDA, handles[0], handles[1], proof, false, []);
+    await f.game.connect(session).startRun(NVDA, handles[0], handles[1], proof, false, [], 0);
     const id = (await f.game.runCount()) - 1n;
     const run = await f.game.getRun(id);
     expect(run.player).to.eq(f.alice.address);
@@ -100,8 +100,8 @@ describe("Siroclimb: sessions and packs", function () {
     const cap = [1, 2, 4, 6][tier];
     await price(f, NVDA, BASE[NVDA]);
     const { handles, proof } = await encrypt(f, f.alice, true, 10n * USDC);
-    await expect(f.game.connect(f.bob).startRun(NVDA, handles[0], handles[1], proof, true, [])).to.be.reverted;
-    await f.game.connect(f.alice).startRun(NVDA, handles[0], handles[1], proof, true, []);
+    await expect(f.game.connect(f.bob).startRun(NVDA, handles[0], handles[1], proof, true, [], 0)).to.be.reverted;
+    await f.game.connect(f.alice).startRun(NVDA, handles[0], handles[1], proof, true, [], 0);
     const id = (await f.game.runCount()) - 1n;
     expect(await f.game.hasPack(f.alice.address)).to.eq(false);
     const run = await f.game.getRun(id);
@@ -115,7 +115,7 @@ describe("Siroclimb: sessions and packs", function () {
     expect(got).to.eq(model([{ t: 0, p: BASE[NVDA] }, { t: 50, p: p1 }], cap).long);
     // the public multipliers are the uncapped ones: the cap itself stays private
     expect((await f.game.getRun(id)).multLong).to.eq(model([{ t: 0, p: BASE[NVDA] }, { t: 50, p: p1 }]).long);
-    const s = await f.game.connect(f.alice).startRun.staticCall(NVDA, handles[0], handles[1], proof, true, []).catch((e) => e);
+    const s = await f.game.connect(f.alice).startRun.staticCall(NVDA, handles[0], handles[1], proof, true, [], 0).catch((e) => e);
     expect(String(s)).to.match(/NoPack|revert/);
   });
 });

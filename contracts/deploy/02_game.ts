@@ -11,7 +11,7 @@ export const SEPOLIA_PYTH = "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21";
 
 export const MOVE_SCALE = Number(process.env.MOVE_SCALE ?? 25);
 export const ROUND_ENTRY = 10_000_000; // 10 cUSDC
-export const JOIN_SECONDS = Number(process.env.JOIN_SECONDS ?? 45);
+export const JOIN_SECONDS = Number(process.env.JOIN_SECONDS ?? 60);
 const FAUCET_AMOUNT = 1_000_000_000; // 1000 cUSDC
 const FAUCET_COOLDOWN = 600;
 
@@ -70,5 +70,5 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 };
 
 export default func;
-func.id = "siroclimb_game_v1";
+func.id = "siroclimb_game_v2";
 func.tags = ["Siroclimb"];

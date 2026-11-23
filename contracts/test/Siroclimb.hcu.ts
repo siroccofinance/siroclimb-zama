@@ -33,10 +33,10 @@ describe("Siroclimb: HCU budget (worst cases)", function () {
   it("solo: start (with reserve refill), packed start, cash out, packed cash out", async function () {
     await price(f, NVDA, BASE[NVDA]);
     let e = await encrypt(f, f.alice, true, 10n * USDC);
-    await measure("startRun (first: reserve refill)", f.game.connect(f.alice).startRun(NVDA, e.handles[0], e.handles[1], e.proof, false, []));
+    await measure("startRun (first: reserve refill)", f.game.connect(f.alice).startRun(NVDA, e.handles[0], e.handles[1], e.proof, false, [], 0));
     await measure("openPack", f.game.connect(f.bob).openPack());
     e = await encrypt(f, f.bob, false, 10n * USDC);
-    await measure("startRun (packed)", f.game.connect(f.bob).startRun(NVDA, e.handles[0], e.handles[1], e.proof, true, []));
+    await measure("startRun (packed)", f.game.connect(f.bob).startRun(NVDA, e.handles[0], e.handles[1], e.proof, true, [], 0));
     const run = await f.game.getRun(0);
     for (let k = 1; k <= 5; k++) {
       await at(run.startAt, k * 10);
