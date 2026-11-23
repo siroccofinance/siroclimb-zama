@@ -48,13 +48,18 @@ const inUse = new Set(), expired = new Set();
 let keeping = true;
 async function keeperLoop() {
   while (keeping) {
+    try { await keeperTick(); } catch (e) { log('keeper tick', errText(e)); }   // a lagging read must never stop the keeper
+    await sleep(2500);
+  }
+}
+async function keeperTick() {
+  {
     for (const m of inUse) await pushIfStale(keeper, m, 11).catch(e => log('keeper price', MARKETS[m].id, errText(e)));
     for (const id of [...expired]) {
       const r = await game.getRun(id);
       if (Number(r.status) === 2) { expired.delete(id); continue; }
       if (Date.now() / 1000 > Number(r.startAt) + 62) await keeper.send(game, 'settleRun', [id]).then(() => expired.delete(id)).catch(e => { if (!/WrongRunStatus/.test(errText(e))) log('keeper settle', id, errText(e)); });
     }
-    await sleep(2500);
   }
 }
 
