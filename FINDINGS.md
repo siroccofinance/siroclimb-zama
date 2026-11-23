@@ -1,0 +1,22 @@
+# Findings
+
+Issues found while building and running Siroclimb on Sepolia and on the FHEVM mock, and how each one
+was fixed. The on-chain battery reports are at the end.
+
+## Integration findings
+
+| # | Finding | Where | Fix |
+| - | ------- | ----- | --- |
+| F1 | The game contract came out at 26.3 KB, over the 24 KB code size limit. | Contracts | The run rules moved into `ClimbLadder`, a stateless contract the game reads (long and short multipliers on the oracle path). The game is now 23.2 KB and the rules can be audited alone. |
+| F2 | Concurrent user decryptions on the FHEVM mock failed with "Parse event … in backward order": the mock coprocessor's log cursor is not reentrant. | Tests | Balance decryptions in the tests run one after the other (`balances()` helper). |
+| F3 | The hardhat FHEVM plugin raised its own assertion ("Fhevm assertion failed") instead of the revert reason for a reverted *send* to a non-FHE contract. | Tests | That expectation uses `staticCall`, which returns the custom error. |
+| F4 | The shared Sepolia deployer key is also used by another live project. Two deploys raced for nonces (`nonce too low`, then a transaction dropped by a nonce collision that left `hardhat deploy` waiting forever). | Sepolia deploy | Siroclimb deploys from a key of its own (`~/.config/zama/siroclimb-deployer.key`), funded once from the shared key with a single transfer. The battery players come from their own mnemonic, and the ops keeper has its own key. |
+| F5 | Right after `setUpdater`, the seeding `pushPrices` reverted on a lagging public RPC node (the role was not visible yet). The FHEVM plugin masked the error as "plugin is not initialized". | Sepolia deploy | The deploy waits until the RPC shows the updater role before seeding. |
+| F6 | The Pyth API key is entitled to Equity.US.TSLA/USD; NVDA, AAPL, XAUT and GBP answer 403 "Not entitled". The public Hermes and Benchmarks endpoints now require a key too. | Prices | `/api/pyth` learns the 403s and keeps the entitled feeds. The other markets use the bounded public fallback with reference prices from `/api/prices`. A wider grant switches them to Pyth with no code change. |
+| F7 | Yahoo Finance (stocks, GBP) has no CORS, so the browser cannot read it. Stock prices also stop outside US sessions. | Prices | `/api/prices` reads it on the server, with the trading periods. A stock market is open only inside today's pre, regular or post session with a recent candle. Closed markets show *Closed*, and a round never opens on them (the contract skips markets without a checkpoint in the last 60 s). |
+| F8 | First browser run: the first faucet claim was still in flight when the balance was first decrypted, so it showed 0.00 and the start button turned into "Get test cUSDC". | Front, Sepolia | `connect()` waits for the first-visit claim before it returns. |
+| F9 | Right after a player was funded, the next transaction failed with "insufficient funds" because the public RPC node lagged a block behind. | Front, ops | Those errors are retried, like nonce errors. |
+| F10 | Solo starts on fallback markets reverted with `StaleEntry`. The browser first refreshed the checkpoint (one transaction), then sent `startRun`, and by the time the second one landed the checkpoint was more than 30 s old. | Sepolia, front and battery | `startRun` takes a bounded public price that rides along in the same transaction (`try oracle.pushPublic`, same bounds as anyone's push), the entry may be up to 60 s old, and game transactions carry a 0.2 gwei tip. A start is one transaction again. The game was redeployed. |
+| F11 | The battery read a run "after" its cash out from a lagging RPC node and saw a zero multiplier handle, which made the unfunded check fail. The on-chain value was right (0.998275 on decryption). | Battery | The battery waits until the run shows as settled with its handles before it decrypts. |
+| F12 | With slow inclusion, a 45 s join window was too short for a second player's join (relayer encryption, then a block or two). | Sepolia | The join window is 60 s (deploy parameter). The practice bots start joining 27 s before the bell. |
+| F13 | Keeper duties (checkpoints, settlement) and the player's own cash out shared the session key's queue, so a cash out could wait behind a checkpoint transaction. | Front | The autopilot uses a key derived from the session key, with its own nonce queue, and the session tops it up. |
