@@ -1,4 +1,4 @@
-// Siroclimb game front. Screens: lobby → game → result. All data goes through ./api.js (mock for now).
+// Siroclimb game front. Screens: lobby → game → result. All data goes through ./api.js (Sepolia by default, ?mock for the simulation).
 // The 3D scene is the hero's: in the lobby the belt loops; on start it brakes, the coin's box climbs one level
 // per leverage step; cash out tosses the coin (camera follows), a bust drops it.
 import * as api from './api.js';
@@ -23,7 +23,7 @@ const money = v => nf.format(v);
 const sgn = v => (v < -0.0049 ? MINUS : '+');
 const signed = v => sgn(v) + nf.format(Math.abs(v));
 const pct = v => sgn(v) + Math.abs(v).toFixed(2) + '%';
-const price = p => (p >= 1000 ? nf.format(p) : p >= 1 ? p.toFixed(2) : p.toFixed(4));
+const price = p => (p >= 1000 ? nf.format(p) : p >= 10 ? p.toFixed(2) : p.toFixed(4));
 const levTxt = x => (x % 1 ? x.toFixed(1) : String(x)) + 'x';
 const mmss = s => { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
@@ -32,8 +32,8 @@ const shortAddr = a => a.slice(0, 4) + '…' + a.slice(-4);
 // ── state
 const assets = api.listAssets();
 const byId = Object.fromEntries(assets.map(a => [a.id, a]));
-const C = { mode: store.get('mode', 'solo'), asset: store.get('asset', 'BTC'), side: store.get('side', 'long'), stake: store.get('stake', 25) };
-if (!byId[C.asset]) C.asset = 'BTC';
+const C = { mode: store.get('mode', 'solo'), asset: store.get('asset', 'TSLAx'), side: store.get('side', 'long'), stake: store.get('stake', 25) };
+if (!byId[C.asset]) C.asset = assets[0].id;
 let screen = body.dataset.screen || 'intro', round = api.currentRound(), busy = false;
 let run = null, upd = null, shownStep = 0, ended = null, roundTimer = 0;
 const D = { value: 0, pnl: 0, pct: 0, danger: 0 };           // displayed values, eased toward the feed every frame
@@ -42,7 +42,17 @@ function setScreen(s) { screen = s; body.dataset.screen = s; }
 
 // ── toast
 let toastT = 0;
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('is-on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('is-on'), 2400); }
+function toast(msg, ms = 2400) { const t = $('#toast'); t.textContent = msg; t.classList.add('is-on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('is-on'), ms); }
+
+// ── chain status line: wallet steps, encryption, transactions, decryption, keeper duties
+const chainline = $('#chainline');
+api.onStatus(st => {
+  if (!st) { chainline.classList.remove('is-on'); clearTimeout(chainline._t); chainline._t = setTimeout(() => { chainline.hidden = true; }, 250); return; }
+  clearTimeout(chainline._t); chainline.hidden = false; chainline.dataset.kind = st.kind; $('#chainlineT').textContent = st.text;
+  requestAnimationFrame(() => chainline.classList.add('is-on'));
+  if (st.kind === 'error') chainline._t = setTimeout(() => api.onStatus && chainline.classList.remove('is-on'), 6000);
+});
+if (api.unavailable) setTimeout(() => toast('Sepolia unavailable, playing the simulation', 5000), 1500);
 
 // ── sound: a few synthesized notes, nothing to load
 const sound = (() => {
@@ -146,19 +156,37 @@ walletBtn.onclick = e => {
 walletMenu.onclick = async e => {
   const act = e.target.dataset.act; walletMenu.hidden = true; walletBtn.setAttribute('aria-expanded', false);
   if (act === 'copy') { try { await navigator.clipboard.writeText(api.account()); toast('Address copied'); } catch { toast(api.account()); } }
-  if (act === 'out') { api.disconnect(); renderWallet(); toast('Wallet disconnected'); }
+  if (act === 'out') { api.disconnect(); renderWallet(); renderBalance(api.balance()); toast('Wallet disconnected'); }
+  if (act === 'decrypt') decrypt();
+  if (act === 'explorer') window.open(`https://sepolia.etherscan.io/address/${api.account()}`, '_blank', 'noopener');
+  if (act === 'name') { const n = prompt('Your name on the leaderboard (24 characters max)'); if (n) { try { await api.setName(n.trim()); toast('Name saved on chain'); } catch (e) { toast(e.message); } } }
 };
 addEventListener('click', () => { if (!walletMenu.hidden) { walletMenu.hidden = true; walletBtn.setAttribute('aria-expanded', false); } });
 
 const balEl = $('#bal'), faucetBtn = $('#faucet');
+// the balance is an encrypted ERC-7984 handle: shown sealed until the player decrypts it (one signature a day)
 function renderBalance(v, bump) {
-  balEl.textContent = money(v);
-  faucetBtn.hidden = v >= 1000;
+  const sealed = v == null && api.mode === 'chain';
+  balEl.textContent = sealed ? (api.account() ? 'Decrypt' : '••••') : money(v ?? 0);
+  balEl.classList.toggle('is-sealed', sealed);
+  balEl.title = sealed ? 'Encrypted on chain. Click to decrypt it in your browser' : '';
+  faucetBtn.hidden = !sealed && v >= 1000;
   if (bump) { const b = balEl.parentElement; b.classList.remove('is-bump'); void b.offsetWidth; b.classList.add('is-bump'); }
   renderGo();
 }
 api.onBalance(v => renderBalance(v, true));
-faucetBtn.onclick = async () => { await api.faucet(); toast('Test balance topped up to 1,000 tUSDC'); };
+faucetBtn.onclick = async () => {
+  if (!(await connect(true))) return;
+  try { await api.faucet(); toast('+1,000 test cUSDC, minted and wrapped for you'); } catch (e) { toast(e.message); }
+};
+async function decrypt() {
+  if (!(await connect(true))) return;
+  try { await api.decryptBalance(); } catch (e) { toast(e.message || 'Could not decrypt'); }
+}
+balEl.onclick = () => { if (api.mode === 'chain') decrypt(); };
+// enough to play: a sealed balance is not a reason to block (the contract moves 0 when short)
+const canPay = amount => { const b = api.balance(); return b == null || b >= amount; };
+const KIND = { stock: 'Stock', gold: 'Gold', fx: 'FX', crypto: 'Crypto' };
 
 // ── lobby
 const marketsEl = $('#markets');
@@ -166,7 +194,8 @@ const chip = {};
 for (const a of assets) {
   const b = document.createElement('button');
   b.className = 'market'; b.dataset.v = a.id;
-  b.innerHTML = `<b>${a.ticker}</b><span class="k">${a.kind === 'stock' ? 'Stock' : 'Crypto'}</span><span class="p"></span><span class="c"></span>`;
+  b.innerHTML = `<b>${a.ticker}</b><span class="k">${KIND[a.kind] || a.kind}</span><span class="p"></span><span class="c"></span>`;
+  b.title = a.token ? `${a.name}, confidential token ${a.token}` : a.name;
   b.onclick = () => { if (C.mode === 'round') return; C.asset = a.id; store.set('asset', a.id); renderLobby(); };
   marketsEl.appendChild(b);
   chip[a.id] = { b, p: b.querySelector('.p'), c: b.querySelector('.c') };
@@ -174,7 +203,9 @@ for (const a of assets) {
     if (screen !== 'lobby') return;
     const h = api.history(a.id, 60), ch = h.length ? (p / h[0].price - 1) * 100 : 0;
     chip[a.id].p.textContent = price(p);
-    chip[a.id].c.textContent = sgn(ch) + Math.abs(ch).toFixed(1) + '%'; chip[a.id].c.className = 'c ' + (ch >= 0 ? 'is-up' : 'is-down');
+    const open = api.marketOpen(a.id);
+    chip[a.id].b.classList.toggle('is-closed', !open);
+    chip[a.id].c.textContent = open ? sgn(ch) + Math.abs(ch).toFixed(2) + '%' : 'Closed'; chip[a.id].c.className = 'c ' + (!open ? 'is-closed' : ch >= 0 ? 'is-up' : 'is-down');
   });
 }
 function bindSeg(el, key, parse = v => v) {
@@ -210,24 +241,30 @@ function renderLobby() {
   $('#side').querySelectorAll('button').forEach(b => { b.disabled = !!joined; });
   const sel = C.mode === 'round' ? round.assetId : C.asset;
   for (const [id, c] of Object.entries(chip)) { c.b.setAttribute('aria-pressed', String(id === sel)); c.b.disabled = C.mode === 'round' && id !== sel; }
-  $('#modeHint').textContent = C.mode === 'solo' ? (STAIRS ? 'The coin rolls on the live price. Leverage grows every 6 seconds.' : 'Climb at your own pace. The coin steps up every 6 seconds.')
-    : `60 seconds on ${byId[round.assetId].ticker} for everyone. The top 3 share the pot.`;
+  api.focus(sel);
+  $('#modeHint').textContent = C.mode === 'solo' ? (STAIRS ? 'The coin rolls on the live price. Leverage grows every 6 seconds. Your side and stake stay encrypted.' : 'Climb at your own pace. The coin steps up every 6 seconds.')
+    : `60 seconds on ${byId[round.assetId].ticker} for everyone, sides sealed until the bell. The top 3 share the pot.`;
   $('#entryV').textContent = round.entry;
   renderGo();
 }
 function renderGo() {
   if (screen !== 'lobby') return;
-  const go = $('#go'), meta = $('#goMeta'), bal = api.balance(), now = Date.now();
+  const go = $('#go'), meta = $('#goMeta'), now = Date.now();
   if (C.mode === 'solo') {
-    go.disabled = busy;
-    go.textContent = busy ? 'Starting…' : bal < C.stake ? 'Get test tokens' : 'Start climbing';
-    meta.textContent = `${C.stake} tUSDC on ${byId[C.asset].ticker} ${C.side}, up to 4x`;
+    const open = api.marketOpen(C.asset);
+    go.disabled = busy || !open;
+    go.textContent = busy ? 'Starting…' : !open ? 'Market closed' : !canPay(C.stake) ? 'Get test cUSDC' : 'Start climbing';
+    meta.textContent = open ? `${C.stake} cUSDC on ${byId[C.asset].ticker} ${C.side}, up to 4x, encrypted on chain` : `${byId[C.asset].name} trades during US market hours. Gold and GBP are open now`;
     return;
   }
-  const r = round, pot = `${r.players} ${r.players === 1 ? 'player' : 'players'}, pot ${money(r.pot)} tUSDC`;
+  const r = round, pot = `${r.players} ${r.players === 1 ? 'player' : 'players'}, pot ${money(r.pot)} cUSDC`;
   if (r.joined) { go.disabled = true; go.textContent = `Starts in ${mmss((r.startsAt - now) / 1000)}`; meta.textContent = `You are in. ${pot}`; }
+  else if (r.virtual) {
+    go.disabled = busy; go.textContent = busy ? 'Opening…' : !canPay(r.entry) ? 'Get test cUSDC' : `Open a round for ${r.entry} cUSDC`;
+    meta.textContent = `Next round on ${byId[r.assetId].ticker}: you open it, then 45 s for others to join. Practice bots fill empty seats.`;
+  }
   else if (r.status === 'open' && !r.late) {
-    go.disabled = busy; go.textContent = busy ? 'Joining…' : bal < r.entry ? 'Get test tokens' : `Join for ${r.entry} tUSDC`;
+    go.disabled = busy; go.textContent = busy ? 'Joining…' : !canPay(r.entry) ? 'Get test cUSDC' : `Join for ${r.entry} cUSDC`;
     meta.textContent = `Starts in ${mmss((r.startsAt - now) / 1000)}. ${pot}`;
   } else { go.disabled = true; go.textContent = `Next round in ${mmss((r.endsAt - now) / 1000)}`; meta.textContent = 'A round is live. A new one opens every 80 seconds.'; }
 }
@@ -241,17 +278,16 @@ $('#go').onclick = async () => {
   if (busy) return;
   sound.unlock();
   if (!(await connect(true))) return;
-  const bal = api.balance();
   if (C.mode === 'solo') {
-    if (bal < C.stake) { await api.faucet(); toast('Test balance topped up'); return; }
+    if (!canPay(C.stake)) { try { await api.faucet(); toast('+1,000 test cUSDC'); } catch (e) { toast(e.message); } return; }
     busy = true; renderGo();
     try { const r = await api.startRun({ mode: 'solo', assetId: C.asset, side: C.side, stake: C.stake }); enterGame(r); }
     catch (e) { toast(e.message); }
     finally { busy = false; renderGo(); }
   } else {
-    if (bal < round.entry) { await api.faucet(); toast('Test balance topped up'); return; }
+    if (!canPay(round.entry)) { try { await api.faucet(); toast('+1,000 test cUSDC'); } catch (e) { toast(e.message); } return; }
     busy = true; renderGo();
-    try { round = await api.joinRound({ side: C.side }); sound.tick(); toast("You're in. The round starts soon"); scheduleRound(); }
+    try { round = await api.joinRound({ side: C.side }); sound.tick(); toast("You're in, side sealed. The round starts soon"); scheduleRound(); }
     catch (e) { toast(e.message); }
     finally { busy = false; renderLobby(); }
   }
@@ -352,8 +388,9 @@ function hudFrame(dt) {
 function renderStandings() {
   const st = api.roundStandings(), me = st.find(s => s.you);
   const top = st.slice(0, 5); if (me && me.rank > 5) top.push(me);
-  $('#standings').innerHTML = top.map(s => `<li class="${s.you ? 'is-you' : ''} ${s.status !== 'live' ? 'is-out' : ''}"><span class="n">${s.rank}</span><span>${s.you ? 'You' : s.name}</span><span>${pct(s.pnlPct)}</span></li>`).join('');
-  if (me) $('#rank').textContent = `${ord(me.rank)} of ${st.length}`;
+  const sealed = st.some(s => s.sealed);
+  $('#standings').innerHTML = top.map(s => `<li class="${s.you ? 'is-you' : ''} ${s.status !== 'live' ? 'is-out' : ''} ${s.sealed ? 'is-sealed' : ''}"><span class="n">${sealed ? '·' : s.rank}</span><span>${s.you ? 'You' : s.name}</span><span>${s.sealed ? (s.status !== 'live' ? 'Out' : 'Sealed') : pct(s.pnlPct)}</span></li>`).join('');
+  if (me) $('#rank').textContent = sealed ? `${st.length} players, sealed` : `${ord(me.rank)} of ${st.length}`;
 }
 
 async function cash() {
@@ -383,25 +420,43 @@ function onEnd(res) {
   if (run.mode === 'round') {
     const id = run.id;
     api.whenRoundFinal(id).then(f => { if (run && run.id === id) fillRound(f); });
+  } else if (res.pending) {
+    const id = run.id;
+    api.whenSettled(id).then(f => { if (run && run.id === id) settled(f); }).catch(() => {});
   }
+}
+// the chain's verdict replaces the screen's estimate (same rules, oracle checkpoints)
+function settled(f) {
+  ended = { ...ended, ...f };
+  showResult(f);
+  const rr = $('#rR'); rr.hidden = false;
+  const tx = f.tx ? ` <a href="https://sepolia.etherscan.io/tx/${f.tx}" target="_blank" rel="noopener">View the transaction</a>` : '';
+  rr.innerHTML = `<b>Settled on chain.</b> Paid ${money(f.value)} cUSDC as an encrypted transfer.${tx} <button class="linkish" id="publish">Post to the leaderboard</button>`;
+  const pb = $('#publish');
+  if (pb) pb.onclick = async () => {
+    pb.disabled = true; pb.textContent = 'Revealing your return through the KMS…';
+    try { await api.publishRun(f.runId); pb.textContent = 'Posted: return public, stake still private'; } catch (e) { pb.disabled = false; pb.textContent = 'Post to the leaderboard'; toast(e.message); }
+  };
+  card = null; wantCard = false; if (sc && screen === 'result') makeCard(grabScene());
 }
 function showResult(res) {
   const bust = res.status === 'busted', round = run.mode === 'round';
   $('#rE').textContent = bust ? 'The coin fell' : res.status === 'expired' ? "Time's up, cashed out" : 'Cashed out';
-  $('#rV').textContent = round ? pct(res.pnlPct) : `${signed(res.pnl)} tUSDC`;
+  $('#rV').textContent = round ? pct(res.pnlPct) : `${signed(res.pnl)} cUSDC`;
   $('.result').classList.toggle('is-win', res.pnl > 0.005);
   const a = byId[run.assetId];
   const stats = [['Return', pct(res.pnlPct)], ['Top leverage', levTxt(res.maxLeverage)], ['Time', `${Math.max(1, Math.round(res.duration))}s`],
     [`${a.ticker} entry`, price(res.entryPrice)], ['Exit', price(res.exitPrice)]];
   if (round) stats.shift();
   $('#rS').innerHTML = stats.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
-  const rr = $('#rR'); rr.hidden = !round;
-  if (round) rr.innerHTML = 'Waiting for the round to end…';
+  const rr = $('#rR'); rr.hidden = !round && !res.pending;
+  if (round) rr.innerHTML = res.chain ? 'Waiting for the bell and the standings reveal…' : 'Waiting for the round to end. Standings stay sealed until the bell…';
+  else if (res.pending) rr.innerHTML = 'Settling on chain: encrypted payout…';
 }
 function fillRound(f) {
   const rr = $('#rR'); rr.hidden = false;
-  rr.innerHTML = f.prize ? `<b>${ord(f.rank)} of ${f.of}.</b> You win ${money(f.prize)} tUSDC from the pot.` : `<b>${ord(f.rank)} of ${f.of}.</b> The top 3 share the pot.`;
-  if (f.prize) { sound.cash(); toast(`+${money(f.prize)} tUSDC prize`); }
+  rr.innerHTML = f.prize ? `<b>${ord(f.rank)} of ${f.of}.</b> You win ${money(f.prize)} cUSDC from the pot.` : `<b>${ord(f.rank)} of ${f.of}.</b> The top 3 share the pot.`;
+  if (f.prize) { sound.cash(); toast(`+${money(f.prize)} cUSDC prize`); }
 }
 $('#again').onclick = () => {
   hideTip();
@@ -433,9 +488,9 @@ async function makeCard(scene) {
   const a = byId[mine.assetId], bust = r.status === 'busted', rd = mine.mode === 'round';
   const d = {
     eyebrow: bust ? 'The coin fell' : r.status === 'expired' ? "Time's up, cashed out" : 'Cashed out',
-    value: rd ? pct(r.pnlPct) : signed(r.pnl), unit: rd ? '' : 'tUSDC', win: r.pnl > 0.005,
+    value: rd ? pct(r.pnlPct) : signed(r.pnl), unit: rd ? '' : 'cUSDC', win: r.pnl > 0.005,
     side: mine.side, ticker: a.ticker, logo: await loadLogo('assets/brand/sirocco-mark-safran.svg'),
-    stats: [['Stake', `${money(mine.stake)} tUSDC`], ['Return', pct(r.pnlPct)], ['Top leverage', levTxt(r.maxLeverage)], ['Entry', price(r.entryPrice)], ['Exit', price(r.exitPrice)], ['Time', `${Math.max(1, Math.round(r.duration))}s`]],
+    stats: [['Stake', `${money(mine.stake)} cUSDC`], ['Return', pct(r.pnlPct)], ['Top leverage', levTxt(r.maxLeverage)], ['Entry', price(r.entryPrice)], ['Exit', price(r.exitPrice)], ['Time', `${Math.max(1, Math.round(r.duration))}s`]],
   };
   const blob = await toBlob(drawCard(scene, d));
   if (ended !== r || !blob) return;
