@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="play.css?v=8">
+  <link rel="stylesheet" href="play.css?v=9">
 </head>
 <body data-screen="intro" data-mode="solo">
   <div class="stage" id="stage" aria-hidden="true">
@@ -27,7 +27,7 @@
     <a class="brand" href="./" aria-label="Siroclimb home">
       <img src="assets/brand/sirocco-mark-safran.svg" alt="" width="28" height="28">
       <span>Siroclimb</span>
-      <em class="tag">Test mode</em>
+      <em class="tag">Sepolia</em>
     </a>
     <div class="top__actions">
       <button class="icon" data-open="rules" aria-label="How it works" title="How it works">
@@ -39,14 +39,17 @@
       <button class="icon" id="sound" aria-label="Sound" title="Sound" aria-pressed="true">
         <svg viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10z"/><path class="on" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="off" d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
       </button>
-      <div class="balance" title="Test balance">
-        <span class="balance__v" id="bal">0.00</span><span class="balance__u">tUSDC</span>
+      <div class="balance" title="Your confidential cUSDC balance">
+        <button class="balance__v" id="bal" aria-label="Decrypt your balance">0.00</button><span class="balance__u">cUSDC</span>
         <button class="balance__add" id="faucet" aria-label="Get test tokens" title="Get test tokens">+</button>
       </div>
       <div class="wallet">
         <button class="wallet__btn" id="wallet" aria-haspopup="menu" aria-expanded="false">Connect wallet</button>
         <div class="wallet__menu" id="walletMenu" role="menu" hidden>
           <button role="menuitem" data-act="copy">Copy address</button>
+          <button role="menuitem" data-act="decrypt">Decrypt balance</button>
+          <button role="menuitem" data-act="name">Set your name</button>
+          <button role="menuitem" data-act="explorer">View on Etherscan</button>
           <button role="menuitem" data-act="out">Disconnect</button>
         </div>
       </div>
@@ -90,11 +93,11 @@
           </div>
         </div>
         <div class="field field--stake">
-          <span class="label" id="l-stake">Stake <small>tUSDC</small></span>
+          <span class="label" id="l-stake">Stake <small>cUSDC</small></span>
           <div class="seg" id="stake" role="group" aria-labelledby="l-stake">
             <button data-v="10">10</button><button data-v="25">25</button><button data-v="50">50</button><button data-v="100">100</button>
           </div>
-          <div class="entry" id="entry"><b id="entryV">10</b> tUSDC entry</div>
+          <div class="entry" id="entry"><b id="entryV">10</b> cUSDC entry</div>
         </div>
       </div>
     </div>
@@ -133,7 +136,7 @@
 
     <div class="hud__bottom">
       <div class="pnl" aria-live="off">
-        <div class="pnl__v"><span id="pV">+0.00</span><small>tUSDC</small></div>
+        <div class="pnl__v"><span id="pV">+0.00</span><small>cUSDC</small></div>
         <div class="pnl__s"><span id="pP">+0.00%</span><span class="pnl__lev">at <b id="pL">1x</b></span></div>
         <div class="safety"><div class="safety__bar"><i id="sBar"></i></div><span id="sTxt">Stake safe</span></div>
       </div>
@@ -145,7 +148,7 @@
   <section class="screen result" aria-live="polite">
     <div class="result__text">
       <p class="eyebrow" id="rE">Cashed out</p>
-      <h2 class="title" id="rV">+0.00 tUSDC</h2>
+      <h2 class="title" id="rV">+0.00 cUSDC</h2>
       <dl class="stats" id="rS"></dl>
       <p class="result__round" id="rR" hidden></p>
     </div>
@@ -161,13 +164,15 @@
       <button class="icon sheet__x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       <h2 id="rules-title">How it works</h2>
       <ol class="steps">
-        <li><b>Pick a market, a direction and a stake.</b> Crypto or tokenized stocks, long or short.</li>
+        <li><b>Pick a market, a direction and a stake.</b> Tokenized stocks, gold or the pound, long or short.</li>
         <li><b>The coin rolls on the live price.</b> When the price goes your way it climbs a step, when it turns it steps down. Big moves, big jumps. Your leverage grows every 6 seconds, from 1x to 4x.</li>
         <li><b>Cash out whenever you want.</b> If the price runs too far against you, the stairs give way and the coin falls. You lose your stake, never more.</li>
       </ol>
       <h3>Rounds</h3>
       <p>60 seconds on the same market for everyone. The top 3 share the pot: 50%, 30% and 20%.</p>
-      <p class="fine">Test tokens only. Prices come from a demo feed that moves faster than the market.</p>
+      <h3>Private by design</h3>
+      <p>Your direction and your stake are encrypted on chain with Zama's FHE. Nobody can copy or fade you, not even in a round. Your result is computed on ciphertexts and paid in the same transaction; round standings stay sealed until the bell.</p>
+      <p class="fine">Sepolia test network, Zama's confidential test USDC. Real prices (Pyth and public market data); every move counts 25x, then your leverage. Stocks trade during US market hours.</p>
       <button class="cta sheet__ok" data-close>Got it</button>
     </div>
   </div>
@@ -184,6 +189,7 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="chainline" id="chainline" role="status" aria-live="polite" hidden><i aria-hidden="true"></i><span id="chainlineT"></span></div>
   <div class="sharetip" id="sharetip" role="status" aria-live="polite" hidden>
     <img id="tipImg" alt="Your Siroclimb result card">
     <div class="sharetip__body">
@@ -201,6 +207,6 @@
   </script>
 
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
-  <script type="module" src="js/game.js?v=11"></script>
+  <script type="module" src="js/game.js?v=12"></script>
 </body>
 </html>

@@ -2,15 +2,20 @@
   "name": "siroclimb",
   "private": true,
   "type": "module",
-  "description": "Siroclimb game front: landing, lobby, stairs game, results. Static site, Three.js scene, mock API.",
+  "description": "Siroclimb: confidential climbing game on the Zama Protocol (Sepolia). Static front, Three.js scene, two server routes (Pyth, reference prices).",
   "scripts": {
-    "dev": "python3 -m http.server 8765 --bind 127.0.0.1",
+    "dev": "node dev.mjs",
+    "dev:static": "python3 -m http.server 8765 --bind 127.0.0.1",
     "test:solo": "node tests/app.mjs . out 1440 900 d solo",
     "test:round": "node tests/round.mjs . out",
     "test:intro": "node tests/intro.mjs . out",
-    "test:ends": "node tests/ends.mjs . out"
+    "test:ends": "node tests/ends.mjs . out",
+    "test:chain:smoke": "node tests/chain/smoke.mjs",
+    "test:chain:solo": "node tests/chain/solo.mjs",
+    "test:chain:round": "node tests/chain/round.mjs"
   },
   "devDependencies": {
+    "ethers": "^6.17.0",
     "puppeteer-core": "^22.15.0",
     "three": "^0.160.0"
   }

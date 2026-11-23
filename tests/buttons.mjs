@@ -1,7 +1,7 @@
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 import puppeteer from 'puppeteer-core';
 const [root, out, W = 1440, H = 900, tag = 'd', flow = 'solo'] = process.argv.slice(2);
-const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.mp4': 'video/mp4', '.webm': 'video/webm', '.webp': 'image/webp', '.svg': 'image/svg+xml' };
+const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.mp4': 'video/mp4', '.webm': 'video/webm', '.webp': 'image/webp', '.json': 'application/json', '.svg': 'image/svg+xml' };
 const srv = http.createServer((q, r) => { let u = decodeURIComponent(q.url.split('?')[0]); if (u === '/') u = '/index.html'; const p = path.join(root, u); if (!fs.existsSync(p)) { r.writeHead(404); return r.end(); } r.writeHead(200, { 'content-type': types[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(r); }).listen(0);
 const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const pg = await b.newPage(); pg.on('pageerror', e => console.log('ERR', e.message)); pg.on('console', c => ['error', 'warning'].includes(c.type()) && console.log('CONSOLE', c.text()));
@@ -11,7 +11,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 const shot = n => pg.screenshot({ path: `${out}/${tag}-${n}.png` });
 const scr = () => pg.evaluate(() => document.body.dataset.screen);
 // lobby buttons (long green, short red, sliding thumb) and the share to X flow
-await pg.goto(`http://localhost:${srv.address().port}/#play`, { waitUntil: 'networkidle2' });
+await pg.goto(`http://localhost:${srv.address().port}/?mock#play`, { waitUntil: 'networkidle2' });
 await wait(2200); if (await pg.$('.sheet:not([hidden]) .sheet__ok')) { await pg.click('.sheet__ok'); await wait(700); }
 await pg.click('#side [data-v=long]'); await wait(900); await shot('1long');
 await pg.click('#side [data-v=short]'); await wait(300); await shot('2shortmid'); await wait(700); await shot('3short');
