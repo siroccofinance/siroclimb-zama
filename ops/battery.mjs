@@ -17,7 +17,7 @@
 // usage: node battery.mjs [players=16] [soloWaves=2] [rounds=2]
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { Contract } from 'ethers';
-import { ADDR, MARKETS, SCALE, Sender, USDC, balanceOf, view, batteryWallet, encryptRun, errText, faucet, fallbackFor, game, handle, key, ladder, openMarkets, publicDecrypt, pushIfStale, pythFor, sleep, token, userDecrypt } from './lib.mjs';
+import { ADDR, MARKETS, SCALE, Sender, USDC, balanceAt, balanceOf, settledBlock, view, batteryWallet, encryptRun, errText, faucet, fallbackFor, game, handle, key, ladder, openMarkets, publicDecrypt, pushIfStale, pythFor, sleep, token, userDecrypt } from './lib.mjs';
 
 const N = Number(process.argv[2] || 16), WAVES = Number(process.argv[3] || 2), ROUNDS = Number(process.argv[4] || 2);
 const OFFSET = Number(process.env.OFFSET || 1);         // index 0 is the browser e2e player
@@ -60,21 +60,23 @@ async function keeperLoop() {
 
 // ── solo
 function expectedPaid(stake) { return stake > 100n * USDC ? 100n * USDC : stake; }
-async function soloRun(p, wave) {
-  const open = await openMarkets();
+async function soloRun(p, wave, delay = 0) {
+  await sleep(delay);                                    // staggered starts: the relayer is shared
+  let open = await openMarkets();
+  if (!open.length) open = [3];                          // gold trades around the clock
   const market = open[Math.floor(Math.random() * open.length)];
   const long = Math.random() < 0.5;
   const scenario = p === poor ? 'unfunded' : Math.random() < 0.12 ? 'clamp' : Math.random() < 0.15 && p.hasPack ? 'pack' : Math.random() < 0.35 ? 'expire' : 'cash';
   const stake = scenario === 'clamp' ? 150n * USDC : BigInt(5 + Math.floor(Math.random() * 60)) * USDC;
   inUse.add(market);
-  const before = p === poor ? 0n : await balanceOf(p.wallet);
-  const beforeHandle = balanceOf.last;
   const enc = await encryptRun(p.address, long, stake);
   const py = await pythFor(market);
   const fb = py ? 0n : await fallbackFor(market);
   const rc = await p.send(game, 'startRun', [market, enc.handles[0], enc.handles[1], enc.proof, scenario === 'pack', py ? py.updateData : [], fb], py ? py.fee : 0n);
   const ev = rc.logs.map(l => { try { return game.interface.parseLog(l); } catch { return null; } }).find(e => e?.name === 'RunStarted');
   const id = ev.args.runId;
+  // balances are read at exact blocks: just before the start, and at the settlement
+  const before = p === poor ? 0n : await balanceAt(p.wallet, rc.blockNumber - 1);
   if (scenario === 'pack') p.hasPack = false;
   log(`solo w${wave} ${p.name.padEnd(18)} run ${id} ${MARKETS[market].id} ${long ? 'long ' : 'short'} ${Number(stake) / 1e6} ${scenario}`);
   if (scenario === 'expire') { expired.add(id); await view(() => game.getRun(id), x => Number(x.status) === 2, 80); }
@@ -93,7 +95,7 @@ async function soloRun(p, wave) {
   if (scenario === 'pack') { const [cl, cs] = await ladder.multipliers(market, r.entryIndex, r.exitIndex, r.startAt, Number(cap)); expMult = long ? cl : cs; }
   const expPaid = scenario === 'unfunded' ? 0n : expectedPaid(stake);
   const expValue = (expPaid * expMult) / SCALE;
-  const after = p === poor ? 0n : await balanceOf(p.wallet, beforeHandle);
+  const after = p === poor ? 0n : await balanceAt(p.wallet, await settledBlock(id, rc.blockNumber));
   const checks = {
     pathMatchesLadder: mL === r.multLong && mS === r.multShort,
     sideMultiplier: mult === expMult,
@@ -114,18 +116,17 @@ async function soloRun(p, wave) {
 // ── rounds
 async function roundGame(k) {
   const live = await openMarkets();
+  const roster = players.slice(0, Math.min(players.length, 24));
+  const entrants = k === 1 ? [poor, ...roster.slice(0, 23)] : roster;
+  const sides = new Map(), joinBlock = new Map(), encs = new Map();
+  // every player encrypts its side first (at its own pace, like a player choosing before clicking),
+  // so 17 relayer encryptions at once do not eat the 60 s join window
+  for (const p of entrants) { const long = Math.random() < 0.5; sides.set(p, long); encs.set(p, await encryptRun(p.address, long)); }
   // wait for a joinable state: nothing open, or an open round with time left
   const n = Number(await game.roundCount());
   let id = n;
-  if (n) { const [r] = await game.getRound(n - 1); if (Date.now() / 1000 < Number(r.startsAt) - 20) id = n - 1; else if (Date.now() / 1000 < Number(r.startsAt)) await sleep((Number(r.startsAt) - Date.now() / 1000 + 1) * 1000); }
-  const market = Number(await game.nextRoundMarket());
-  const roster = players.slice(0, Math.min(players.length, 24));
-  const entrants = k === 1 ? [poor, ...roster.slice(0, 23)] : roster;
-  const sides = new Map(), before = new Map();
-  const beforeH = new Map();
-  for (const p of entrants) if (p !== poor) { before.set(p, await balanceOf(p.wallet)); beforeH.set(p, balanceOf.last); }
-  // the first player opens it, the others join concurrently
-  const join = async p => { const long = Math.random() < 0.5; sides.set(p, long); const enc = await encryptRun(p.address, long); await p.send(game, 'joinRound', [id, enc.handles[0], enc.proof]); };
+  if (n) { const [r] = await game.getRound(n - 1); if (Date.now() / 1000 < Number(r.startsAt) - 20) id = n - 1; else if (Date.now() / 1000 < Number(r.startsAt)) { await sleep((Number(r.startsAt) - Date.now() / 1000 + 1) * 1000); } }
+  const join = async p => { const enc = encs.get(p); const rc = await p.send(game, 'joinRound', [id, enc.handles[0], enc.proof]); joinBlock.set(p, rc.blockNumber); };
   await join(entrants[0]);
   const [r0] = await view(() => game.getRound(id));
   inUse.add(Number(r0.market));
@@ -146,9 +147,10 @@ async function roundGame(k) {
   }));
   await sleep(Math.max(0, endsAt * 1000 - Date.now()) + 4000);
   await keeper.send(game, 'closeRound', [id]).catch(e => { if (!/WrongRoundStatus/.test(errText(e))) throw e; });
-  const handles = await game.roundScoreHandles(id);
+  const handles = await view(() => game.roundScoreHandles(id), hs => hs.length && hs.every(h => !/^0x0+$/.test(h)), 30);
   const { values: scores, proof } = await publicDecrypt([...handles]);
   await keeper.send(game, 'finalizeRound', [id, scores, proof]).catch(e => { if (!/WrongRoundStatus/.test(errText(e))) throw e; });
+  const finalBlock = await view(async () => (await game.queryFilter(game.filters.RoundFinalized(id), Math.min(...joinBlock.values()))).at(-1)?.blockNumber, b => b != null, 30);
   // local recomputation of ranks and prizes
   const [rf] = await view(() => game.getRound(id), ([x]) => Number(x.status) === 3, 30);
   const order = scores.map((s, i) => i).sort((a, b) => (scores[b] > scores[a] ? 1 : scores[b] < scores[a] ? -1 : a - b));
@@ -168,8 +170,9 @@ async function roundGame(k) {
     const p = entrants.find(x => x.address.toLowerCase() === run.player.toLowerCase());
     const long = sides.get(p);
     const expScore = p === poor ? 0n : (long ? run.multLong : run.multShort) + 1n;
-    const after = p === poor ? 0n : await balanceOf(p.wallet, beforeH.get(p));
-    const ok = scores[i] === expScore && (p === poor || after - before.get(p) === prize.get(i) - 10n * USDC);
+    // exact blocks: just before the join, and the finalize block (prize paid)
+    const delta = p === poor ? 0n : (await balanceAt(p.wallet, finalBlock)) - (await balanceAt(p.wallet, joinBlock.get(p) - 1));
+    const ok = scores[i] === expScore && (p === poor || delta === prize.get(i) - 10n * USDC);
     checks.push({ player: p.name, side: long ? 'long' : 'short', score: Number(scores[i]), pnlPct: scores[i] ? (Number(scores[i]) - 1 - 1e6) / 1e4 : null, prize: Number(prize.get(i)) / 1e6, ok });
   }
   const ok = checks.every(c => c.ok) && Number(rf.status) === 3 && rf.pot === pot;
@@ -190,7 +193,7 @@ await Promise.all(players.slice(0, Math.ceil(N / 3)).map(async p => { await p.se
 for (let w = 1; w <= WAVES; w++) {
   await Promise.all(players.map(p => topUp(p).catch(() => {})));
   const runners = w === 1 ? [...players, poor] : players;
-  const res = await Promise.allSettled(runners.map(p => soloRun(p, w)));
+  const res = await Promise.allSettled(runners.map((p, i) => soloRun(p, w, i * 2000)));
   res.forEach((r, i) => { if (r.status === 'rejected') { log('solo error', runners[i].name, errText(r.reason)); pass('solo', false, { wave: w, player: runners[i].name, error: errText(r.reason) }); } });
   log(`wave ${w}: ${results.solo.filter(x => x.wave === w && x.ok).length} / ${results.solo.filter(x => x.wave === w).length} pass`);
 }
