@@ -85,6 +85,7 @@ function afterConnect() {
   autopilot.start(api);
   if (hasGrant(a)) refreshBalance().catch(() => {});
   game.nameOf(a).then(n => n && names.set(a.toLowerCase(), n)).catch(() => {});
+  setTimeout(() => bots.prepareAll(), 4000);       // practice bots ready before the first round
 }
 
 export function disconnect() { W.disconnectWallet(); ready = false; setBal(null); autopilot.stop(); }

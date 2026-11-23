@@ -33,6 +33,14 @@ async function prepare(b) {
   if (!(await W.game.nameOf(b.address))) await b.send(W.game, 'setName', [b.handle], 0n, 'bot name');
 }
 
+let preparing = null;
+/** Gets the bots ready ahead of time (gas, cUSDC, operator, name), so they can take a seat in seconds. */
+export function prepareAll() {
+  if (!enabled() || !W.currentSession()) return Promise.resolve();
+  preparing ||= Promise.all(bots().map(b => prepare(b).catch(e => console.warn('bot setup', b.handle, W.errText(e))))).finally(() => { preparing = null; });
+  return preparing;
+}
+
 const filling = new Set();
 /** Fills round `roundId` with practice bots if it has fewer than MIN_PLAYERS when its join window closes. */
 export function fill(roundId) {
