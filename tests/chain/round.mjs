@@ -12,7 +12,8 @@ import { injectWallet } from './wallet.mjs';
 const base = process.argv[2] || 'http://127.0.0.1:3043', idx = Number(process.env.PLAYER || 0);
 const m = Mnemonic.fromPhrase(readFileSync(`${homedir()}/.config/zama/siroclimb-battery.mnemonic`, 'utf8').trim());
 const key = HDNodeWallet.fromMnemonic(m, `m/44'/60'/0'/0/${idx}`).privateKey;
-const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new' });
+// a persistent profile per test wallet: the game session (and its gas) carries over between runs
+const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', userDataDir: `out/chrome-player-${idx}` });
 const pg = await b.newPage();
 const errors = [];
 pg.on('pageerror', e => { errors.push(e.message); console.log('PAGEERROR', e.message); });
