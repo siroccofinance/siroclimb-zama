@@ -46,8 +46,9 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
     uint32 public constant MAX_MULT = 10 * SCALE;
     uint64 public constant MAX_STAKE = 100_000_000; // 100 cUSDC (6 decimals)
     uint64 public constant MAX_PAYOUT = (MAX_STAKE * MAX_MULT) / SCALE;
-    /// @notice The entry price of a solo run must be at most this old.
-    uint64 public constant MAX_ENTRY_AGE = 30;
+    /// @notice The entry price of a solo run must be at most this old (Sepolia inclusion can take
+    ///         a few blocks); a fallback price can ride along to refresh it in the same transaction.
+    uint64 public constant MAX_ENTRY_AGE = 60;
     uint256 public constant MAX_ROUND_PLAYERS = 24;
     uint64 public constant ROUND_REFUND_AFTER = 1 days;
     uint64 public constant PACK_COOLDOWN = 10 minutes;
@@ -148,7 +149,6 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
     mapping(address player => string) public nameOf;
     mapping(address session => SessionGrant) public sessions;
     mapping(address player => address) public sessionOf;
-    mapping(address player => uint256[]) private _runsOf;
 
     mapping(address player => euint8) private _packTier;
     mapping(address player => bool) public hasPack;
@@ -288,17 +288,26 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
 
     /// @notice Opens a solo run. Side and stake are encrypted inputs (bound to the caller); the
     ///         stake is clamped to `MAX_STAKE` on ciphertexts and pulled from the player as an
-    ///         ERC-7984 operator. A signed Pyth update can ride along so the entry is fresh.
+    ///         ERC-7984 operator. A signed Pyth update can ride along so the entry is fresh; for a
+    ///         market Pyth does not cover, a public price can ride along instead (the oracle's
+    ///         bounds apply, exactly as for `pushPublic`).
     function startRun(
         uint8 market,
         externalEbool side,
         externalEuint64 stake,
         bytes calldata inputProof,
         bool usePack,
-        bytes[] calldata pythUpdate
+        bytes[] calldata pythUpdate,
+        uint64 fallbackPrice
     ) external payable returns (uint256 runId) {
         if (market >= marketCount) revert UnknownMarket(market);
         if (pythUpdate.length != 0) oracle.pushPyth{value: msg.value}(pythUpdate);
+        if (fallbackPrice != 0) {
+            uint256[] memory ms = new uint256[](1);
+            uint64[] memory ps = new uint64[](1);
+            (ms[0], ps[0]) = (market, fallbackPrice);
+            try oracle.pushPublic(ms, ps) {} catch {}
+        }
         (uint256 index, uint64 at, uint64 price, ) = oracle.latest(market);
         if (block.timestamp > at + MAX_ENTRY_AGE) revert StaleEntry(market, at);
         address player = playerOf(msg.sender);
@@ -312,7 +321,6 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
         r.startAt = uint64(block.timestamp);
         r.entryPrice = price;
         r.entryIndex = uint32(index);
-        _runsOf[player].push(runId);
 
         Sealed storage s = _sealed[runId];
         s.long = FHE.fromExternal(side, inputProof);
@@ -430,7 +438,6 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
         r.status = RunStatus.Live;
         r.roundId = uint32(roundId);
         r.startAt = rd.startsAt;
-        _runsOf[player].push(runId);
         _roundRuns[roundId].push(runId);
         runOfPlayerInRound[roundId][player] = runId + 1;
 
@@ -545,10 +552,6 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
         );
     }
 
-    function runsOf(address player) external view returns (uint256[] memory) {
-        return _runsOf[player];
-    }
-
     function roundCount() external view returns (uint256) {
         return _rounds.length;
     }
@@ -575,10 +578,6 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
             if (block.timestamp <= at + 2 * MAX_ENTRY_AGE) return m;
         }
         return roundMarkets[k % len];
-    }
-
-    function roundMarketList() external view returns (uint8[] memory) {
-        return roundMarkets;
     }
 
     function resultCount() external view returns (uint256) {
