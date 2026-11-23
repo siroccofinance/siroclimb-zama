@@ -20,7 +20,7 @@ await pg.evaluateOnNewDocument(() => { localStorage.setItem('siroclimb:ui:seenRu
 await pg.setViewport({ width: 1440, height: 900 });
 const wait = ms => new Promise(r => setTimeout(r, ms)), t0 = Date.now(), T = () => ((Date.now() - t0) / 1000).toFixed(0) + 's';
 const shot = n => pg.screenshot({ path: `out/chain-solo-${n}.png` });
-const line = () => pg.evaluate(() => document.querySelector('#chainline')?.hidden ? '' : document.querySelector('#chainlineT')?.textContent);
+const line = () => pg.evaluate(() => [document.querySelector('#chainline')?.hidden ? '' : document.querySelector('#chainlineT')?.textContent, document.querySelector('#toast.is-on')?.textContent].filter(Boolean).join(' / '));
 await pg.goto(`${base}/#play`, { waitUntil: 'networkidle2', timeout: 60000 });
 await wait(3000);
 console.log(T(), 'player', w.address);
