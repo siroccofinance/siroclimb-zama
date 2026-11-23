@@ -1,7 +1,7 @@
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 import puppeteer from 'puppeteer-core';
 const [root, out, W = 1440, H = 900, tag = 'd', flow = 'solo'] = process.argv.slice(2);
-const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.mp4': 'video/mp4', '.webm': 'video/webm', '.webp': 'image/webp', '.svg': 'image/svg+xml' };
+const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.mp4': 'video/mp4', '.webm': 'video/webm', '.webp': 'image/webp', '.json': 'application/json', '.svg': 'image/svg+xml' };
 const srv = http.createServer((q, r) => { let u = decodeURIComponent(q.url.split('?')[0]); if (u === '/') u = '/index.html'; const p = path.join(root, u); if (!fs.existsSync(p)) { r.writeHead(404); return r.end(); } r.writeHead(200, { 'content-type': types[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(r); }).listen(0);
 const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const pg = await b.newPage(); pg.on('pageerror', e => console.log('ERR', e.message)); pg.on('console', c => ['error', 'warning'].includes(c.type()) && console.log('CONSOLE', c.text()));
@@ -10,7 +10,7 @@ await pg.setViewport({ width: +W, height: +H, isMobile: mob, hasTouch: mob, devi
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const shot = n => pg.screenshot({ path: `${out}/${tag}-${n}.png` });
 const scr = () => pg.evaluate(() => document.body.dataset.screen);
-await pg.goto(`http://localhost:${srv.address().port}/play.html`, { waitUntil: 'networkidle2' });
+await pg.goto(`http://localhost:${srv.address().port}/play.html?mock`, { waitUntil: 'networkidle2' });
 await wait(2200); await shot('0rules');
 await pg.click('.sheet__ok'); await wait(700); await shot('1lobby');
 if (flow === 'solo') {
