@@ -19,7 +19,7 @@ export const pythContract = new Contract(ADDR.Pyth, ['function getUpdateFee(byte
 
 // ───────────────────────────── senders (session key, bots)
 const TX_GAS_CAP = 16_000_000n;
-const RETRY = /nonce|underpriced|already known|replacement|timeout|failed to fetch|network|ECONNRESET|503|502|429/i;
+const RETRY = /nonce|underpriced|already known|replacement|timeout|failed to fetch|network|ECONNRESET|503|502|429|insufficient funds/i;
 
 export class Sender {
   constructor(key) { this.wallet = new Wallet(key, rpc); this.address = this.wallet.address; this.queue = Promise.resolve(); this.nonce = null; }
