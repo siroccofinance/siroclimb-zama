@@ -104,6 +104,7 @@ async function soloRun(p, wave, delay = 0) {
     payout: value === expValue,
     balance: p === poor ? after === 0n : after - before === expValue - expPaid,
   };
+  log(`solo w${wave} ${p.name.padEnd(18)} run ${id} ${Object.values(checks).every(Boolean) ? 'PASS' : 'FAIL'} mult ${Number(mult) / 1e6} payout ${Number(value) / 1e6}`);
   pass('solo', Object.values(checks).every(Boolean), { wave, player: p.name, run: Number(id), market: MARKETS[market].id, side: long ? 'long' : 'short', stake: Number(stake) / 1e6, scenario,
     mult: Number(mult) / 1e6, multLong: Number(r.multLong) / 1e6, multShort: Number(r.multShort) / 1e6, payout: Number(value) / 1e6, seconds: Number(r.endAt - r.startAt), checks });
   if (scenario !== 'unfunded' && Math.random() < 0.15) {        // publish: reveal the multiplier with a KMS proof
@@ -194,7 +195,9 @@ await Promise.all(players.slice(0, Math.ceil(N / 3)).map(async p => { await p.se
 for (let w = 1; w <= WAVES; w++) {
   await Promise.all(players.map(p => topUp(p).catch(() => {})));
   const runners = w === 1 ? [...players, poor] : players;
-  const res = await Promise.allSettled(runners.map((p, i) => soloRun(p, w, i * 2000)));
+  // watchdog: a run that hangs (a dropped request somewhere) fails after 8 minutes instead of blocking the wave
+  const guard = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error(`watchdog: ${what} took over ${ms / 60000} min`)), ms))]);
+  const res = await Promise.allSettled(runners.map((p, i) => guard(soloRun(p, w, i * 2000), 8 * 60_000, 'solo run')));
   res.forEach((r, i) => { if (r.status === 'rejected') { log('solo error', runners[i].name, errText(r.reason)); pass('solo', false, { wave: w, player: runners[i].name, error: errText(r.reason) }); } });
   log(`wave ${w}: ${results.solo.filter(x => x.wave === w && x.ok).length} / ${results.solo.filter(x => x.wave === w).length} pass`);
 }
