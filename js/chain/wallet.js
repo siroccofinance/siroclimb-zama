@@ -33,7 +33,7 @@ export class Sender {
           const gas = est * 2n > TX_GAS_CAP ? TX_GAS_CAP : est * 2n;     // the FHE cost depends on the state it lands on
           const pending = await rpc.getTransactionCount(this.address, 'pending');
           const nonce = this.nonce == null ? pending : Math.max(this.nonce, pending);
-          const tx = await c[method](...args, { value, gasLimit: gas, nonce });
+          const tx = await c[method](...args, { value, gasLimit: gas, nonce, ...(await fees()) });
           this.nonce = nonce + 1;
           emitTx({ label, hash: tx.hash, from: this.address, state: 'sent' });
           const rc = await rpc.waitForTransaction(tx.hash, 1, 180_000);
@@ -71,6 +71,14 @@ export class Sender {
 export function derived(sender, tag) {
   const key = keccak256(toUtf8Bytes(`${sender.key}:${tag}`));
   return new Sender(key);
+}
+
+/** A small tip above the floor so a game transaction lands in the next block even when Sepolia is busy. */
+const MIN_TIP = 200_000_000n; // 0.2 gwei
+async function fees() {
+  const fd = await rpc.getFeeData();
+  const tip = (fd.maxPriorityFeePerGas ?? 0n) > MIN_TIP ? fd.maxPriorityFeePerGas : MIN_TIP;
+  return { maxPriorityFeePerGas: tip, maxFeePerGas: (fd.maxFeePerGas ?? fd.gasPrice ?? 0n) + tip };
 }
 
 const txSubs = new Set();
