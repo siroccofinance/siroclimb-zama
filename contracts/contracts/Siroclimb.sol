@@ -86,6 +86,7 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
         uint32 multLong; // public at the end: value / stake for a long (6 decimals), uncapped ladder
         uint32 multShort; // same for a short
         uint32 entryIndex; // oracle checkpoint of the entry
+        uint32 exitIndex; // last oracle checkpoint counted (written at or before the exit, known at settlement)
         bool publishRequested;
         bool published;
     }
@@ -603,7 +604,9 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
             r.entryIndex = uint32(idx);
             r.entryPrice = oracle.getCheckpoint(r.market, idx).price;
         }
-        (uint32 ml, uint32 ms, uint64 exitPrice) = ladder.multipliers(r.market, r.entryIndex, r.startAt, exitAt, TOP_STEP);
+        uint256 exitIndex = oracle.indexAtOrBefore(r.market, exitAt);
+        r.exitIndex = uint32(exitIndex);
+        (uint32 ml, uint32 ms, uint64 exitPrice) = ladder.multipliers(r.market, r.entryIndex, exitIndex, r.startAt, TOP_STEP);
         r.status = RunStatus.Ended;
         r.endAt = exitAt;
         r.exitPrice = exitPrice;
@@ -617,7 +620,7 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
             // the cap is encrypted: pick among the capped paths on ciphertexts
             uint8[3] memory caps = [uint8(1), 2, 4];
             for (uint256 k; k < 3; ++k) {
-                (uint32 cl, uint32 cs, ) = ladder.multipliers(r.market, r.entryIndex, r.startAt, exitAt, caps[k]);
+                (uint32 cl, uint32 cs, ) = ladder.multipliers(r.market, r.entryIndex, exitIndex, r.startAt, caps[k]);
                 mult = FHE.select(FHE.eq(s.cap, caps[k]), FHE.select(s.long, FHE.asEuint32(cl), FHE.asEuint32(cs)), mult);
             }
         }
