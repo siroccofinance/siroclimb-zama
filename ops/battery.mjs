@@ -33,7 +33,7 @@ const poor = Object.assign(new Sender(batteryWallet(800)), { i: 'poor', name: 'q
 
 // ── setup
 async function setup(p, { fund = true } = {}) {
-  if ((await p.eth()) < 0.02) await deployer.sendEth(p.address, 0.04);
+  if ((await p.eth()) < 0.01) await deployer.sendEth(p.address, 0.02);
   if (fund && Number(await faucet.lastClaim(p.address)) === 0) await p.send(faucet, 'claim');
   if (!(await token.isOperator(p.address, ADDR.Siroclimb))) await p.send(token, 'setOperator', [ADDR.Siroclimb, Math.floor(Date.now() / 1000) + 30 * 86400]);
   if (!(await game.nameOf(p.address))) await p.send(game, 'setName', [p.name]);
