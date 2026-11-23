@@ -1,0 +1,15 @@
+{
+  "name": "siroclimb-ops",
+  "private": true,
+  "description": "Optional ops for Siroclimb on Sepolia: on-chain test battery, keeper. Nothing here is needed to play.",
+  "type": "module",
+  "scripts": {
+    "battery": "node battery.mjs",
+    "keeper": "node keeper.mjs",
+    "status": "node status.mjs"
+  },
+  "dependencies": {
+    "@zama-fhe/relayer-sdk": "0.4.1",
+    "ethers": "6.17.0"
+  }
+}
