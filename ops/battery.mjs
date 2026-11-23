@@ -17,7 +17,7 @@
 // usage: node battery.mjs [players=16] [soloWaves=2] [rounds=2]
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { Contract } from 'ethers';
-import { ADDR, MARKETS, SCALE, Sender, USDC, balanceOf, batteryWallet, encryptRun, errText, faucet, fallbackFor, game, handle, key, ladder, openMarkets, publicDecrypt, pushIfStale, pythFor, sleep, token, userDecrypt } from './lib.mjs';
+import { ADDR, MARKETS, SCALE, Sender, USDC, balanceOf, view, batteryWallet, encryptRun, errText, faucet, fallbackFor, game, handle, key, ladder, openMarkets, publicDecrypt, pushIfStale, pythFor, sleep, token, userDecrypt } from './lib.mjs';
 
 const N = Number(process.argv[2] || 16), WAVES = Number(process.argv[3] || 2), ROUNDS = Number(process.argv[4] || 2);
 const OFFSET = Number(process.env.OFFSET || 1);         // index 0 is the browser e2e player
@@ -68,6 +68,7 @@ async function soloRun(p, wave) {
   const stake = scenario === 'clamp' ? 150n * USDC : BigInt(5 + Math.floor(Math.random() * 60)) * USDC;
   inUse.add(market);
   const before = p === poor ? 0n : await balanceOf(p.wallet);
+  const beforeHandle = balanceOf.last;
   const enc = await encryptRun(p.address, long, stake);
   const py = await pythFor(market);
   const fb = py ? 0n : await fallbackFor(market);
@@ -76,16 +77,15 @@ async function soloRun(p, wave) {
   const id = ev.args.runId;
   if (scenario === 'pack') p.hasPack = false;
   log(`solo w${wave} ${p.name.padEnd(18)} run ${id} ${MARKETS[market].id} ${long ? 'long ' : 'short'} ${Number(stake) / 1e6} ${scenario}`);
-  if (scenario === 'expire') { expired.add(id); for (let i = 0; i < 60; i++) { if (Number((await game.getRun(id)).status) === 2) break; await sleep(4000); } }
+  if (scenario === 'expire') { expired.add(id); await view(() => game.getRun(id), x => Number(x.status) === 2, 80); }
   else {
     await sleep((8 + Math.random() * 40) * 1000);
     const py2 = await pythFor(market);
     await p.send(game, 'cashOut', [id, py2 ? py2.updateData : []], py2 ? py2.fee : 0n).catch(e => { if (!/WrongRunStatus/.test(errText(e))) throw e; });
   }
   // public RPC nodes lag: read the run until it shows as settled with its handles
-  let r = await game.getRun(id);
-  for (let i = 0; i < 20 && Number(r.status) !== 2; i++) { await sleep(3000); r = await game.getRun(id); }
-  for (let i = 0; i < 20 && /^0x0+$/.test((await game.runHandles(id))[3]); i++) await sleep(3000);
+  const r = await view(() => game.getRun(id), x => Number(x.status) === 2, 30);
+  await view(() => game.runHandles(id), h => !/^0x0+$/.test(h[3]), 30);
   const [mL, mS] = await ladder.multipliers(market, r.entryIndex, r.startAt, r.endAt, 6);
   const [, paidH, valueH, multH, , capH] = await game.runHandles(id);
   const [paid, value, mult, cap] = await userDecrypt(p.wallet, [{ handle: paidH, contract: ADDR.Siroclimb }, { handle: valueH, contract: ADDR.Siroclimb }, { handle: multH, contract: ADDR.Siroclimb }, { handle: capH, contract: ADDR.Siroclimb }]);
@@ -93,7 +93,7 @@ async function soloRun(p, wave) {
   if (scenario === 'pack') { const [cl, cs] = await ladder.multipliers(market, r.entryIndex, r.startAt, r.endAt, Number(cap)); expMult = long ? cl : cs; }
   const expPaid = scenario === 'unfunded' ? 0n : expectedPaid(stake);
   const expValue = (expPaid * expMult) / SCALE;
-  const after = p === poor ? 0n : await balanceOf(p.wallet);
+  const after = p === poor ? 0n : await balanceOf(p.wallet, beforeHandle);
   const checks = {
     pathMatchesLadder: mL === r.multLong && mS === r.multShort,
     sideMultiplier: mult === expMult,
@@ -122,19 +122,20 @@ async function roundGame(k) {
   const roster = players.slice(0, Math.min(players.length, 24));
   const entrants = k === 1 ? [poor, ...roster.slice(0, 23)] : roster;
   const sides = new Map(), before = new Map();
-  for (const p of entrants) if (p !== poor) before.set(p, await balanceOf(p.wallet));
+  const beforeH = new Map();
+  for (const p of entrants) if (p !== poor) { before.set(p, await balanceOf(p.wallet)); beforeH.set(p, balanceOf.last); }
   // the first player opens it, the others join concurrently
   const join = async p => { const long = Math.random() < 0.5; sides.set(p, long); const enc = await encryptRun(p.address, long); await p.send(game, 'joinRound', [id, enc.handles[0], enc.proof]); };
   await join(entrants[0]);
-  const [r0] = await game.getRound(id);
+  const [r0] = await view(() => game.getRound(id));
   inUse.add(Number(r0.market));
   log(`round ${id} on ${MARKETS[Number(r0.market)].id} (${live.length} markets open), ${entrants.length} players`);
   const joined = await Promise.allSettled(entrants.slice(1).map(join));
   joined.forEach((j, i) => { if (j.status === 'rejected') log('join failed', entrants[i + 1].name, errText(j.reason)); });
-  const [r1, ids] = await game.getRound(id);
+  const [r1, ids] = await view(() => game.getRound(id), ([, x]) => x.length >= entrants.length - joined.filter(j => j.status === 'rejected').length);
   const startsAt = Number(r1.startsAt), endsAt = Number(r1.endsAt);
   const runOf = new Map();
-  for (const rid of ids) { const x = await game.getRun(rid); runOf.set(x.player.toLowerCase(), rid); }
+  for (const rid of ids) { const x = await view(() => game.getRun(rid)); runOf.set(x.player.toLowerCase(), rid); }
   // exits: 40 % cash out during the minute
   await sleep(Math.max(0, startsAt * 1000 - Date.now()) + 2000);
   await Promise.all(entrants.filter(p => runOf.has(p.address.toLowerCase())).map(async p => {
@@ -149,7 +150,7 @@ async function roundGame(k) {
   const { values: scores, proof } = await publicDecrypt([...handles]);
   await keeper.send(game, 'finalizeRound', [id, scores, proof]).catch(e => { if (!/WrongRoundStatus/.test(errText(e))) throw e; });
   // local recomputation of ranks and prizes
-  const [rf] = await game.getRound(id);
+  const [rf] = await view(() => game.getRound(id), ([x]) => Number(x.status) === 3, 30);
   const order = scores.map((s, i) => i).sort((a, b) => (scores[b] > scores[a] ? 1 : scores[b] < scores[a] ? -1 : a - b));
   const funded = scores.filter(s => s !== 0n).length, pot = BigInt(funded) * 10n * USDC, places = Math.min(3, funded);
   const bps = [5000n, 3000n, 2000n], shareSum = bps.slice(0, places).reduce((a, b) => a + b, 0n);
@@ -163,11 +164,11 @@ async function roundGame(k) {
   }
   const checks = [];
   for (let i = 0; i < ids.length; i++) {
-    const run = await game.getRun(ids[i]);
+    const run = await view(() => game.getRun(ids[i]), x => Number(x.status) === 2);
     const p = entrants.find(x => x.address.toLowerCase() === run.player.toLowerCase());
     const long = sides.get(p);
     const expScore = p === poor ? 0n : (long ? run.multLong : run.multShort) + 1n;
-    const after = p === poor ? 0n : await balanceOf(p.wallet);
+    const after = p === poor ? 0n : await balanceOf(p.wallet, beforeH.get(p));
     const ok = scores[i] === expScore && (p === poor || after - before.get(p) === prize.get(i) - 10n * USDC);
     checks.push({ player: p.name, side: long ? 'long' : 'short', score: Number(scores[i]), pnlPct: scores[i] ? (Number(scores[i]) - 1 - 1e6) / 1e4 : null, prize: Number(prize.get(i)) / 1e6, ok });
   }

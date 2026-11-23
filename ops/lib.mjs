@@ -130,9 +130,20 @@ export async function userDecrypt(wallet, items) {
   }
   return items.map(i => out.get(i.handle) ?? 0n);
 }
-export async function balanceOf(wallet) {
-  const h = await token.confidentialBalanceOf(wallet.address);
-  return (await userDecrypt(wallet, [{ handle: h, contract: ADDR.StakeToken }]))[0];
+export async function balanceOf(wallet, notHandle = null) {
+  // a lagging RPC node can still serve the previous balance handle: wait until it changed
+  let h = await token.confidentialBalanceOf(wallet.address);
+  for (let i = 0; i < 15 && notHandle && h === notHandle; i++) { await sleep(3000); h = await token.confidentialBalanceOf(wallet.address); }
+  const v = (await userDecrypt(wallet, [{ handle: h, contract: ADDR.StakeToken }]))[0];
+  balanceOf.last = h;
+  return v;
+}
+/** Retries a view that a lagging RPC node may not serve yet (Panic on a new array index, stale reads). */
+export async function view(fn, ok = () => true, tries = 15) {
+  for (let i = 0; ; i++) {
+    try { const v = await fn(); if (ok(v) || i >= tries) return v; } catch (e) { if (i >= tries) throw e; }
+    await sleep(2500);
+  }
 }
 export async function publicDecrypt(handles) {
   for (let attempt = 0; ; attempt++) {
@@ -155,7 +166,7 @@ export async function pythFor(market) {
 export async function fallbackFor(market, fresh = 0) {
   const [, ts, last] = await oracle.latest(market);
   if (Date.now() / 1000 - Number(ts) < fresh) return 0n;
-  const ref = (await prices()).markets[market];
+  const ref = (await prices().catch(() => ({ markets: [] }))).markets[market];
   if (!(ref?.price > 0)) return 0n;
   const lastP = Number(last) / 1e10;
   return BigInt(Math.round(Math.min(lastP * 1.0049, Math.max(lastP * 0.9951, ref.price)) * 1e10));
