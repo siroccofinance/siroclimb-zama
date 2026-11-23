@@ -469,3 +469,32 @@ body[data-side="short"] .sideglow { --g: var(--short); }
 .sharetip__links a:hover { text-decoration: underline; }
 .sharetip__x { position: absolute; top: 6px; right: 6px; color: rgba(43, 33, 26, .5); }
 .sharetip__x:hover { background: rgba(43, 33, 26, .07); color: var(--ink-d); }
+
+/* ── chain states: status line (wallet, encryption, transactions, decryption, keeper) */
+.chainline { position: fixed; left: 50%; top: 76px; z-index: 60; display: flex; align-items: center; gap: 10px; max-width: min(92vw, 560px);
+  padding: 9px 16px 9px 12px; border-radius: 999px; background: rgba(43, 20, 10, .72); border: 1px solid var(--line); color: var(--ink);
+  font-size: 13.5px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transform: translate(-50%, -8px); opacity: 0;
+  transition: opacity .25s var(--ease), transform .25s var(--ease); pointer-events: none; }
+.chainline.is-on { opacity: 1; transform: translate(-50%, 0); }
+.chainline i { width: 14px; height: 14px; flex: none; border-radius: 50%; border: 2px solid rgba(255, 230, 166, .3); border-top-color: #ffe6a6; animation: spin .8s linear infinite; }
+.chainline[data-kind="fhe"] i { border-top-color: #f2c94c; }
+.chainline[data-kind="decrypt"] i { border-top-color: #9be7b0; }
+.chainline[data-kind="keeper"] { opacity: .8; }
+.chainline[data-kind="error"] i { animation: none; border-color: #ef4444; }
+.chainline span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 767px) { .chainline { top: 64px; font-size: 12.5px; } }
+
+/* encrypted balance: a button that decrypts it */
+.balance__v { font: inherit; font-weight: 600; color: inherit; padding: 0; background: none; border: 0; cursor: default; }
+.balance__v.is-sealed { cursor: pointer; color: #ffe6a6; letter-spacing: .02em; }
+.balance__v.is-sealed:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* closed stock markets */
+.market.is-closed { opacity: .55; }
+.market .c.is-closed { color: var(--ink-mute); }
+
+/* sealed round standings */
+.standings li.is-sealed span:last-child { color: var(--ink-mute); font-size: 12px; letter-spacing: .03em; }
+.result__round a, .linkish { color: #ffe6a6; text-decoration: underline; text-underline-offset: 3px; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.linkish:disabled { opacity: .7; cursor: default; text-decoration: none; }
