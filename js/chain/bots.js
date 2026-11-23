@@ -47,7 +47,10 @@ export function fill(roundId) {
   if (!enabled() || filling.has(roundId)) return;
   filling.add(roundId);
   (async () => {
-    const [r] = await W.game.getRound(roundId);
+    // the RPC may not show the round yet right after the join (lagging node): retry the read
+    let r = null;
+    for (let i = 0; i < 10 && !r; i++) { try { [r] = await W.game.getRound(roundId); } catch { await W.sleep(2000); } }
+    if (!r) return;
     const startsAt = Number(r.startsAt) * 1000, endsAt = Number(r.endsAt) * 1000;
     // give humans most of the join window, keep ~25 s for the bots' encryption and blocks
     await W.sleep(Math.max(0, startsAt - 27_000 - Date.now()));

@@ -26,6 +26,8 @@ export const listAssets = () => MARKETS.map(m => ({ id: m.id, name: m.name, tick
 export const subscribePrice = (id, cb) => feed.subscribe(indexOf(id), cb);
 export const history = (id, seconds = 60) => feed.history(indexOf(id), seconds);
 export const marketOpen = id => feed.isOpen(indexOf(id));
+/** Where the chain gets this market's checkpoints from now: 'Pyth' (verified) or 'bounded' (public fallback). */
+export const priceSource = id => (feed.isPyth(indexOf(id)) ? 'Pyth verified' : 'bounded fallback');
 export const onMarkets = cb => feed.onMarkets(cb);
 let focusId = null;
 /** The market the lobby shows: its price checkpoint is kept fresh so a start is instant. */
@@ -322,7 +324,7 @@ export async function joinRound({ side = 'long' }) {
   myRoundRuns.set(Number(ev.roundId), id);
   makeRun({ id, mode: 'round', assetId: MARKETS[Number(ev.market)].id, side, stake: ROUND_ENTRY, startedAt: Number(ev.startAt) * 1000, entryPrice: feed.last(Number(ev.market)), roundId: Number(ev.roundId) });
   if (bal != null) setBal(bal - ROUND_ENTRY);
-  await pollRound();
+  for (let i = 0; i < 10; i++) { await pollRound(); if ((roundCache.latest?.id ?? -1) >= Number(ev.roundId)) break; await sleep(1500); }   // lagging RPC nodes
   bots.fill(Number(ev.roundId));
   return currentRound();
 }
