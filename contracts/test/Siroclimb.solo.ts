@@ -149,16 +149,30 @@ describe("Siroclimb: solo runs", function () {
   });
 
   it("refuses a stale entry price", async function () {
-    await time.increase(31);
+    await time.increase(61);
     const { handles, proof } = await encrypt(f, f.alice, true, 10n * USDC);
-    await expect(f.game.connect(f.alice).startRun(AAPL, handles[0], handles[1], proof, false, [])).to.be.revertedWithCustomError(
+    await expect(f.game.connect(f.alice).startRun(AAPL, handles[0], handles[1], proof, false, [], 0)).to.be.revertedWithCustomError(
       f.game,
       "StaleEntry",
     );
-    await expect(f.game.connect(f.alice).startRun(9, handles[0], handles[1], proof, false, [])).to.be.revertedWithCustomError(
+    await expect(f.game.connect(f.alice).startRun(9, handles[0], handles[1], proof, false, [], 0)).to.be.revertedWithCustomError(
       f.game,
       "UnknownMarket",
     );
+  });
+
+  it("a bounded public price can ride along to refresh a stale entry (fallback market)", async function () {
+    await time.increase(90);
+    const { handles, proof } = await encrypt(f, f.alice, true, 10n * USDC);
+    // out of bounds: the push is skipped, the entry is stale, the start reverts
+    await expect(
+      f.game.connect(f.alice).startRun(XAUT, handles[0], handles[1], proof, false, [], (BASE[XAUT] * 10_100n) / 10_000n),
+    ).to.be.revertedWithCustomError(f.game, "StaleEntry");
+    const p = (BASE[XAUT] * 10_030n) / 10_000n;
+    await f.game.connect(f.alice).startRun(XAUT, handles[0], handles[1], proof, false, [], p);
+    const run = await f.game.getRun((await f.game.runCount()) - 1n);
+    expect(run.entryPrice).to.eq(p);
+    expect((await f.oracle.latest(XAUT))[3]).to.eq(2); // a public checkpoint
   });
 
   it("a signed Pyth update can ride along on entry and exit", async function () {
@@ -167,7 +181,7 @@ describe("Siroclimb: solo runs", function () {
     const upd = await f.pyth.createPriceFeedUpdateData(feed[AAPL], 61_500n * 10n ** 8n, 10n, -8, 61_500n * 10n ** 8n, 10n, now + 1, now);
     const { handles, proof } = await encrypt(f, f.alice, true, 10n * USDC);
     await time.setNextBlockTimestamp(now + 1);
-    await f.game.connect(f.alice).startRun(AAPL, handles[0], handles[1], proof, false, [upd], { value: 1 });
+    await f.game.connect(f.alice).startRun(AAPL, handles[0], handles[1], proof, false, [upd], 0, { value: 1 });
     const id = (await f.game.runCount()) - 1n;
     const run = await f.game.getRun(id);
     expect(run.entryPrice).to.eq(61_500n * 10n ** 10n);

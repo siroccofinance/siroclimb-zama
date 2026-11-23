@@ -106,7 +106,7 @@ export async function encrypt(f: Fixture, signer: HardhatEthersSigner | string, 
 
 export async function startRun(f: Fixture, signer: HardhatEthersSigner, market: number, long: boolean, stake: bigint, usePack = false) {
   const { handles, proof } = await encrypt(f, signer, long, stake);
-  await f.game.connect(signer).startRun(market, handles[0], handles[1], proof, usePack, []);
+  await f.game.connect(signer).startRun(market, handles[0], handles[1], proof, usePack, [], 0);
   return (await f.game.runCount()) - 1n;
 }
 
