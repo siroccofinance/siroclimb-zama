@@ -12,7 +12,8 @@ coverage
 dist
 node_modules
 types
-deployments
+deployments/localhost
+deployments/hardhat
 tmp
 
 # files

@@ -2,7 +2,7 @@ import type { ContractTransactionResponse } from "ethers";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { fhevm } from "hardhat";
-import { BASE, ETH, type Fixture, TSLA, USDC, at, deployFixture, encrypt, joinRound, price } from "./helpers";
+import { BASE, NVDA, type Fixture, TSLA, USDC, at, deployFixture, encrypt, joinRound, price } from "./helpers";
 
 // Per-transaction limits of the Zama coprocessor (HCU = homomorphic complexity units).
 const GLOBAL_LIMIT = 20_000_000;
@@ -31,16 +31,16 @@ describe("Siroclimb: HCU budget (worst cases)", function () {
   });
 
   it("solo: start (with reserve refill), packed start, cash out, packed cash out", async function () {
-    await price(f, ETH, BASE[ETH]);
+    await price(f, NVDA, BASE[NVDA]);
     let e = await encrypt(f, f.alice, true, 10n * USDC);
-    await measure("startRun (first: reserve refill)", f.game.connect(f.alice).startRun(ETH, e.handles[0], e.handles[1], e.proof, false, []));
+    await measure("startRun (first: reserve refill)", f.game.connect(f.alice).startRun(NVDA, e.handles[0], e.handles[1], e.proof, false, []));
     await measure("openPack", f.game.connect(f.bob).openPack());
     e = await encrypt(f, f.bob, false, 10n * USDC);
-    await measure("startRun (packed)", f.game.connect(f.bob).startRun(ETH, e.handles[0], e.handles[1], e.proof, true, []));
+    await measure("startRun (packed)", f.game.connect(f.bob).startRun(NVDA, e.handles[0], e.handles[1], e.proof, true, []));
     const run = await f.game.getRun(0);
     for (let k = 1; k <= 5; k++) {
       await at(run.startAt, k * 10);
-      await price(f, ETH, (BASE[ETH] * BigInt(10_000 + k)) / 10_000n);
+      await price(f, NVDA, (BASE[NVDA] * BigInt(10_000 + k)) / 10_000n);
     }
     await measure("cashOut (solo, encrypted payout)", f.game.connect(f.alice).cashOut(0, []));
     await measure("cashOut (packed: 4 capped paths)", f.game.connect(f.bob).cashOut(1, []));

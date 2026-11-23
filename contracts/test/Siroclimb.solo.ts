@@ -4,8 +4,8 @@ import { expect } from "chai";
 import { ethers, fhevm } from "hardhat";
 import {
   BASE,
-  BTC,
-  ETH,
+  AAPL,
+  NVDA,
   type Fixture,
   FAUCET_AMOUNT,
   SCALE,
@@ -30,7 +30,7 @@ describe("Siroclimb: solo runs", function () {
     f = await deployFixture();
   });
 
-  async function runAndPath(long: boolean, stake: bigint, moves: [number, bigint][], exit: number, market = BTC) {
+  async function runAndPath(long: boolean, stake: bigint, moves: [number, bigint][], exit: number, market = AAPL) {
     await price(f, market, BASE[market]); // fresh entry
     const id = await startRun(f, f.alice, market, long, stake);
     const run = await f.game.getRun(id);
@@ -47,7 +47,7 @@ describe("Siroclimb: solo runs", function () {
 
   it("pulls the encrypted stake and keeps side and stake private", async function () {
     const before = await balance(f, f.alice);
-    const id = await startRun(f, f.alice, BTC, true, 25n * USDC);
+    const id = await startRun(f, f.alice, AAPL, true, 25n * USDC);
     expect(await balance(f, f.alice)).to.eq(before - 25n * USDC);
     const [longH, paidH] = await f.game.runHandles(id);
     expect(await fhevm.userDecryptEbool(longH, f.gameAddress, f.alice)).to.eq(true);
@@ -57,14 +57,14 @@ describe("Siroclimb: solo runs", function () {
     await expect(decrypt64(f, paidH, f.bob)).to.be.rejected;
     const run = await f.game.getRun(id);
     expect(run.status).to.eq(1);
-    expect(run.entryPrice).to.eq(BASE[BTC]);
+    expect(run.entryPrice).to.eq(BASE[AAPL]);
   });
 
   it("a long cashed out on a rise is paid stake x multiplier in the same transaction", async function () {
     const stake = 40n * USDC;
     const before = await balance(f, f.alice);
-    const p1 = (BASE[BTC] * 10_010n) / 10_000n; // +0.1 % at 13 s (2x)
-    const p2 = (BASE[BTC] * 10_030n) / 10_000n; // +0.2 % more at 25 s (3x)
+    const p1 = (BASE[AAPL] * 10_010n) / 10_000n; // +0.1 % at 13 s (2x)
+    const p2 = (BASE[AAPL] * 10_030n) / 10_000n; // +0.2 % more at 25 s (3x)
     const { id, expected, run } = await runAndPath(true, stake, [[13, p1], [25, p2]], 31);
     expect(run.multLong).to.eq(expected.long);
     expect(run.multShort).to.eq(expected.short);
@@ -80,7 +80,7 @@ describe("Siroclimb: solo runs", function () {
   it("a short on the same path gets the mirror multiplier", async function () {
     const stake = 10n * USDC;
     const before = await balance(f, f.alice);
-    const p1 = (BASE[BTC] * 9_985n) / 10_000n;
+    const p1 = (BASE[AAPL] * 9_985n) / 10_000n;
     const { expected, run } = await runAndPath(false, stake, [[20, p1]], 22);
     expect(run.multShort).to.eq(expected.short);
     expect(expected.short).to.be.gt(SCALE);
@@ -90,8 +90,8 @@ describe("Siroclimb: solo runs", function () {
   it("the coin falls at -100 % and stays down even if the price comes back", async function () {
     const stake = 10n * USDC;
     const before = await balance(f, f.alice);
-    const crash = (BASE[BTC] * 9_850n) / 10_000n; // -1.5 % at 4x x25 = -150 %
-    const back = (BASE[BTC] * 10_200n) / 10_000n;
+    const crash = (BASE[AAPL] * 9_850n) / 10_000n; // -1.5 % at 4x x25 = -150 %
+    const back = (BASE[AAPL] * 10_200n) / 10_000n;
     const { expected, run } = await runAndPath(true, stake, [[37, crash], [43, back]], 50);
     expect(expected.long).to.eq(0n);
     expect(run.multLong).to.eq(0);
@@ -101,21 +101,21 @@ describe("Siroclimb: solo runs", function () {
   it("anyone settles an expired run at its 60th second, whenever they call", async function () {
     const stake = 20n * USDC;
     const before = await balance(f, f.alice);
-    const id = await startRun(f, f.alice, ETH, true, stake);
+    const id = await startRun(f, f.alice, NVDA, true, stake);
     const run = await f.game.getRun(id);
     await at(run.startAt, 30);
-    await price(f, ETH, (BASE[ETH] * 10_010n) / 10_000n);
+    await price(f, NVDA, (BASE[NVDA] * 10_010n) / 10_000n);
     await at(run.startAt, 59);
     await expect(f.game.connect(f.bob).settleRun(id)).to.be.revertedWithCustomError(f.game, "RunNotOver");
     await at(run.startAt, 70);
-    await price(f, ETH, (BASE[ETH] * 9_000n) / 10_000n); // after the bell: must not count
+    await price(f, NVDA, (BASE[NVDA] * 9_000n) / 10_000n); // after the bell: must not count
     await time.increase(100);
     await f.game.connect(f.bob).settleRun(id);
     const end = await f.game.getRun(id);
     expect(end.endAt).to.eq(run.startAt + 60n);
     const expected = model([
-      { t: 0, p: BASE[ETH] },
-      { t: 30, p: (BASE[ETH] * 10_010n) / 10_000n },
+      { t: 0, p: BASE[NVDA] },
+      { t: 30, p: (BASE[NVDA] * 10_010n) / 10_000n },
     ]);
     expect(end.multLong).to.eq(expected.long);
     expect(await balance(f, f.alice)).to.eq(before - stake + (stake * expected.long) / SCALE);
@@ -123,13 +123,13 @@ describe("Siroclimb: solo runs", function () {
   });
 
   it("only the player (or their session) cashes out", async function () {
-    const id = await startRun(f, f.alice, BTC, true, 10n * USDC);
+    const id = await startRun(f, f.alice, AAPL, true, 10n * USDC);
     await expect(f.game.connect(f.bob).cashOut(id, [])).to.be.revertedWithCustomError(f.game, "NotPlayer");
   });
 
   it("clamps the stake to 100 cUSDC on ciphertexts", async function () {
     const before = await balance(f, f.alice);
-    const id = await startRun(f, f.alice, BTC, true, 500n * USDC);
+    const id = await startRun(f, f.alice, AAPL, true, 500n * USDC);
     const [, paidH] = await f.game.runHandles(id);
     expect(await decrypt64(f, paidH, f.alice)).to.eq(100n * USDC);
     expect(await balance(f, f.alice)).to.eq(before - 100n * USDC);
@@ -138,12 +138,12 @@ describe("Siroclimb: solo runs", function () {
   it("an unfunded stake moves 0 and is paid 0, without revealing the balance", async function () {
     const poor = f.players[5];
     await f.token.connect(poor).setOperator(f.gameAddress, (await time.latest()) + 3600);
-    const id = await startRun(f, poor, BTC, true, 10n * USDC);
+    const id = await startRun(f, poor, AAPL, true, 10n * USDC);
     const [, paidH] = await f.game.runHandles(id);
     expect(await decrypt64(f, paidH, poor)).to.eq(0n);
     const run = await f.game.getRun(id);
     await at(run.startAt, 10);
-    await price(f, BTC, (BASE[BTC] * 10_100n) / 10_000n);
+    await price(f, AAPL, (BASE[AAPL] * 10_100n) / 10_000n);
     await f.game.connect(poor).cashOut(id, []);
     expect(await balance(f, poor)).to.eq(0n);
   });
@@ -151,7 +151,7 @@ describe("Siroclimb: solo runs", function () {
   it("refuses a stale entry price", async function () {
     await time.increase(31);
     const { handles, proof } = await encrypt(f, f.alice, true, 10n * USDC);
-    await expect(f.game.connect(f.alice).startRun(BTC, handles[0], handles[1], proof, false, [])).to.be.revertedWithCustomError(
+    await expect(f.game.connect(f.alice).startRun(AAPL, handles[0], handles[1], proof, false, [])).to.be.revertedWithCustomError(
       f.game,
       "StaleEntry",
     );
@@ -164,14 +164,14 @@ describe("Siroclimb: solo runs", function () {
   it("a signed Pyth update can ride along on entry and exit", async function () {
     const feed = await f.oracle.feedIds();
     const now = await time.latest();
-    const upd = await f.pyth.createPriceFeedUpdateData(feed[BTC], 61_500n * 10n ** 8n, 10n, -8, 61_500n * 10n ** 8n, 10n, now + 1, now);
+    const upd = await f.pyth.createPriceFeedUpdateData(feed[AAPL], 61_500n * 10n ** 8n, 10n, -8, 61_500n * 10n ** 8n, 10n, now + 1, now);
     const { handles, proof } = await encrypt(f, f.alice, true, 10n * USDC);
     await time.setNextBlockTimestamp(now + 1);
-    await f.game.connect(f.alice).startRun(BTC, handles[0], handles[1], proof, false, [upd], { value: 1 });
+    await f.game.connect(f.alice).startRun(AAPL, handles[0], handles[1], proof, false, [upd], { value: 1 });
     const id = (await f.game.runCount()) - 1n;
     const run = await f.game.getRun(id);
     expect(run.entryPrice).to.eq(61_500n * 10n ** 10n);
-    const upd2 = await f.pyth.createPriceFeedUpdateData(feed[BTC], 61_530n * 10n ** 8n, 10n, -8, 61_530n * 10n ** 8n, 10n, now + 20, now + 1);
+    const upd2 = await f.pyth.createPriceFeedUpdateData(feed[AAPL], 61_530n * 10n ** 8n, 10n, -8, 61_530n * 10n ** 8n, 10n, now + 20, now + 1);
     await time.setNextBlockTimestamp(now + 20);
     await f.game.connect(f.alice).cashOut(id, [upd2], { value: 1 });
     const end = await f.game.getRun(id);
@@ -191,7 +191,7 @@ describe("Siroclimb: solo runs", function () {
 
   it("keeps a reserve able to pay any live run at its maximum", async function () {
     expect(await f.game.reserveFloor()).to.eq(0n);
-    await startRun(f, f.alice, BTC, true, 10n * USDC);
+    await startRun(f, f.alice, AAPL, true, 10n * USDC);
     const max = await f.game.MAX_PAYOUT();
     expect(await f.game.reserveFloor()).to.eq(1_000_000n * USDC - max);
     // the house balance is encrypted: the owner of the contract cannot read it either
@@ -200,7 +200,7 @@ describe("Siroclimb: solo runs", function () {
   });
 
   it("publishes a finished run on the leaderboard with the KMS proof, forged values rejected", async function () {
-    const p1 = (BASE[BTC] * 10_020n) / 10_000n;
+    const p1 = (BASE[AAPL] * 10_020n) / 10_000n;
     const { id, expected } = await runAndPath(true, 30n * USDC, [[8, p1]], 12);
     await expect(f.game.connect(f.bob).publishRun(id)).to.be.revertedWithCustomError(f.game, "NotPlayer");
     await f.game.connect(f.alice).publishRun(id);

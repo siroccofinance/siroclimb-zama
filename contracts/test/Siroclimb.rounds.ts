@@ -3,9 +3,9 @@ import { expect } from "chai";
 import { fhevm } from "hardhat";
 import {
   BASE,
-  BTC,
+  AAPL,
   ENTRY,
-  ETH,
+  NVDA,
   type Fixture,
   JOIN_SECONDS,
   SCALE,
@@ -40,7 +40,7 @@ describe("Siroclimb: rounds", function () {
     expect(ids).to.deep.eq([a.runId]);
     await joinRound(f, f.bob, false, 0n);
     expect((await f.game.getRound(0))[1].length).to.eq(2);
-    expect(await f.game.nextRoundMarket()).to.eq(ETH);
+    expect(await f.game.nextRoundMarket()).to.eq(NVDA);
     // nobody can read another player's side
     const [longH] = await f.game.runHandles(a.runId);
     await expect(fhevm.userDecryptEbool(longH, f.gameAddress, f.bob)).to.be.rejected;
@@ -56,7 +56,7 @@ describe("Siroclimb: rounds", function () {
     await expect(joinRound(f, f.bob, false, 0n)).to.be.revertedWithCustomError(f.game, "RoundNotJoinable");
     const b = await joinRound(f, f.bob, false, 1n);
     const [r1] = await f.game.getRound(1);
-    expect(r1.market).to.eq(ETH);
+    expect(r1.market).to.eq(NVDA);
     expect((await f.game.getRun(b.runId)).roundId).to.eq(1);
   });
 
@@ -161,7 +161,7 @@ describe("Siroclimb: rounds", function () {
       const id = await f.game.roundCount();
       await joinRound(f, f.alice, true, id);
       const [r] = await f.game.getRound(id);
-      expect(r.market).to.eq([TSLA, ETH, BTC][i]);
+      expect(r.market).to.eq([TSLA, NVDA, AAPL][i]);
       await time.setNextBlockTimestamp(Number(r.startsAt) + 1);
     }
     expect(await f.game.MAX_ROUND_PLAYERS()).to.eq(24n);
