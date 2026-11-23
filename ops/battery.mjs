@@ -88,14 +88,15 @@ async function soloRun(p, wave, delay = 0) {
   // public RPC nodes lag: read the run until it shows as settled with its handles
   const r = await view(() => game.getRun(id), x => Number(x.status) === 2, 30);
   await view(() => game.runHandles(id), h => !/^0x0+$/.test(h[3]), 30);
-  const [mL, mS] = await ladder.multipliers(market, r.entryIndex, r.exitIndex, r.startAt, 6);
+  const sb = await settledBlock(id, rc.blockNumber);       // recompute at the settlement block (lagging nodes)
+  const [mL, mS] = await view(() => ladder.multipliers(market, r.entryIndex, r.exitIndex, r.startAt, 6, { blockTag: sb }));
   const [, paidH, valueH, multH, , capH] = await game.runHandles(id);
   const [paid, value, mult, cap] = await userDecrypt(p.wallet, [{ handle: paidH, contract: ADDR.Siroclimb }, { handle: valueH, contract: ADDR.Siroclimb }, { handle: multH, contract: ADDR.Siroclimb }, { handle: capH, contract: ADDR.Siroclimb }]);
   let expMult = long ? r.multLong : r.multShort;
   if (scenario === 'pack') { const [cl, cs] = await ladder.multipliers(market, r.entryIndex, r.exitIndex, r.startAt, Number(cap)); expMult = long ? cl : cs; }
   const expPaid = scenario === 'unfunded' ? 0n : expectedPaid(stake);
   const expValue = (expPaid * expMult) / SCALE;
-  const after = p === poor ? 0n : await balanceAt(p.wallet, await settledBlock(id, rc.blockNumber));
+  const after = p === poor ? 0n : await balanceAt(p.wallet, sb);
   const checks = {
     pathMatchesLadder: mL === r.multLong && mS === r.multShort,
     sideMultiplier: mult === expMult,
