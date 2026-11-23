@@ -40,15 +40,19 @@ contract ClimbLadder {
     }
 
     /// @notice Value / stake (6 decimals) of a long and of a short that entered at checkpoint
-    ///         `entryIndex` at time `start` and left at `exitAt`, the ladder capped at `capStep`.
+    ///         `entryIndex` at time `start` and left at checkpoint `exitIndex`, the ladder capped
+    ///         at `capStep`. Index bounds (not times) make the result reproducible by anyone, even
+    ///         when another checkpoint lands later in the block of a cash out.
     function multipliers(
         uint256 market,
         uint256 entryIndex,
+        uint256 exitIndex,
         uint64 start,
-        uint64 exitAt,
         uint8 capStep
     ) external view returns (uint32 multLong, uint32 multShort, uint64 exitPrice) {
-        (uint64[] memory ts, uint64[] memory px) = oracle.path(market, entryIndex, exitAt, MAX_PATH);
+        uint256 count = exitIndex >= entryIndex ? exitIndex - entryIndex + 1 : 1;
+        if (count > MAX_PATH) count = MAX_PATH;
+        (uint64[] memory ts, uint64[] memory px) = oracle.path(market, entryIndex, type(uint256).max, count);
         int256 one = int256(uint256(SCALE));
         int256 accL;
         int256 accS;
