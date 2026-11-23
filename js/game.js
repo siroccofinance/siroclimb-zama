@@ -381,7 +381,7 @@ function hudFrame(dt) {
     if (!next) rungs.forEach(li => li.style.setProperty('--p', 0));
     gaugeFrame(tr);
     const p = u ? u.price : run.entryPrice, ch = (p / run.entryPrice - 1) * 100;
-    $('#hP').textContent = price(p); $('#hC').textContent = pct(ch) + ' since entry';
+    $('#hP').textContent = price(p); const src = api.priceSource(run.assetId); $('#hC').textContent = pct(ch) + ' since entry' + (src ? ` · ${src}` : '');
   }
 }
 
