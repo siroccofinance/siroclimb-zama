@@ -2,7 +2,7 @@ import { FhevmType } from "@fhevm/hardhat-plugin";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers, fhevm } from "hardhat";
-import { BASE, ETH, type Fixture, SCALE, USDC, at, balance, decrypt32, deployFixture, encrypt, model, price } from "./helpers";
+import { BASE, NVDA, type Fixture, SCALE, USDC, at, balance, decrypt32, deployFixture, encrypt, model, price } from "./helpers";
 
 describe("Siroclimb: sessions and packs", function () {
   let f: Fixture;
@@ -26,20 +26,20 @@ describe("Siroclimb: sessions and packs", function () {
     expect(await f.game.playerOf(session.address)).to.eq(f.alice.address);
     expect(await f.game.sessionOf(f.alice.address)).to.eq(session.address);
     const before = await balance(f, f.alice);
-    await price(f, ETH, BASE[ETH]);
+    await price(f, NVDA, BASE[NVDA]);
     // inputs are encrypted for the session (the transaction sender); funds move from the player
     const { handles, proof } = await encrypt(f, session.address, true, 50n * USDC);
-    await f.game.connect(session).startRun(ETH, handles[0], handles[1], proof, false, []);
+    await f.game.connect(session).startRun(NVDA, handles[0], handles[1], proof, false, []);
     const id = (await f.game.runCount()) - 1n;
     const run = await f.game.getRun(id);
     expect(run.player).to.eq(f.alice.address);
     expect(await balance(f, f.alice)).to.eq(before - 50n * USDC);
     await at(run.startAt, 14);
-    const p1 = (BASE[ETH] * 10_015n) / 10_000n;
-    await price(f, ETH, p1);
+    const p1 = (BASE[NVDA] * 10_015n) / 10_000n;
+    await price(f, NVDA, p1);
     await at(run.startAt, 15);
     await f.game.connect(session).cashOut(id, []);
-    const m = model([{ t: 0, p: BASE[ETH] }, { t: 14, p: p1 }]).long;
+    const m = model([{ t: 0, p: BASE[NVDA] }, { t: 14, p: p1 }]).long;
     expect(await balance(f, f.alice)).to.eq(before - 50n * USDC + (50n * USDC * m) / SCALE);
     // the player (not the session) owns the run's ciphertexts
     const [, , , multH] = await f.game.runHandles(id);
@@ -98,24 +98,24 @@ describe("Siroclimb: sessions and packs", function () {
     await f.game.connect(f.alice).openPack();
     const tier = Number(await fhevm.userDecryptEuint(FhevmType.euint8, await f.game.packHandle(f.alice.address), f.gameAddress, f.alice));
     const cap = [1, 2, 4, 6][tier];
-    await price(f, ETH, BASE[ETH]);
+    await price(f, NVDA, BASE[NVDA]);
     const { handles, proof } = await encrypt(f, f.alice, true, 10n * USDC);
-    await expect(f.game.connect(f.bob).startRun(ETH, handles[0], handles[1], proof, true, [])).to.be.reverted;
-    await f.game.connect(f.alice).startRun(ETH, handles[0], handles[1], proof, true, []);
+    await expect(f.game.connect(f.bob).startRun(NVDA, handles[0], handles[1], proof, true, [])).to.be.reverted;
+    await f.game.connect(f.alice).startRun(NVDA, handles[0], handles[1], proof, true, []);
     const id = (await f.game.runCount()) - 1n;
     expect(await f.game.hasPack(f.alice.address)).to.eq(false);
     const run = await f.game.getRun(id);
-    const p1 = (BASE[ETH] * 10_010n) / 10_000n;
+    const p1 = (BASE[NVDA] * 10_010n) / 10_000n;
     await at(run.startAt, 50); // step 8 -> capped
-    await price(f, ETH, p1);
+    await price(f, NVDA, p1);
     await at(run.startAt, 51);
     await f.game.connect(f.alice).cashOut(id, []);
     const [, , , multH] = await f.game.runHandles(id);
     const got = await decrypt32(f, multH, f.alice);
-    expect(got).to.eq(model([{ t: 0, p: BASE[ETH] }, { t: 50, p: p1 }], cap).long);
+    expect(got).to.eq(model([{ t: 0, p: BASE[NVDA] }, { t: 50, p: p1 }], cap).long);
     // the public multipliers are the uncapped ones: the cap itself stays private
-    expect((await f.game.getRun(id)).multLong).to.eq(model([{ t: 0, p: BASE[ETH] }, { t: 50, p: p1 }]).long);
-    const s = await f.game.connect(f.alice).startRun.staticCall(ETH, handles[0], handles[1], proof, true, []).catch((e) => e);
+    expect((await f.game.getRun(id)).multLong).to.eq(model([{ t: 0, p: BASE[NVDA] }, { t: 50, p: p1 }]).long);
+    const s = await f.game.connect(f.alice).startRun.staticCall(NVDA, handles[0], handles[1], proof, true, []).catch((e) => e);
     expect(String(s)).to.match(/NoPack|revert/);
   });
 });
