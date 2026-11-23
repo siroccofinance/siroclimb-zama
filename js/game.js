@@ -42,7 +42,7 @@ function setScreen(s) { screen = s; body.dataset.screen = s; }
 
 // ── toast
 let toastT = 0;
-function toast(msg, ms = 2400) { const t = $('#toast'); t.textContent = msg; t.classList.add('is-on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('is-on'), ms); }
+function toast(msg, ms = Math.max(2400, String(msg).length * 70)) { const t = $('#toast'); t.textContent = msg; t.classList.add('is-on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('is-on'), ms); }
 
 // ── chain status line: wallet steps, encryption, transactions, decryption, keeper duties
 const chainline = $('#chainline');
