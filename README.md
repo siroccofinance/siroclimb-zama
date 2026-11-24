@@ -65,8 +65,52 @@ browser does each one itself (autopilot):
 - closing a round at the bell;
 - the KMS reveal and `finalizeRound` with the proof.
 
-The practice bots are real players whose keys come from your session key. An optional ops keeper
+The practice bots are real players whose keys come from your game account. An optional ops keeper
 (`ops/keeper.mjs`) does the same duties.
+
+## Every transaction and signature
+
+The wallet signs once and sends one transaction, on the first visit only. Everything after that is
+sent by the **game account**: a key derived from that one signature, kept in the browser, holding
+the test cUSDC and a little gas. It signs locally, so there are no pop-ups. "Waits" means the player
+waits for it on screen.
+
+**First visit**
+
+| Step | Who signs | Kind | Waits | Gas |
+| --- | --- | --- | --- | --- |
+| Create the game account (`personal_sign` of a fixed message) | wallet | signature | yes | none |
+| Send 0.03 Sepolia ETH to the game account | wallet | transaction | yes (one block) | 21k |
+| `setOperator(Siroclimb)` on cUSDC, 365 days | game account | transaction | no, background | 136k |
+| `ClimbFaucet.claimFor`: mint and wrap 1,000 cUSDC | game account | transaction | no, background | 856k |
+| User-decryption grant (EIP-712, 7 days), then the balance is decrypted | game account | signature | no, automatic | none |
+
+**Solo run**
+
+| Step | Who signs | Kind | Waits | Gas |
+| --- | --- | --- | --- | --- |
+| Encrypt side and stake (relayer proof) | browser | off chain | no, done in the lobby when picked | none |
+| `startRun` with the signed Pyth price (or a bounded public price) | game account | transaction | the coin moves at the click; the entry snaps in when mined | up to 3.77M |
+| Price checkpoints (`pushPyth` / `pushPublic`) | game account (autopilot) | transaction | no, background | 340k (Pyth) |
+| `cashOut` with the signed Pyth price frozen at the click | game account | transaction | no: the result shows in 1.5 s, marked "Settling on chain" | 2.21M |
+| `settleRun` at the 60th second, if not cashed out | game account (autopilot, anyone) | transaction | no, background | 1.88M |
+| Balance decryption after the payout | game account | off chain | no, automatic | none |
+| `publishRun` then `recordRun` with the KMS proof | game account | 2 transactions | only when the player clicks **Post** | small |
+
+**Round**
+
+| Step | Who signs | Kind | Waits | Gas |
+| --- | --- | --- | --- | --- |
+| Encrypt the side | browser | off chain | no, done in the lobby | none |
+| `joinRound` (or open one) | game account | transaction | yes, one block | 2.99M |
+| Practice bots' `joinRound` | bot keys derived in the browser | transactions | no, background | 2.99M each |
+| `exitAtBell` for a live run, just before the bell | game account (autopilot) | transaction | no, background | 1.04M |
+| `closeRound`, then `finalizeRound` with the KMS proof | any browser (autopilot) | 2 transactions | no, background | 0.55M + 1.78M (4 players) to 8.71M (24) |
+| `claim` the prize | game account | transaction | no, background after the standings show | 1.06M |
+
+So a player waits for two things only: the first visit's gas transfer, and the start (`startRun` or
+`joinRound`). A solo run costs two transactions (start and cash out); posting it adds two more, on
+demand.
 
 ## Confidentiality design
 
@@ -128,8 +172,8 @@ and at -100 % the coin falls and the run is worth 0 for good.
 ```
  browser (static site)                                    Sepolia
  ┌─────────────────────────────────────┐   tx   ┌──────────────────────────────────────────┐
- │ wallet: operator approval, session   ├───────►│ Siroclimb ── FHE ops (Zama coprocessor)  │
- │ session key: start, cash out, join   │        │   ├─ cUSDCMock (Zama, ERC-7984)          │
+ │ wallet: 1 signature, 1 gas transfer ├───────►│ Siroclimb ── FHE ops (Zama coprocessor)  │
+ │ game account: every game tx         │        │   ├─ cUSDCMock (Zama, ERC-7984)          │
  │ relayer SDK: encrypt, user/public    │        │   ├─ ClimbLadder ── ClimbPriceOracle      │
  │   decrypt (KMS proofs)               │        │   │                    └─ Pyth (Wormhole) │
  │ autopilot: checkpoints, settle,      │        │ ClimbFaucet ─► USDCMock.mint + wrap      │
@@ -150,7 +194,7 @@ and at -100 % the coin falls and the run is worth 0 for good.
 | `contracts/contracts/tokens/` | `MirrorToken` (xStock underlyings) and the OpenZeppelin ERC-7984 wrapper |
 | `contracts/test/` | FHEVM mock tests, HCU budget |
 | `js/api.js` | The front/back contract; Sepolia by default, `?mock` for the simulation |
-| `js/chain/` | Sepolia implementation: config, FHE client, wallet and session, feed, prices, autopilot, bots |
+| `js/chain/` | Sepolia implementation: config, FHE client, wallet and game account, feed, prices, autopilot, bots |
 | `api/` | Server routes: `pyth.js` (Hermes proxy), `prices.js` (reference prices, market hours) |
 | `ops/` | On-chain battery, optional keeper |
 | `tests/chain/` | Puppeteer end to end tests of the real front on Sepolia (injected test wallet) |
@@ -218,7 +262,8 @@ in the same folder, and the ops keeper uses `keeper.key`. No key is ever committ
   reporters. A wider Pyth entitlement makes them trustless with no code change.
 - Solo runs pay from a house bankroll that the testnet auto-mints (`_reserve`). A mainnet version
   would need a real liquidity pool.
-- The session key lives in the browser's local storage. Its power is limited to playing with the
-  approved stake, and it expires after 7 days.
+- The game account key lives in the browser's local storage and holds only test cUSDC and a little
+  gas. It is derived from a wallet signature, so the same wallet recovers it in any browser. A
+  mainnet version would want a passkey or a smart account instead.
 - Market hours come from the reference route. The contract itself does not know the trading
   calendar; a closed market simply has no fresh checkpoint, and `startRun` refuses stale entries.
