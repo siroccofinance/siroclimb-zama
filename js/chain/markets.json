@@ -114,13 +114,5 @@
         "contract": "ctGBPMock"
       }
     }
-  ],
-  "roundMarkets": [
-    "TSLAx",
-    "NVDAx",
-    "AAPLx",
-    "AMZNx",
-    "XAUt",
-    "tGBP"
   ]
 }
