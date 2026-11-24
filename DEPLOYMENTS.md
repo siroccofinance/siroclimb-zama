@@ -33,3 +33,18 @@ first prices.
 | `cXAUtMock` (shown as cXAUt) | [`0xe4FcF848739845BC81Dee1d5352cf3844F0a60C7`](https://sepolia.etherscan.io/address/0xe4FcF848739845BC81Dee1d5352cf3844F0a60C7) | Gold market, valid in the registry |
 | `ctGBPMock` (shown as ctGBP) | [`0xfCE5c7069c5525eF6c8C2b2E35A745bA20a2F7CC`](https://sepolia.etherscan.io/address/0xfCE5c7069c5525eF6c8C2b2E35A745bA20a2F7CC) | Pound market, valid in the registry. Zama's non-mock `ctGBP` (`0x167D…A208`) is valid too, but its underlying cannot be minted publicly, so the test market uses the mock |
 | Pyth | [`0xDd24F84d36BF92C65F92307595335bdFab5Bbd21`](https://sepolia.etherscan.io/address/0xDd24F84d36BF92C65F92307595335bdFab5Bbd21) | Verifies Hermes updates (Wormhole) |
+
+### Sirocco mirrors (stock markets)
+
+Tokenized stocks have no Zama confidential token on Sepolia, so Siroclimb deploys mirrors of
+Backed's xStocks. They are built exactly like Zama's Sepolia tokens: an ERC-20 underlying
+(`MirrorToken`) with the real token's name, symbol and decimals (18, like the mainnet xStocks) and a
+public mint capped per call, wrapped by the OpenZeppelin `ERC7984ERC20Wrapper` (6 decimals,
+`rate()` = 10^12). **They are not listed in Zama's Wrappers Registry**, where registration is
+owner-only.
+
+| Market | Confidential token | Underlying | Mainnet xStock |
+| --- | --- | --- | --- |
+| Tesla | `cTSLAx` [`0x6a9b0628378DcbE094164C29577D9e53D031d7E1`](https://sepolia.etherscan.io/address/0x6a9b0628378DcbE094164C29577D9e53D031d7E1) | Tesla xStock (TSLAx) [`0xd5Fd…373E`](https://sepolia.etherscan.io/address/0xd5Fde06DdbA04b289839fb0d362F15aa3E72373E) | `0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0` |
+| NVIDIA | `cNVDAx` [`0x2C4a032CD3A8f895B31dc32aB1f3a4CdF65e3E81`](https://sepolia.etherscan.io/address/0x2C4a032CD3A8f895B31dc32aB1f3a4CdF65e3E81) | NVIDIA xStock (NVDAx) [`0x738F…62A3`](https://sepolia.etherscan.io/address/0x738F3128b18A09e460Ef4bB16A473F76F51a62A3) | `0xc845b2894dBddd03858fd2D643B4eF725fE0849d` |
+| Apple | `cAAPLx` [`0x1881F38510f5B8040966312535C80Cb94c5e6433`](https://sepolia.etherscan.io/address/0x1881F38510f5B8040966312535C80Cb94c5e6433) | Apple xStock (AAPLx) [`0x2f12…92da`](https://sepolia.etherscan.io/address/0x2f12893FEcDA47b694EB56459a4039Ddb57792da) | `0x9d275685dC284C8eB1C79f6ABA7a63Dc75ec890a` |
