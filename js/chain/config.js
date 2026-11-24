@@ -6,7 +6,8 @@ const [marketsFile, deployments, ABI] = await Promise.all([load('./markets.json'
 export const CHAIN_ID = 11155111;
 export const CHAIN_HEX = '0xaa36a7';
 const q = new URLSearchParams(location.search);
-export const RPC_URL = q.get('rpc') || window.SIROCLIMB_RPC || 'https://ethereum-sepolia-rpc.publicnode.com';
+// Tenderly's public gateway: CORS-enabled and far more consistent than load-balanced public nodes (F27)
+export const RPC_URL = q.get('rpc') || window.SIROCLIMB_RPC || 'https://sepolia.gateway.tenderly.co';
 export const EXPLORER = 'https://sepolia.etherscan.io';
 export const ADDR = deployments[String(CHAIN_ID)];
 if (!ADDR) throw new Error('Siroclimb is not deployed on Sepolia yet');
