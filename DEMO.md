@@ -25,3 +25,24 @@ open (or use gold and GBP), and a second tab on Sepolia Etherscan.
 
 > "My balance is encrypted on chain. I decrypt it here, in my browser, with a signature that's
 > valid for the day. Nobody else can read it, not even the game's deployer."
+
+## 0:50 to 1:40 · A solo run
+
+*Pick a market (TSLAx if open, else XAUt), Short, 50 cUSDC, then Start climbing. Point at the
+status line: "Encrypting your side and stake…", then "Sealing your run on Sepolia…".*
+
+> "My side and my stake are encrypted right here with Zama's relayer SDK and sealed on chain. The
+> stake is even clamped to 100 on ciphertexts."
+
+*The run plays. The coin climbs and steps down, the leverage gauge fills. Cash out around 4x.*
+
+> "The coin follows real prices: Pyth when it's covered, a bounded fallback otherwise. Every move
+> counts 25 times, then the leverage on top. I'll take it here."
+
+*Result screen: "Settling on chain: encrypted payout…" then "Settled on chain. Paid … cUSDC as an
+encrypted transfer." Click "View the transaction".*
+
+> "The contract worked out, in the open, what a long and what a short would have made on the oracle
+> prices. My encrypted side picked one, it was multiplied by my encrypted stake, and the payout went
+> out as an encrypted transfer in the same transaction. On Etherscan you see the call and two public
+> multipliers. My side, my stake and my payout stay ciphertexts."
