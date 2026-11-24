@@ -14,7 +14,8 @@ const json = p => JSON.parse(readFileSync(join(root, p), 'utf8'));
 export const ADDR = json('js/chain/deployments.json')['11155111'];
 export const ABI = json('js/chain/abi.json');
 export const MARKETS = json('js/chain/markets.json').markets;
-export const RPC_URL = process.env.RPC_URL || 'https://sepolia.gateway.tenderly.co';
+// publicnode: it takes battery load (Tenderly's gateway rate-limits it, F34); reads after writes wait (F27)
+export const RPC_URL = process.env.RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
 // a request the RPC never answers fails after 20 s (ethers waits 5 minutes by default), and is retried
 const rpcRequest = new FetchRequest(RPC_URL);
 rpcRequest.timeout = 20_000;
