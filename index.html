@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="play.css?v=9">
 </head>
-<body data-screen="intro" data-mode="solo">
+<body data-screen="intro">
   <div class="stage" id="stage" aria-hidden="true">
     <video class="stage__video" id="film" autoplay muted loop playsinline preload="auto" poster="assets/poster/siroclimb-hero-poster-1920x1080.webp">
       <source src="assets/video/siroclimb-hero-2560x1440.webm" type="video/webm" media="(min-width: 1600px)">
@@ -71,13 +71,7 @@
     <div class="lobby__main">
       <h2 id="lobby-title" class="title">Pick your climb</h2>
 
-      <div class="field">
-        <span class="label" id="l-mode">Mode</span>
-        <div class="seg" id="mode" role="group" aria-labelledby="l-mode">
-          <button data-v="solo">Solo</button><button data-v="round">Round</button>
-        </div>
-        <p class="hint" id="modeHint"></p>
-      </div>
+      <p class="hint" id="lobbyHint"></p>
 
       <div class="field">
         <span class="label" id="l-market">Market</span>
@@ -97,7 +91,6 @@
           <div class="seg" id="stake" role="group" aria-labelledby="l-stake">
             <button data-v="10">10</button><button data-v="25">25</button><button data-v="50">50</button><button data-v="100">100</button>
           </div>
-          <div class="entry" id="entry"><b id="entryV">10</b> cUSDC entry</div>
         </div>
       </div>
     </div>
@@ -120,7 +113,6 @@
     <div class="hud__clock">
       <svg class="ring" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28"/><circle class="ring__v" id="ringV" cx="32" cy="32" r="28"/></svg>
       <span class="ring__t" id="clock">1:00</span>
-      <span class="rank" id="rank"></span>
     </div>
 
     <ol class="ladder" id="ladder" aria-label="Leverage"></ol>
@@ -132,7 +124,6 @@
       </div>
       <span class="gauge__next" id="gNext">Next 1.5x in 6s</span>
     </div>
-    <ol class="standings" id="standings" aria-label="Round standings"></ol>
 
     <div class="hud__bottom">
       <div class="pnl" aria-live="off">
@@ -150,7 +141,7 @@
       <p class="eyebrow" id="rE">Cashed out</p>
       <h2 class="title" id="rV">+0.00 cUSDC</h2>
       <dl class="stats" id="rS"></dl>
-      <p class="result__round" id="rR" hidden></p>
+      <p class="result__note" id="rR" hidden></p>
     </div>
     <div class="go">
       <button class="ghost" id="share" aria-label="Share your result on X"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.75 3h3.07l-6.7 7.66L22 21h-6.17l-4.83-6.32L5.47 21H2.4l7.17-8.2L2 3h6.33l4.37 5.77L17.75 3zm-1.08 16.18h1.7L7.4 4.73H5.58l11.09 14.45z"/></svg>Share on X</button>
@@ -168,10 +159,8 @@
         <li><b>The coin rolls on the live price.</b> When the price goes your way it climbs a step, when it turns it steps down. Big moves, big jumps. Your leverage grows every 6 seconds, from 1x to 4x.</li>
         <li><b>Cash out whenever you want.</b> If the price runs too far against you, the stairs give way and the coin falls. You lose your stake, never more.</li>
       </ol>
-      <h3>Rounds</h3>
-      <p>60 seconds on the same market for everyone. The top 3 share the pot: 50%, 30% and 20%.</p>
       <h3>Private by design</h3>
-      <p>Your direction and your stake are encrypted on chain with Zama's FHE. Nobody can copy or fade you, not even in a round. Your result is computed on ciphertexts and paid in the same transaction; round standings stay sealed until the bell.</p>
+      <p>Your direction and your stake are encrypted on chain with Zama's FHE. Nobody can copy or fade you. Your result is computed on ciphertexts and paid in the same transaction.</p>
       <p class="fine">Sepolia test network, Zama's confidential test USDC. Real prices (Pyth and public market data); every move counts 25x, then your leverage. Stocks trade during US market hours (4:00 to 20:00 New York time, US trading days).</p>
       <button class="cta sheet__ok" data-close>Got it</button>
     </div>
@@ -182,7 +171,7 @@
       <button class="icon sheet__x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       <h2 id="board-title">Leaderboard</h2>
       <div class="seg seg--tabs" id="boardTabs" role="tablist">
-        <button data-v="round" role="tab">Last round</button><button data-v="today" role="tab">Today</button><button data-v="all" role="tab">All time</button>
+        <button data-v="today" role="tab">Today</button><button data-v="all" role="tab">All time</button>
       </div>
       <ol class="board" id="boardList"></ol>
     </div>
