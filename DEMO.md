@@ -68,3 +68,13 @@ the standings…". The result shows the rank and the prize.*
 > is permissionless."
 
 *Open the leaderboard: Last round.*
+
+## 2:35 to 3:00 · Wrap-up
+
+*Show the README's confidentiality table, then the repo's test output (39 tests, HCU table) and the
+battery summary in FINDINGS.md.*
+
+> "Encrypted sides and stakes, payouts computed on ciphertexts, sealed standings revealed once with a
+> KMS proof, leverage packs from the encrypted PRNG. Stakes in Zama's confidential USDC, real world
+> assets as markets. All on Sepolia, verified on Sourcify, with a battery of concurrent players and
+> every payout checked. Siroclimb: climb higher, privately."
