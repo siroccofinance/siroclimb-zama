@@ -24,11 +24,14 @@
 //   faucet()                                 → Promise<number>    mints and wraps 1,000 test cUSDC
 //   openPack()                               → Promise<{ tier, maxLeverage, proof }>   leverage packs (encrypted PRNG), UI off for now
 //   onStatus(cb)                             → unsubscribe()      cb({ kind: 'wallet' | 'fhe' | 'chain' | 'decrypt' | 'keeper' | 'error', text } | null)
+//   reserveStats()                           → Promise<Reserve>   { tvl, sharePrice, utilization, aprPct, apyPct, interestEarned, locked, openLoans, syncedAt } (public, KMS-synced)
+//   reservePosition()                        → Promise<{ shares, value }>  the player's encrypted reserve shares, decrypted in the browser
+//   reserveDeposit(amount) / reserveWithdraw(amount) → Promise   encrypted amounts in cUSDC; a withdrawal is all or nothing
 //   shareCard(png, result)                   → Promise<string|null> optional hosted share page (null: the front attaches the picture)
 //
 // Run        { id, assetId, side, stake, entryPrice, startedAt, ladder, stepEvery, duration }
-// RunUpdate  { t (s since start), price, step, leverage, value, pnl, pnlPct, risk (0..1 of the stake lost), status }
-// RunResult  { status: 'cashed' | 'busted' | 'expired', value, pnl, pnlPct, maxLeverage, duration (s), entryPrice, exitPrice, pending?, chain? }
+// RunUpdate  { t (s since start), price, step, leverage, value (net of interest), pnl, pnlPct, risk (0..1 of the stake lost), borrowed, interest, status }
+// RunResult  { status: 'cashed' | 'busted' | 'expired', value, pnl, pnlPct, maxLeverage, duration (s), entryPrice, exitPrice, borrowed, interest, pending?, chain? }
 
 const MOCK = new URLSearchParams(location.search).has('mock');
 let impl, chainError = null;
@@ -65,6 +68,10 @@ export const decryptBalance = () => (impl.decryptBalance ? impl.decryptBalance()
 export const faucet = () => impl.faucet();
 export const openPack = () => impl.openPack();
 export const shareCard = (png, r) => impl.shareCard(png, r);
+export const reserveStats = f => impl.reserveStats(f);
+export const reservePosition = atBlock => impl.reservePosition(atBlock);
+export const reserveDeposit = a => impl.reserveDeposit(a);
+export const reserveWithdraw = a => impl.reserveWithdraw(a);
 export const onStatus = cb => (impl.onStatus ? impl.onStatus(cb) : noop());
 export const focus = id => impl.focus?.(id);
 /** Lets the back end prepare the next start (encrypt side and stake in the background). */

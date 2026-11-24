@@ -82,15 +82,25 @@ function advance(run, ts) {
   if (run.value <= 0) { run.value = 0; run.status = 'busted'; run.endedAt = ts; }
   else if (t >= run.duration) { run.status = 'expired'; run.endedAt = ts; }
 }
+// the leverage is borrowed from the (simulated) Sirocco Reserve: S x (L - 1), interest per second at the APR
+const APR = 0.2, YEAR = 365 * 86400;
+function interestOf(run, t) {
+  let bt = 0;
+  for (let i = 0; i < run.ladder.length; i++) { const from = i * run.stepEvery; if (t <= from) break; const to = Math.min(i === run.ladder.length - 1 ? t : (i + 1) * run.stepEvery, t); bt += (run.ladder[i] - 1) * (to - from); }
+  return run.stake * APR * bt / YEAR;
+}
+const netOf = (run, t) => { const i = Math.min(interestOf(run, t), run.value); return { value: run.value - i, interest: i }; };
 function update(run, ts) {
-  const t = Math.max(0, (Math.min(ts, run.endedAt || ts) - run.startedAt) / 1000), step = stepOf(run, t);
-  return { t, price: run.last, step, leverage: run.ladder[step], value: run.value, pnl: run.value - run.stake, pnlPct: (run.value / run.stake - 1) * 100,
-    risk: Math.min(1, Math.max(0, 1 - run.value / run.stake)), status: run.status };
+  const t = Math.max(0, (Math.min(ts, run.endedAt || ts) - run.startedAt) / 1000), step = stepOf(run, t), { value, interest } = netOf(run, t);
+  return { t, price: run.last, step, leverage: run.ladder[step], value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100,
+    risk: Math.min(1, Math.max(0, 1 - run.value / run.stake)), borrowed: run.stake * (run.ladder[step] - 1), interest, status: run.status };
 }
 function settle(run) {
-  const r = { status: run.status, value: run.value, pnl: run.value - run.stake, pnlPct: (run.value / run.stake - 1) * 100, maxLeverage: run.maxLev,
-    duration: ((run.endedAt || Date.now()) - run.startedAt) / 1000, entryPrice: run.entryPrice, exitPrice: run.last };
-  setBal(bal + run.value); record(run, r);
+  const duration = ((run.endedAt || Date.now()) - run.startedAt) / 1000, { value, interest } = netOf(run, duration);
+  const r = { status: run.status, value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, maxLeverage: run.maxLev,
+    duration, entryPrice: run.entryPrice, exitPrice: run.last, borrowed: run.stake * (run.maxLev - 1), interest };
+  setBal(bal + value); record(run, r);
+  pool.assets += run.stake - value; pool.interest += interest;
   return r;
 }
 function runTick(ts) {
@@ -132,6 +142,26 @@ export async function leaderboard(scope = 'today') {
 }
 
 export function runInfo(id) { const r = runs.get(id); return r ? publicRun(r) : null; }
+
+// ── Sirocco Reserve (simulated): a lending pool seeded with 250,000, your shares kept locally
+const pool = { assets: 250_000, shares: 250_000, interest: 0, mine: store.get('reserveShares', 0), t0: Date.now() };
+export async function reserveStats() {
+  const live = [...runs.values()].filter(r => r.status === 'live').length, price = pool.assets / pool.shares;
+  return { tvl: pool.assets, shares: pool.shares, sharePrice: price, interestEarned: pool.interest, syncedAt: Date.now(), syncPending: false,
+    locked: live * 1000, openLoans: live, utilization: (live * 1000) / pool.assets, aprPct: APR * 100, apyPct: null, returnPct: (price - 1) * 100, days: 0 };
+}
+export async function reservePosition() { return { shares: pool.mine, value: pool.mine * pool.assets / pool.shares }; }
+export async function reserveDeposit(amount) {
+  if (!(amount > 0) || amount > bal) throw new Error('Not enough test tokens');
+  const s = amount * pool.shares / pool.assets;
+  setBal(bal - amount); pool.assets += amount; pool.shares += s; pool.mine += s; store.set('reserveShares', pool.mine);
+}
+export async function reserveWithdraw(amount) {
+  const s = amount * pool.shares / pool.assets;
+  if (s > pool.mine + 1e-9) return { out: 0 };
+  setBal(bal + amount); pool.assets -= amount; pool.shares -= s; pool.mine -= s; store.set('reserveShares', pool.mine);
+  return { out: amount };
+}
 
 // ── leverage packs (VRF on chain). Kept off in the UI for now.
 export const PACKS = [
