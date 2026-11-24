@@ -58,9 +58,9 @@ Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain 
    withdraw (an encrypted, all-or-nothing withdrawal). Your position is decrypted in your browser
    only.
 
-Stocks trade during US market hours (4:00 to 20:00 New York time, pre and post market included,
-US trading days only: weekends and exchange holidays are closed). Outside those hours their chips
-show *Closed*, while cXAUt and ctGBP stay open.
+xStocks trade 24/7, so the stock markets never close: cTSLAx, cNVDAx, cAAPLx and cAMZNx follow the
+xStock they wrap (TSLAx and the others), priced from Kraken's xStock spot book around the clock.
+cXAUt follows XAUt (also 24/7) and ctGBP follows GBP/USD (closed on weekends).
 
 **Nothing has to run on our side.** Every keeper duty is a permissionless call, and the player's
 browser does each one itself (autopilot):
@@ -206,15 +206,20 @@ screen animates smoothly on live prices and the chain settles on 3 to 6 checkpoi
    prices. Entry and exit rides along with `startRun` and `cashOut`, which makes them the freshest
    verified price (at most 25 s old).
 2. **Bounded public fallback**. Markets the Hermes plan does not cover take the reference price from
-   `/api/prices` (Yahoo Finance for stocks and GBP, Kraken for XAUt, with market hours) through
+   `/api/prices` (Kraken's 24/7 xStock book for the stocks, Kraken for XAUt, Yahoo for GBP) through
    `pushPublic`. The oracle bounds it: at most every 10 s, +/-0.5 % per checkpoint, +/-3 % from the
    last Pyth price, and only while Pyth has nothing fresher than 2 minutes for that market.
    *Trade-off*: in this mode players are semi-trusted price reporters within those bounds. Each
    checkpoint's source is public.
 
-The current API key is entitled to Equity.US.TSLA/USD. NVDA, AAPL, AMZN, XAUT and GBP answer 403
-and go through the fallback. The route detects entitlements by itself, so adding grants to the key moves
-those markets to trustless Pyth with no code change.
+The stocks follow their xStock, which trades 24/7, through the fallback. The oracle's stock feed ids
+are Pyth's Equity.US feeds, which only move in the regular session (9:30 to 16:00 New York) and
+outside it keep publishing the closing price with a fresh timestamp: a climb on them froze at night
+(F56). So the stocks are flagged `pythLive: false` and never post that feed. Pyth's 24/7
+Crypto.TSLAX/USD, NVDAX, AAPLX and AMZNX feeds would make them trustless again; the current key
+answers 403 for them ("no grant accepts this feed (asset type 'crypto', instrument type 'spot')"),
+and wiring them in needs that grant plus an oracle with those feed ids. XAUT and GBP answer 403 too.
+The route detects entitlements by itself.
 
 **Game scale**: real prices move little in a minute, so every move counts 25x, then the leverage
 applies on top. A 0.1 % move pays 2.5 % at 1x and 10 % at 4x. PnL adds up on a constant notional,
@@ -327,5 +332,6 @@ in the same folder, and the ops keeper uses `keeper.key`. No key is ever committ
 - The game account key lives in the browser's local storage and holds only test cUSDC and a little
   gas. It is derived from a wallet signature, so the same wallet recovers it in any browser. A
   mainnet version would want a passkey or a smart account instead.
-- Market hours come from the reference route. The contract itself does not know the trading
-  calendar; a closed market simply has no fresh checkpoint, and `startRun` refuses stale entries.
+- Market hours come from the reference route (the stocks are 24/7 xStocks, GBP closes on weekends).
+  The contract itself does not know the trading calendar; a closed market simply has no fresh
+  checkpoint, and `startRun` refuses stale entries.
