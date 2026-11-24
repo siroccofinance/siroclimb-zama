@@ -1,7 +1,7 @@
 // FHE client: Zama's relayer SDK, loaded from Zama's CDN (window.relayerSDK).
 //  - encryption of the player's inputs (side, stake) through the relayer, bound to the sender;
 //  - user decryption of the player's own handles (balance, run value) with an EIP-712 grant the
-//    wallet signs once a day (the keypair never leaves this browser);
+//    wallet signs once a week (the keypair never leaves this browser);
 //  - public decryption (round standings, published runs) with the KMS proof the contract checks.
 import { ADDR, RPC_URL } from './config.js';
 
@@ -54,7 +54,7 @@ export async function encryptRun(sender, long, stakeUnits) {
 }
 
 // ── user decryption grant (one wallet signature per day, kept in this tab's local storage)
-const DAYS = 1;
+const DAYS = 7;   // one decryption signature a week
 const grantKey = user => `siroclimb:fhe-grant:${user.toLowerCase()}`;
 const CONTRACTS = () => [ADDR.Siroclimb, ADDR.StakeToken];
 function loadGrant(user) {
