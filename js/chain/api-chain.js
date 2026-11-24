@@ -51,7 +51,8 @@ export const balance = () => bal;
 export const balanceSealed = () => bal == null;
 export function onBalance(cb) { balSubs.add(cb); return () => balSubs.delete(cb); }
 let names = new Map();
-export const account = () => W.account();
+/** The player's game account (where the cUSDC lives), or the wallet before the first signature. */
+export const account = () => W.player() || W.account();
 let ready = false;
 export const sessionReady = () => ready;
 
@@ -60,16 +61,16 @@ export async function init() {
   if (W.wasConnected() && W.hasWallet()) {
     try {
       const a = await W.connectWallet(true);
-      if (a) { ready = (await W.setupNeeds(a)).length === 0; afterConnect(); }
+      if (a) { ready = (await W.setupNeeds()).length === 0; if (ready) afterConnect(); }
     } catch {}
   }
   await feed.ready(4000);
-  return { user: { name: (W.account() && names.get(W.account().toLowerCase())) || 'You' }, balance: bal };
+  return { user: { name: (W.player() && names.get(W.player().toLowerCase())) || 'You' }, balance: bal };
 }
 
 export async function connect() {
   if (!W.account()) { status({ kind: 'wallet', text: 'Connect your wallet…' }); await W.connectWallet(false); }
-  const needs = await W.setupNeeds(W.account());
+  const needs = await W.setupNeeds();
   if (needs.length) {
     try { await W.setup(t => status({ kind: 'wallet', text: t })); }
     catch (e) { status(null); throw new Error(friendly(e)); }
@@ -77,15 +78,16 @@ export async function connect() {
   ready = true;
   status(null);
   // first visit: 1,000 test cUSDC straight away (minted and wrapped by the faucet, through the session key)
-  if (Number(await faucetC.lastClaim(W.account()).catch(() => 1)) === 0) await faucet().catch(() => {});
   afterConnect();
-  return { address: W.account() };
+  return { address: W.player() };
 }
 
 function afterConnect() {
-  const a = W.account(); if (!a) return;
+  const a = W.player(); if (!a) return;
   autopilot.start(api);
-  if (hasGrant(a)) refreshBalance().catch(() => {});
+  W.ensureOperator().catch(() => {});
+  // first visit: 1,000 test cUSDC straight away (minted and wrapped by the faucet, from the game account)
+  faucetC.lastClaim(a).then(t => (Number(t) === 0 ? faucet() : null)).catch(() => {}).finally(() => refreshBalance().catch(() => {}));
   game.nameOf(a).then(n => n && names.set(a.toLowerCase(), n)).catch(() => {});
   setTimeout(() => bots.prepareAll(), 4000);       // practice bots ready before the first round
 }
@@ -95,13 +97,12 @@ export function disconnect() { W.disconnectWallet(); ready = false; setBal(null)
 /** Decrypts the player's encrypted cUSDC balance (asks the wallet for the daily grant once). */
 let balHandle = null;
 export async function refreshBalance(expectChange = false) {
-  const a = W.account(); if (!a) return null;
+  const a = W.player(); if (!a) return null;
   let h = await (typeof expectChange === 'number' ? W.view(() => token.confidentialBalanceOf(a, { blockTag: expectChange })) : token.confidentialBalanceOf(a));
   // after a transfer, a lagging RPC node can still serve the old balance handle: wait for the new one
   for (let i = 0; expectChange === true && h === balHandle && i < 10; i++) { await sleep(2000); h = await token.confidentialBalanceOf(a); }
   if (expectChange === true && h === balHandle) return bal;
-  if (!hasGrant(a)) status({ kind: 'decrypt', text: 'Sign the decryption grant in your wallet (once a day)' });
-  else status({ kind: 'decrypt', text: 'Decrypting your balance…' });
+  status({ kind: 'decrypt', text: 'Decrypting your balance…' });
   try {
     const [v] = await userDecrypt(a, W.signTyped, [{ handle: h, contract: ADDR.StakeToken }]);
     balHandle = h;
@@ -111,12 +112,12 @@ export async function refreshBalance(expectChange = false) {
 }
 export const decryptBalance = refreshBalance;
 /** Re-decrypts the balance; `atBlock`: as of the block of a known transfer (exact even on a lagging node). */
-const refreshSoon = (atBlock = true) => { if (W.account() && hasGrant(W.account())) setTimeout(() => refreshBalance(atBlock).catch(() => {}), 1500); };
+const refreshSoon = (atBlock = true) => { if (W.player()) setTimeout(() => refreshBalance(atBlock).catch(() => {}), 1500); };
 
 export async function faucet() {
   const s = await session();
   status({ kind: 'chain', text: 'Minting and wrapping 1,000 cUSDC…' });
-  try { await s.send(faucetC, 'claimFor', [W.account()], 0n, 'faucet'); }
+  try { await s.send(faucetC, 'claimFor', [W.player()], 0n, 'faucet'); }
   catch (e) { throw new Error(friendly(e)); }
   finally { status(null); }
   if (bal != null) setBal(bal + 1000);
@@ -125,7 +126,7 @@ export async function faucet() {
 }
 
 async function session() {
-  if (!W.account() || !ready) await connect();
+  if (!W.player() || !ready) await connect();
   return W.currentSession();
 }
 
@@ -285,7 +286,7 @@ async function pollRound() {
     }
     const next = Number(await game.nextRoundMarket());
     roundCache = { latest, runs: runsInfo, next, count: n, at: Date.now() };
-    const a = W.account()?.toLowerCase();
+    const a = W.player()?.toLowerCase();
     if (latest && a) { const mine = runsInfo.find(x => x.player.toLowerCase() === a); if (mine) myRoundRuns.set(latest.id, String(mine.id)); }
   } catch {}
 }
@@ -296,7 +297,7 @@ async function loadNames(addrs) {
 export const nameOf = a => names.get(a.toLowerCase()) || a.slice(0, 6) + '…' + a.slice(-4);
 
 function buildRound(now = Date.now()) {
-  const L = roundCache.latest, a = W.account()?.toLowerCase();
+  const L = roundCache.latest, a = W.player()?.toLowerCase();
   const joinedRun = L ? myRoundRuns.get(L.id) : null;
   if (L && now < L.endsAt && (now < L.startsAt || joinedRun)) {
     return { id: L.id, assetId: MARKETS[L.market].id, opensAt: L.opensAt, startsAt: L.startsAt, endsAt: L.endsAt, status: now < L.startsAt ? 'open' : 'live',
@@ -339,7 +340,7 @@ export async function joinRound({ side = 'long' }) {
 /** Live standings: everyone's side and score are encrypted until the bell, only exits are public. */
 export function roundStandings() {
   const L = roundCache.latest; if (!L) return [];
-  const a = W.account()?.toLowerCase();
+  const a = W.player()?.toLowerCase();
   const out = roundCache.runs.map(x => {
     const me = x.player.toLowerCase() === a, local = me ? runs.get(String(x.id)) : null;
     const u = local ? update(local, Date.now()) : null;
@@ -358,7 +359,7 @@ export function whenRoundFinal(runId) {
         if (Number(r.status) === 3) {
           const n = Number(await game.resultCount());
           const list = await game.results(Math.max(0, n - 80), 80);
-          const mine = list.find(x => x.inRound && Number(x.ref) === run.roundId && x.player.toLowerCase() === W.account().toLowerCase());
+          const mine = list.find(x => x.inRound && Number(x.ref) === run.roundId && x.player.toLowerCase() === W.player().toLowerCase());
           if (!run.chain) await settleFromChain(run).catch(() => {});
           let claimBlock = null;
           // the prize is a pull payment (one encrypted transfer per claim): the session claims it
@@ -389,7 +390,7 @@ export async function leaderboard(scope = 'today') {
   // plain objects: ethers' Result arrays are read-only, so sorting them throws
   const list = (n ? [...(await game.results(Math.max(0, n - 400), 400))] : []).map(x => ({ player: x.player, timestamp: x.timestamp, pnlPpm: x.pnlPpm, inRound: x.inRound, rank: x.rank, ref: x.ref, prize: x.prize }));
   await loadNames(list.map(x => x.player));
-  const a = W.account()?.toLowerCase();
+  const a = W.player()?.toLowerCase();
   const row = x => ({ name: x.player.toLowerCase() === a ? 'You' : nameOf(x.player), pnlPct: Number(x.pnlPpm) / 1e4, prize: Number(x.prize) / USDC, you: x.player.toLowerCase() === a, rank: Number(x.rank) });
   if (scope === 'round') {
     const rounds = list.filter(x => x.inRound);
@@ -406,7 +407,7 @@ export async function leaderboard(scope = 'today') {
   return [...best.values()].sort((p, q) => Number(q.pnlPpm) - Number(p.pnlPpm)).slice(0, 12).map(row);
 }
 
-export async function setName(name) { const s = await session(); await s.send(game, 'setName', [name.slice(0, 24)], 0n, 'setName'); names.set(W.account().toLowerCase(), name); }
+export async function setName(name) { const s = await session(); await s.send(game, 'setName', [name.slice(0, 24)], 0n, 'setName'); names.set(W.player().toLowerCase(), name); }
 
 // ───────────────────────────── leverage packs (encrypted PRNG on chain). UI off for now.
 export const PACKS = [
@@ -417,7 +418,7 @@ export async function openPack() {
   const s = await session();
   const rc = await s.send(game, 'openPack', [], 0n, 'openPack');
   const h = parseEvent(rc, 'PackOpened').tierHandle;
-  const [tier] = await userDecrypt(W.account(), W.signTyped, [{ handle: h, contract: ADDR.Siroclimb }]);
+  const [tier] = await userDecrypt(W.player(), W.signTyped, [{ handle: h, contract: ADDR.Siroclimb }]);
   const p = PACKS[Number(tier)];
   return { tier: p.tier, maxLeverage: p.maxLeverage, proof: rc.hash };
 }

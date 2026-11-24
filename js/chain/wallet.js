@@ -1,12 +1,12 @@
-// Wallet + session key.
-//  - The wallet (MetaMask, Rabby... any injected EIP-1193 provider) holds the player's cUSDC and
-//    signs three things once: the ERC-7984 operator approval for the game, the session grant
-//    (which also sends the session a little Sepolia ETH for gas), and the daily decryption grant.
-//  - The session key is a burner key kept in this browser. It sends every game transaction for the
-//    player (start, cash out, join, faucet, keeper duties), so a run never waits on a pop-up. It can
-//    only play with what the player approved; it can never withdraw.
-// Every sender (session key, practice bots) has one queue: one transaction at a time with a
-// locally tracked nonce, so concurrent duties never race for a nonce.
+// Wallet + game account.
+//  - The wallet (MetaMask, Rabby... any injected EIP-1193 provider) signs one message, once: the game
+//    account's key is derived from that signature, so the same wallet finds the same account on any
+//    device. It also sends the account a little Sepolia ETH for gas. That is all it is asked for.
+//  - The game account holds the player's test cUSDC and sends every game transaction (start, cash
+//    out, join, faucet, operator approval) and signs the decryption grant locally: no pop-up during
+//    play. It plays with test tokens only.
+// Every sender (game account, keeper key, practice bots) has one queue: one transaction at a time
+// with a locally tracked nonce, so concurrent duties never race for a nonce.
 import { BrowserProvider, Contract, FetchRequest, JsonRpcProvider, Wallet, getBytes, keccak256, parseEther, formatEther, toUtf8Bytes } from '../vendor/ethers-6.17.0.min.js';
 import { ABI, ADDR, CHAIN_HEX, CHAIN_ID, RPC_URL, SESSION_FUND_ETH, SESSION_MIN_ETH } from './config.js';
 
@@ -145,36 +145,26 @@ export async function connectWallet(silent = false) {
 export function disconnectWallet() { wallet = null; store.del('wallet'); }
 export const wasConnected = () => !!store.get('wallet', null);
 
-/** EIP-712 signature by the wallet (decryption grant). */
-export async function signTyped(t) {
-  if (!wallet) throw new Error('Connect your wallet first');
-  const types = { ...t.types }; delete types.EIP712Domain;
-  return wallet.signer.signTypedData(t.domain, types, t.message);
-}
-
-/** One transaction from the wallet itself (operator approval, session grant). Returns the hash. */
-async function walletSend(contract, method, args, value = 0n, gasLimit) {
-  const c = contract.connect(wallet.signer);
-  const tx = await c[method](...args, { value, ...(gasLimit ? { gasLimit } : {}) });
-  emitTx({ label: method, hash: tx.hash, from: wallet.address, state: 'sent' });
-  return tx.hash;
-}
-async function mined(hash, what) {
-  const rc = await receipt(hash, 300_000);
-  if (!rc || rc.status !== 1) throw new Error(`${what} failed`);
-  return rc;
-}
-
-// ───────────────────────────── session key
+// ───────────────────────────── game account
+// The player's game account is a key derived from one wallet signature (the same wallet always
+// derives the same account, on any device). It holds the player's test cUSDC, signs every game
+// transaction and the decryption grant locally: after that single signature and one gas transfer,
+// nothing asks the wallet again. The key never leaves the browser.
 let session = null;
-const sessionStoreKey = player => 'session:' + player.toLowerCase();
-export function sessionFor(player) {
-  let k = store.get(sessionStoreKey(player), null);
-  if (!k) { k = Wallet.createRandom().privateKey; store.set(sessionStoreKey(player), k); }
+const keyStore = owner => 'gamekey:' + owner.toLowerCase();
+export const gameMessage = owner =>
+  `Siroclimb game account\n\nSign to create (or recover) your Siroclimb game key on this device. The key stays in your browser and plays with test tokens on Sepolia.\n\nWallet: ${owner}\nChain: ${CHAIN_ID}`;
+function sessionFromKey(k) {
   if (!session || session.key !== k) { session = new Sender(k); session.key = k; }
   return session;
 }
-export const currentSession = () => (wallet ? sessionFor(wallet.address) : null);
+export function storedGameKey(owner) { return store.get(keyStore(owner), null); }
+export const currentSession = () => {
+  const k = wallet && storedGameKey(wallet.address);
+  return k ? sessionFromKey(k) : null;
+};
+/** The game account's address (the on-chain player), or null before the first signature. */
+export const player = () => currentSession()?.address || null;
 let keeper = null;
 /** The keeper key: autopilot duties never queue behind the player's own transactions. */
 export function currentKeeper() {
@@ -182,55 +172,65 @@ export function currentKeeper() {
   if (!keeper || keeper.parent !== s.address) { keeper = derived(s, 'keeper'); keeper.parent = s.address; }
   return keeper;
 }
+/** EIP-712 signature by the game account (decryption grant): local, no wallet pop-up. */
+export async function signTyped(t) {
+  const s = currentSession(); if (!s) throw new Error('Connect your wallet first');
+  const types = { ...t.types }; delete types.EIP712Domain;
+  return s.wallet.signTypedData(t.domain, types, t.message);
+}
 
-/** What the player still has to do before playing: [] when ready. */
-export async function setupNeeds(player) {
-  const s = sessionFor(player), now = Math.floor(Date.now() / 1000);
-  const [op, grant, mine, eth] = await Promise.all([
-    token.isOperator(player, ADDR.Siroclimb), game.sessions(s.address), game.sessionOf(player), s.eth(),
-  ]);
-  const needs = [];
-  if (!op) needs.push('operator');
-  if (grant.player.toLowerCase() !== player.toLowerCase() || Number(grant.expiry) < now + 3600 || mine.toLowerCase() !== s.address.toLowerCase()) needs.push('session');
-  else if (eth < SESSION_MIN_ETH) needs.push('gas');
-  return needs;
+/** What is missing before playing: [] when ready. 'key' = one wallet signature, 'gas' = one transfer. */
+export async function setupNeeds() {
+  const s = currentSession();
+  if (!s) return ['key', 'gas'];
+  return (await s.eth()) < SESSION_MIN_ETH ? ['gas'] : [];
 }
 
 /**
- * Wallet steps, each one pop-up: approve the game as ERC-7984 operator of the player's cUSDC (30
- * days), then grant the session key (7 days) and send it gas. `step(label)` reports progress.
+ * First visit: one wallet signature (derives the game account) and one transfer (gas for it). The
+ * account then approves the game as ERC-7984 operator of its own cUSDC in the background, queued
+ * before its first game transaction. `step(label)` reports progress.
  */
 export async function setup(step = () => {}) {
-  const player = wallet.address, s = sessionFor(player);
-  const needs = await setupNeeds(player);
-  // both wallet transactions are signed back to back and mined together: one wait instead of two
-  const pending = [];
-  if (needs.includes('operator')) {
-    step('Approve the game for your cUSDC (wallet 1/2)');
-    pending.push([await walletSend(token, 'setOperator', [ADDR.Siroclimb, Math.floor(Date.now() / 1000) + 30 * 86400]), 'operator approval']);
+  if (!storedGameKey(wallet.address)) {
+    step('Sign once to create your game account (wallet)');
+    const sig = await wallet.signer.signMessage(gameMessage(wallet.address));
+    store.set(keyStore(wallet.address), keccak256(sig));
   }
-  // gas for the session key: what the wallet can spare, at most SESSION_FUND_ETH (a wallet that cannot
-  // pay gets a clear message instead of the node's "missing revert data")
-  const spare = (await walletEth()) - 0.004;
-  const fund = Math.min(Number(SESSION_FUND_ETH), spare);
-  if ((needs.includes('session') || needs.includes('gas')) && fund < 0.008)
-    throw new Error('Your wallet needs a little Sepolia ETH (about 0.02) for the game session. Get some from a Sepolia faucet');
-  if (needs.includes('session')) {
-    step('Start a 7-day game session (wallet 2/2)');
-    const expiry = Math.floor(Date.now() / 1000) + 7 * 86400;
-    const digest = await game.sessionDigest(player, expiry);
-    const sig = await s.wallet.signMessage(getBytes(digest));
-    // the two transactions do not depend on each other, so each one's estimate stands on its own
-    pending.push([await walletSend(game, 'authorizeSession', [s.address, expiry, sig], parseEther(fund.toFixed(6))), 'session grant']);
-  } else if (needs.includes('gas')) {
-    step('Top up the session gas (wallet)');
+  const s = currentSession();
+  if ((await s.eth()) < SESSION_MIN_ETH) {
+    const spare = (await walletEth()) - 0.002;
+    const fund = Math.min(Number(SESSION_FUND_ETH), spare);
+    if (fund < 0.008) throw new Error('Your wallet needs a little Sepolia ETH (about 0.03) for game gas. Get some from a Sepolia faucet');
+    step('Send gas to your game account (wallet)');
     const tx = await wallet.signer.sendTransaction({ to: s.address, value: parseEther(fund.toFixed(6)) });
-    pending.push([tx.hash, 'gas top-up']);
+    emitTx({ label: 'fund', hash: tx.hash, from: wallet.address, state: 'sent' });
+    step('Confirming on Sepolia…');
+    await mined(tx.hash, 'gas transfer');
   }
-  if (pending.length) step('Confirming on Sepolia…');
-  await Promise.all(pending.map(([h, what]) => mined(h, what)));
+  ensureOperator(s);
   return s;
 }
+
+/** The game account lets the game pull its stakes (ERC-7984 operator), once, in its own queue. */
+let operatorChecked = null;
+export function ensureOperator(s = currentSession()) {
+  if (!s) return Promise.resolve();
+  operatorChecked ||= (async () => {
+    if (await token.isOperator(s.address, ADDR.Siroclimb)) return;
+    await s.send(token, 'setOperator', [ADDR.Siroclimb, Math.floor(Date.now() / 1000) + 365 * 86400], 0n, 'setOperator');
+  })().catch(e => { operatorChecked = null; throw e; });
+  return operatorChecked;
+}
+
+async function mined(hash, what) {
+  const rc = await receipt(hash, 300_000);
+  if (!rc || rc.status !== 1) throw new Error(`${what} failed`);
+  return rc;
+}
+
+/** The connected wallet (the owner of the game account). */
+export const walletAddress = () => wallet?.address || null;
 
 export async function walletEth() { return wallet ? Number(formatEther(await rpc.getBalance(wallet.address))) : 0; }
 
