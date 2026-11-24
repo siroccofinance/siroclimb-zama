@@ -12,13 +12,13 @@ from `js/chain/deployments.json` (written by `npm run export -- sepolia`).
 
 | Contract | Address | Role |
 | --- | --- | --- |
-| `Siroclimb` | [`0xf280D0B11E57BAe4Fd959E8E3b8b53FE33C8DE8c`](https://sepolia.etherscan.io/address/0xf280D0B11E57BAe4Fd959E8E3b8b53FE33C8DE8c) | Solo runs and rounds with an encrypted side and stake, encrypted payouts, sealed standings, packs, sessions |
+| `Siroclimb` | [`0x92e5AB531046D67d17fE465587fd663323327649`](https://sepolia.etherscan.io/address/0x92e5AB531046D67d17fE465587fd663323327649) | Solo runs and rounds with an encrypted side and stake, encrypted payouts, sealed standings, packs, sessions |
 | `ClimbPriceOracle` | [`0xFB3Be33B9b1589df87FB4E132B334cEC67De19b1`](https://sepolia.etherscan.io/address/0xFB3Be33B9b1589df87FB4E132B334cEC67De19b1) | Per-market price checkpoints: Pyth (trustless) or the bounded public fallback |
-| `ClimbLadder` | [`0xcb916F937dcaB2f0bb09BE2845593cCD316b1D0a`](https://sepolia.etherscan.io/address/0xcb916F937dcaB2f0bb09BE2845593cCD316b1D0a) | Run rules in clear: long and short multipliers on the oracle path (game scale 25x) |
+| `ClimbLadder` | [`0xd6E0181D196c95Ab8D652305fb73342A6bc9bc20`](https://sepolia.etherscan.io/address/0xd6E0181D196c95Ab8D652305fb73342A6bc9bc20) | Run rules in clear: long and short multipliers on the oracle path (game scale 25x) |
 | `ClimbFaucet` | [`0x9a61CF739874c52785f923488F37ceF9817A3C10`](https://sepolia.etherscan.io/address/0x9a61CF739874c52785f923488F37ceF9817A3C10) | Mints USDCMock and wraps it into cUSDC for any account: 1,000 per claim, every 10 min |
 
-Earlier test deployments (made while fixing F10, F15 and F24, and with keys shared with another
-project) are retired; every contract above was redeployed from Siroclimb's own keys.
+Earlier test deployments (made while fixing F10, F15, F24 and F44, and with keys shared with another
+project) are retired with nothing left open; every contract above was deployed from Siroclimb's own keys.
 
 Deployed by `0x6d3376996531a23aBe413AA9D1aC5902644a2A5d` (Siroclimb's dedicated deployer, also the creator of the mirrors). It owns
 `Siroclimb` and `ClimbPriceOracle` and is the only trusted price updater, used once to seed the

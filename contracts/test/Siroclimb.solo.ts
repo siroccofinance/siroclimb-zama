@@ -92,7 +92,7 @@ describe("Siroclimb: solo runs", function () {
     const before = await balance(f, f.alice);
     const crash = (BASE[AAPL] * 9_850n) / 10_000n; // -1.5 % at 4x x25 = -150 %
     const back = (BASE[AAPL] * 10_200n) / 10_000n;
-    const { expected, run } = await runAndPath(true, stake, [[37, crash], [43, back]], 50);
+    const { expected, run } = await runAndPath(true, stake, [[31, BASE[AAPL]], [37, crash], [43, back]], 50);   // the crash starts at 3.5x
     expect(expected.long).to.eq(0n);
     expect(run.multLong).to.eq(0);
     expect(await balance(f, f.alice)).to.eq(before - stake);
