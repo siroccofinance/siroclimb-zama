@@ -46,3 +46,35 @@ was fixed. The on-chain battery reports are at the end.
 | F37 | Key hygiene: the first deployments and batteries used keys from another project's folder, and the mirrors' creator was the shared deployer. | Ops, contracts | Everything moved to Siroclimb's own keys (F4), with a full redeploy and a new battery. The repo has no path to the other project's keys; only the Pyth API key is shared. |
 | F38 | New deployment, wave 1: two starts on stock markets reverted with `StaleEntry`. Under load the reference price lookup timed out, so no fallback price rode along; separately, the browser re-decrypted the balance from a lagging node right after a payout and showed the pre-payout amount. | Battery, front | The battery retries the price lookup and resends a start that reverted for lack of a fresh entry. The front decrypts the balance as of the payout or claim block (`blockTag`), which is exact even on a lagging node. |
 | F39 | Battery, 24-player round on the new deployment: one winner's prize was not claimed by the battery, because a lagging node answered `prizeOf = 0`. Its balance check failed, and the sweep claimed the prize afterwards (the pot was fully paid). | Battery | Prizes are read as of the finalize block. |
+
+## Browser end to end (real front, Sepolia, injected test wallet)
+
+| Flow | Result |
+| --- | --- |
+| Solo (`tests/chain/solo.mjs`) | Connect: two wallet transactions (operator approval, session grant), then the first-visit faucet. Balance decrypted (one EIP-712 grant). The run starts in one transaction (side and stake encrypted, entry price riding along), the cash out is paid as an encrypted transfer, and the decrypted balance moves by exactly the payout. 0 console errors. |
+| Round (`tests/chain/round.mjs`) | Practice bots took 3 seats with their own encrypted sides, and every other player showed *Sealed* while live. The browser's autopilot exited the runs at the bell, closed the round, got the KMS reveal and finalized. The player came 2nd of 4, the prize was claimed, and the leaderboard showed the round. Nothing ran on our side. |
+
+## On-chain battery (Sepolia, current deployment)
+
+`ops/battery.mjs 24 2 2` on `Siroclimb` `0xf280…DE8c`: 24 players from Siroclimb's own mnemonic
+plus one unfunded wallet, two solo waves, two full rounds. Every settled solo run is checked end to
+end: the public multipliers match `ClimbLadder` recomputed between the recorded checkpoints, the
+decrypted multiplier is the one of the player's side, `paid` and the payout are exact, and the
+player's decrypted cUSDC balance at the exact blocks moved by `paid x mult - paid`.
+
+| Metric | Result |
+| --- | --- |
+| Solo runs | 48 / 55 passed every check. No run that settled failed a check. Of the 7 others, 2 starts reverted with `StaleEntry` (fixed in F38) and 5 ran past the watchdog under RPC and relayer load. |
+| Scenarios | Early cash outs, runs left to expire and settled by a third party, stakes above the 100 cap (clamped on ciphertexts), an unfunded player (moves 0, paid 0), packed runs (capped path picked on ciphertexts), published runs (multiplier revealed with a KMS proof) |
+| Round 0 (TSLAx) | 24 players (23 funded plus 1 unfunded), pot 230 cUSDC, an 11-way tie for 2nd shares its places. All 24 checks pass: decrypted score equals the side's multiplier, rank and prize match a local recomputation, and the balance moved by `prize - entry` |
+| Round 1 (NVDAx) | 24 players, a flat price so everyone tied (pot split 24 ways, paid by 24 claims). 23 / 24 checks; the last prize was left unclaimed by the battery (F39) and claimed by the sweep |
+| After the run | `audit.mjs`: 92 / 92 settled runs reproduced from public chain data, 2 / 2 pots fully paid. `sweep.mjs`: nothing left open |
+| Sepolia ETH | 0.85 ETH from the Siroclimb deployer (0.02 per player plus gas) |
+
+Measured gas on Sepolia (F35): `startRun` up to 3.77M, `joinRound` 2.99M, `cashOut` 2.21M,
+`settleRun` 1.88M, `exitAtBell` 1.04M, `closeRound` 3.06M, `finalizeRound` 8.71M for 24 players.
+
+Previous deployment (retired, same contracts before the key move): 249 runs settled, every path
+reproduced, and 4 rounds, two of them with 24 players, finalized with every pot paid.
+
+Raw results: `ops/battery-results/`.
