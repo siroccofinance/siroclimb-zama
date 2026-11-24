@@ -39,6 +39,16 @@ export function errText(e) {
   return e?.shortMessage || e?.message || String(e);
 }
 
+/** Polls for a receipt (ethers' waitForTransaction can miss blocks behind a load balancer). */
+export async function receipt(hash, ms = 240_000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    const rc = await provider.getTransactionReceipt(hash).catch(() => null);
+    if (rc) return rc;
+    await sleep(2000);
+  }
+  return null;
+}
 const MIN_TIP = 200_000_000n;
 export async function fees() {
   const fd = await provider.getFeeData();
@@ -60,7 +70,7 @@ export class Sender {
           const nonce = this.nonce == null ? pending : Math.max(this.nonce, pending);
           const tx = await c[method](...args, { value, gasLimit, nonce, ...(await fees()) });
           this.nonce = nonce + 1;
-          const rc = await provider.waitForTransaction(tx.hash, 1, 240_000);
+          const rc = await receipt(tx.hash);
           if (!rc) throw new Error(`timeout waiting for ${method} ${tx.hash}`);
           if (rc.status !== 1) throw new Error(`${method} reverted ${tx.hash}`);
           this.gasSpent += rc.gasUsed * (rc.gasPrice ?? 0n);
@@ -82,7 +92,7 @@ export class Sender {
           const nonce = this.nonce == null ? pending : Math.max(this.nonce, pending);
           const tx = await this.wallet.sendTransaction({ to, value: parseEther(String(eth)), nonce, ...(await fees()) });
           this.nonce = nonce + 1;
-          await provider.waitForTransaction(tx.hash, 1, 240_000);
+          if (!(await receipt(tx.hash))) throw new Error(`timeout waiting for transfer ${tx.hash}`);
           return tx.hash;
         } catch (e) { this.nonce = null; if (attempt < 4 && RETRY.test(errText(e))) { await sleep(3000); continue; } throw e; }
       }
@@ -100,10 +110,14 @@ export function fhe() {
 }
 const hex = b => '0x' + Buffer.from(b).toString('hex');
 export async function encryptRun(sender, long, stakeUnits) {
-  const input = (await fhe()).createEncryptedInput(ADDR.Siroclimb, sender);
-  input.addBool(long); if (stakeUnits != null) input.add64(BigInt(stakeUnits));
-  const enc = await input.encrypt();
-  return { handles: enc.handles.map(hex), proof: hex(enc.inputProof) };
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const input = (await fhe()).createEncryptedInput(ADDR.Siroclimb, sender);
+      input.addBool(long); if (stakeUnits != null) input.add64(BigInt(stakeUnits));
+      const enc = await input.encrypt();
+      return { handles: enc.handles.map(hex), proof: hex(enc.inputProof) };
+    } catch (e) { if (attempt >= 4) throw e; await sleep(2000 + attempt * 2000); }   // relayer busy: retry
+  }
 }
 const grants = new Map();
 /** User decryption by a wallet we hold (EIP-712 grant signed in Node). */
@@ -138,6 +152,15 @@ export async function balanceOf(wallet, notHandle = null) {
   balanceOf.last = h;
   return v;
 }
+/** Decrypted balance as of a given block (the RPC may need a moment to serve it). */
+export async function balanceAt(wallet, blockTag) {
+  const h = await view(() => token.confidentialBalanceOf(wallet.address, { blockTag }));
+  return (await userDecrypt(wallet, [{ handle: h, contract: ADDR.StakeToken }]))[0];
+}
+/** Block of the transaction that settled run `id` (RunEnded event). */
+export async function settledBlock(id, fromBlock) {
+  return view(async () => (await game.queryFilter(game.filters.RunEnded(id), fromBlock)).at(-1)?.blockNumber, b => b != null, 30);
+}
 /** Retries a view that a lagging RPC node may not serve yet (Panic on a new array index, stale reads). */
 export async function view(fn, ok = () => true, tries = 15) {
   for (let i = 0; ; i++) {
@@ -155,8 +178,14 @@ export async function publicDecrypt(handles) {
 }
 
 // ── prices
+/** Reference prices with retries (Yahoo and Binance can time out under load). */
+async function refPrices() {
+  for (let attempt = 0; ; attempt++) {
+    try { return await prices(); } catch (e) { if (attempt >= 3) return { markets: [] }; await sleep(1500); }
+  }
+}
 export async function pythFor(market) {
-  const b = await pythUpdate();
+  const b = await pythUpdate().catch(() => ({ ok: false }));
   if (!b.ok) return null;
   const p = b.prices.find(x => x.market === market);
   if (!p || Date.now() / 1000 - p.publishTime > 20) return null;
@@ -166,7 +195,7 @@ export async function pythFor(market) {
 export async function fallbackFor(market, fresh = 0) {
   const [, ts, last] = await oracle.latest(market);
   if (Date.now() / 1000 - Number(ts) < fresh) return 0n;
-  const ref = (await prices().catch(() => ({ markets: [] }))).markets[market];
+  const ref = (await refPrices()).markets[market];
   if (!(ref?.price > 0)) return 0n;
   const lastP = Number(last) / 1e10;
   return BigInt(Math.round(Math.min(lastP * 1.0049, Math.max(lastP * 0.9951, ref.price)) * 1e10));
@@ -179,13 +208,13 @@ export async function pushIfStale(sender, market, maxAge = 11) {
   const py = await pythFor(market);
   if (py) { await sender.send(oracle, 'pushPyth', [py.updateData], py.fee); return 'pyth'; }
   if (age < 10.5) return null;
-  const ref = (await prices()).markets[market];
+  const ref = (await refPrices()).markets[market];
   if (!(ref?.price > 0) || !ref.open) return null;
   const lastP = Number(last) / 1e10, c = Math.min(lastP * 1.0049, Math.max(lastP * 0.9951, ref.price));
   await sender.send(oracle, 'pushPublic', [[market], [BigInt(Math.round(c * 1e10))]]);
   return 'public';
 }
-export async function openMarkets() { return (await prices()).markets.filter(m => m.open).map(m => m.market); }
+export async function openMarkets() { return (await refPrices()).markets.filter(m => m.open).map(m => m.market); }
 
 /** Realistic player handles (no "test" or "bot"): trading, desert winds, RWA words. */
 const A = ['saffron', 'dune', 'mistral', 'atlas', 'oasis', 'zephyr', 'bullion', 'tesla', 'nvda', 'apple', 'sterling', 'gold', 'quiet', 'alpha', 'delta', 'theta', 'night', 'cedar'];

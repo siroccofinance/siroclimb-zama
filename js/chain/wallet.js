@@ -36,7 +36,7 @@ export class Sender {
           const tx = await c[method](...args, { value, gasLimit: gas, nonce, ...(await fees()) });
           this.nonce = nonce + 1;
           emitTx({ label, hash: tx.hash, from: this.address, state: 'sent' });
-          const rc = await rpc.waitForTransaction(tx.hash, 1, 180_000);
+          const rc = await receipt(tx.hash);
           if (!rc || rc.status !== 1) throw new Error(`${label} reverted`);
           emitTx({ label, hash: tx.hash, from: this.address, state: 'mined' });
           return rc;
@@ -59,7 +59,7 @@ export class Sender {
       const nonce = this.nonce == null ? pending : Math.max(this.nonce, pending);
       const tx = await this.wallet.sendTransaction({ to, value: parseEther(String(eth)), nonce });
       this.nonce = nonce + 1;
-      await rpc.waitForTransaction(tx.hash, 1, 180_000);
+      if (!(await receipt(tx.hash))) throw new Error('transfer not mined');
     };
     const p = this.queue.then(run, run).catch(e => { this.nonce = null; throw e; });
     this.queue = p.catch(() => {});
@@ -79,6 +79,17 @@ async function fees() {
   const fd = await rpc.getFeeData();
   const tip = (fd.maxPriorityFeePerGas ?? 0n) > MIN_TIP ? fd.maxPriorityFeePerGas : MIN_TIP;
   return { maxPriorityFeePerGas: tip, maxFeePerGas: (fd.maxFeePerGas ?? fd.gasPrice ?? 0n) + tip };
+}
+
+/** Polls for a receipt every second (ethers' waitForTransaction can miss blocks behind a load balancer). */
+export async function receipt(hash, ms = 180_000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    const rc = await rpc.getTransactionReceipt(hash).catch(() => null);
+    if (rc) return rc;
+    await sleep(1000);
+  }
+  return null;
 }
 
 const txSubs = new Set();
@@ -138,7 +149,7 @@ async function walletSend(contract, method, args, value = 0n) {
   const c = contract.connect(wallet.signer);
   const tx = await c[method](...args, { value });
   emitTx({ label: method, hash: tx.hash, from: wallet.address, state: 'sent' });
-  const rc = await rpc.waitForTransaction(tx.hash, 1, 300_000);
+  const rc = await receipt(tx.hash, 300_000);
   if (!rc || rc.status !== 1) throw new Error(`${method} failed`);
   return rc;
 }
@@ -185,16 +196,22 @@ export async function setup(step = () => {}) {
     step('Approve the game for your cUSDC (wallet 1/2)');
     await walletSend(token, 'setOperator', [ADDR.Siroclimb, Math.floor(Date.now() / 1000) + 30 * 86400]);
   }
+  // gas for the session key: what the wallet can spare, at most SESSION_FUND_ETH (a wallet that cannot
+  // pay gets a clear message instead of the node's "missing revert data")
+  const spare = (await walletEth()) - 0.004;
+  const fund = Math.min(Number(SESSION_FUND_ETH), spare);
+  if ((needs.includes('session') || needs.includes('gas')) && fund < 0.008)
+    throw new Error('Your wallet needs a little Sepolia ETH (about 0.02) for the game session. Get some from a Sepolia faucet');
   if (needs.includes('session')) {
     step('Start a 7-day game session (wallet 2/2)');
     const expiry = Math.floor(Date.now() / 1000) + 7 * 86400;
     const digest = await game.sessionDigest(player, expiry);
     const sig = await s.wallet.signMessage(getBytes(digest));
-    await walletSend(game, 'authorizeSession', [s.address, expiry, sig], parseEther(SESSION_FUND_ETH));
+    await walletSend(game, 'authorizeSession', [s.address, expiry, sig], parseEther(fund.toFixed(6)));
   } else if (needs.includes('gas')) {
     step('Top up the session gas (wallet)');
-    const tx = await wallet.signer.sendTransaction({ to: s.address, value: parseEther(SESSION_FUND_ETH) });
-    await rpc.waitForTransaction(tx.hash, 1, 300_000);
+    const tx = await wallet.signer.sendTransaction({ to: s.address, value: parseEther(fund.toFixed(6)) });
+    await receipt(tx.hash, 300_000);
   }
   return s;
 }
