@@ -240,21 +240,32 @@ export async function startRun({ mode = 'solo', assetId, side = 'long', stake })
   if (!(stake > 0) || stake > MAX_STAKE) throw new Error(`Stake between 1 and ${MAX_STAKE} cUSDC`);
   if (bal != null && stake > bal) throw new Error('Not enough cUSDC: use the faucet');
   const s = await session();
-  status({ kind: 'fhe', text: 'Encrypting your side and stake…' });
-  const enc = await encryptRun(s.address, side === 'long', Math.round(stake * USDC));
+  const units = Math.round(stake * USDC);
+  if (!preEnc.has(`${s.address}:${encKey('solo', side === 'long', units)}`)) status({ kind: 'fhe', text: 'Encrypting your side and stake…' });
+  const enc = await takeEncryption(s, 'solo', side === 'long', units);
   // entry price, in the same transaction: a fresh signed Pyth price, or a bounded public one
   const pyth = await pythFor(m);
   const fallback = pyth ? 0n : await fallbackFor(m);
-  status({ kind: 'chain', text: 'Sealing your run on Sepolia…' });
-  let rc;
-  try { rc = await s.send(game, 'startRun', [m, enc.handles[0], enc.handles[1], enc.proof, false, pyth ? pyth.updateData : [], fallback], pyth ? pyth.fee : 0n, 'startRun'); }
+  let sent;
+  try { sent = await s.send(game, 'startRun', [m, enc.handles[0], enc.handles[1], enc.proof, false, pyth ? pyth.updateData : [], fallback], pyth ? pyth.fee : 0n, 'startRun', { fast: true }); }
   catch (e) { status(null); throw new Error(friendly(e)); }
-  status(null);
-  const ev = parseEvent(rc, 'RunStarted');
-  const run = makeRun({ id: ev.runId, mode: 'solo', assetId, side, stake, startedAt: Number(ev.startAt) * 1000, entryPrice: Number(ev.entryPrice) / 10 ** PRICE_DECIMALS });
-  run.tx = rc.hash;
+  // the climb starts now; the chain's start time and entry price snap in when the block lands
+  const run = makeRun({ id: `tx:${sent.hash}`, mode: 'solo', assetId, side, stake, startedAt: Date.now(), entryPrice: pyth ? pyth.price : feed.last(m) });
+  run.tx = sent.hash;
+  status({ kind: 'chain', text: 'Locking your entry on Sepolia…' });
   if (bal != null) setBal(bal - stake);
-  autopilot.watchRun(run);
+  sent.mined.then(rc => {
+    const ev = parseEvent(rc, 'RunStarted');
+    Object.assign(run, { cid: String(ev.runId), startedAt: Number(ev.startAt) * 1000, entryPrice: Number(ev.entryPrice) / 10 ** PRICE_DECIMALS, pending: false });
+    status(null);
+    trackCheckpoints(run);
+    autopilot.watchRun(run);
+  }).catch(e => {
+    status({ kind: 'error', text: `Start failed: ${friendly(e)}. Nothing was staked` });
+    if (bal != null) setBal(bal + stake);
+    run.failed = true;
+    endLocal(run, 'failed');
+  });
   return publicRun(run);
 }
 
@@ -262,7 +273,7 @@ function parseEvent(rc, name) {
   for (const l of rc.logs) { try { const e = game.interface.parseLog(l); if (e?.name === name) return e.args; } catch {} }
   throw new Error(`no ${name} event`);
 }
-const publicRun = r => ({ id: r.id, mode: r.mode, assetId: r.assetId, side: r.side, stake: r.stake, entryPrice: r.entryPrice, startedAt: r.startedAt, ladder: r.ladder, stepEvery: r.stepEvery, duration: r.duration, tx: r.tx });
+const publicRun = r => ({ id: r.id, mode: r.mode, assetId: r.assetId, side: r.side, stake: r.stake, entryPrice: r.entryPrice, startedAt: r.startedAt, ladder: r.ladder, stepEvery: r.stepEvery, duration: r.duration, tx: r.tx, pending: !!r.pending, chainId: r.cid });
 export function onRun(id, cb) { const run = runs.get(String(id)); run.subs.add(cb); return () => run.subs.delete(cb); }
 export const runInfo = id => { const r = runs.get(String(id)); return r ? publicRun(r) : null; };
 export const runResult = id => { const r = runs.get(String(id)); return r?.chain || r?.local || null; };
@@ -383,7 +394,7 @@ export async function joinRound({ side = 'long' }) {
   if (bal != null && bal < r.entry) throw new Error('Not enough cUSDC: use the faucet');
   const s = await session();
   status({ kind: 'fhe', text: 'Encrypting your side…' });
-  const enc = await encryptRun(s.address, side === 'long');
+  const enc = await takeEncryption(s, 'round', side === 'long', null);
   status({ kind: 'chain', text: r.virtual ? 'Opening the round on Sepolia…' : 'Joining the round on Sepolia…' });
   let rc;
   try { rc = await s.send(game, 'joinRound', [r.id, enc.handles[0], enc.proof], 0n, 'joinRound'); }
@@ -392,7 +403,8 @@ export async function joinRound({ side = 'long' }) {
   const ev = parseEvent(rc, 'RunStarted');
   const id = String(ev.runId);
   myRoundRuns.set(Number(ev.roundId), id);
-  makeRun({ id, mode: 'round', assetId: MARKETS[Number(ev.market)].id, side, stake: ROUND_ENTRY, startedAt: Number(ev.startAt) * 1000, entryPrice: feed.last(Number(ev.market)), roundId: Number(ev.roundId) });
+  const rrun = makeRun({ id, cid: id, mode: 'round', assetId: MARKETS[Number(ev.market)].id, side, stake: ROUND_ENTRY, startedAt: Number(ev.startAt) * 1000, entryPrice: feed.last(Number(ev.market)), roundId: Number(ev.roundId) });
+  trackCheckpoints(rrun);
   if (bal != null) setBal(bal - ROUND_ENTRY);
   for (let i = 0; i < 10; i++) { await pollRound(); if ((roundCache.latest?.id ?? -1) >= Number(ev.roundId)) break; await sleep(1500); }   // lagging RPC nodes
   bots.fill(Number(ev.roundId));
