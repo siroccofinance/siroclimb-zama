@@ -146,7 +146,7 @@ body[data-screen="intro"] .stage::before { opacity: 0; }
 /* ───────── lobby ───────── */
 .lobby__main { display: grid; gap: 22px; max-width: 1080px; min-width: 0; }
 /* the summary line wraps instead of squeezing the market row */
-@media (min-width: 768px) { .lobby__main { flex: 1 1 auto; } .lobby .go { flex: 0 1 380px; min-width: 260px; } }
+@media (min-width: 768px) { .lobby__main { flex: 1 1 auto; } .lobby .go { flex: 0 1 320px; min-width: 240px; } }
 .lobby .go__meta { text-wrap: balance; }
 .lobby .title { margin-bottom: 4px; }
 .field { display: grid; gap: 10px; min-width: 0; }
