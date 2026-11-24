@@ -28,27 +28,28 @@ Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain 
 
 1. Open https://climb.sirocco.finance, click **Start playing**, then **Connect wallet**. Use MetaMask or Rabby on
    Sepolia with about 0.05 Sepolia ETH.
-2. Your wallet signs two transactions, once:
-   - it approves the game as ERC-7984 operator of your cUSDC (30 days);
-   - it starts a 7-day game session, which sends 0.03 Sepolia ETH to a session key kept in your
-     browser.
+2. On the first visit your wallet signs one message and sends one transaction:
+   - the signature creates your **game account**, a key derived from it and kept in your browser;
+   - the transaction sends 0.03 Sepolia ETH of gas to that game account.
 
-   From then on the session key sends every game transaction for you, with no pop-ups. It can only
-   play with the stake you approved and can never withdraw. On your first visit the faucet mints and
-   wraps 1,000 test cUSDC for you.
-3. Your balance is encrypted, so it shows **Decrypt**. Click it to decrypt it in your browser. Your
-   wallet signs a decryption grant once a day.
+   From then on the game account sends every game transaction, with no pop-ups. It approves the
+   game as ERC-7984 operator of its cUSDC and claims 1,000 test cUSDC from the faucet in the
+   background. Any browser where you connect the same wallet finds the same game account.
+3. Your balance is encrypted on chain. The game account signs a 7-day decryption grant locally, so
+   the balance is decrypted in your browser automatically, and again after every payout.
 4. **Solo**: pick a market, long or short, and a stake (10 to 100), then **Start climbing**. Your
-   side and stake are encrypted in the browser and sealed on chain. The coin follows the live price
-   and the leverage climbs every 6 s. **Cash out** with the button or the space bar. The contract
-   computes your payout on ciphertexts and sends it as an encrypted transfer in the same
-   transaction. The result screen then shows the settled values and the transaction link. You can
+   side and stake were already encrypted in the background when you picked them, so the climb starts
+   at the click while the entry locks on Sepolia. The coin follows the live price and the leverage
+   climbs every 6 s. **Cash out** with the button or the space bar: the value is frozen with the
+   signed price the transaction carries and shown at once, and it is the value the contract pays.
+   The contract computes your payout on ciphertexts and sends it as an encrypted transfer in the
+   same transaction; the result screen then adds the transaction link. You can
    post your return to the leaderboard: the return becomes public, your stake stays private.
 5. **Round**: switch to Round, pick a side, then **Open a round** (or **Join**). Players have 60 s
    to join. If few players are around, the **practice bots** in your browser take the empty seats with
    their own encrypted sides. While the round is live, every other player shows as *Sealed*. At the
    bell your browser closes the round, the KMS decrypts the standings, the contract checks the proof,
-   and your session claims your prize as an encrypted transfer.
+   and your game account claims your prize as an encrypted transfer in the background.
 6. The trophy icon shows the leaderboards (last round, today, all time). They list public results
    only: round standings and the runs players chose to post.
 
