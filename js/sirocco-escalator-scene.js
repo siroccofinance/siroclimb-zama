@@ -165,7 +165,7 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
   const coin = new THREE.Group();
   const coinMat = new THREE.MeshPhysicalMaterial({ color: SIROCCO_COLORS.coin, metalness: 1, roughness: 0.26, clearcoat: 0.35, clearcoatRoughness: 0.15, envMapIntensity: G ? TH.coinEnv : 1.0, bumpMap: reedingTexture(), bumpScale: 2.2 });
   const fieldMat = new THREE.MeshPhysicalMaterial({ color: '#e2a650', metalness: 1, roughness: 0.17, clearcoat: 0.7, clearcoatRoughness: 0.08, envMapIntensity: G ? TH.coinEnv : 1.0, bumpMap: brushedTexture(), bumpScale: 0.35 });
-  const logoMat = new THREE.MeshPhysicalMaterial({ color: '#f4cb58', metalness: 1, roughness: 0.42, clearcoat: 0.3, clearcoatRoughness: 0.3, envMapIntensity: G ? TH.coinEnv + 0.15 : 1.2 });
+  const logoMat = new THREE.MeshPhysicalMaterial({ color: '#f7d06a', metalness: 1, roughness: 0.4, clearcoat: 0.35, clearcoatRoughness: 0.3, envMapIntensity: G ? TH.coinEnv + 0.35 : 1.3 });
   const face = new THREE.Group();
   {
     const k = RC / 0.30, t = TC / 2, hf = t - 0.008, pts = [];
