@@ -139,6 +139,31 @@ const runs = new Map();        // id -> local run
 const sideSign = s => (s === 'short' ? -1 : 1);
 const stepAt = t => Math.min(LADDER.length - 1, Math.max(0, Math.floor(t / STEP_SECONDS)));
 
+// ── borrowing: a run of stake S at leverage L borrows S x (L - 1) from the Sirocco Reserve and pays
+//    interest on it for the time it is borrowed (Siroclimb.borrowedTenthSeconds, same integer math)
+let APR_BPS = 2000n;
+const INTEREST_DIVISOR = 10_000n * 10n * 365n * 86_400n;
+game.borrowAprBps().then(v => { APR_BPS = BigInt(v); }).catch(() => {});
+export const borrowAprPct = () => Number(APR_BPS) / 100;
+function borrowedTenthSeconds(elapsed, cap = LADDER.length - 1) {
+  let total = 0;
+  for (let i = 0; i < LADDER.length; i++) {
+    const from = i * STEP_SECONDS;
+    if (elapsed <= from) break;
+    const to = Math.min(i === LADDER.length - 1 ? elapsed : (i + 1) * STEP_SECONDS, elapsed);
+    total += 5 * Math.min(i, cap) * (to - from);
+  }
+  return BigInt(total);
+}
+/** What the contract pays for `stake` (cUSDC) at multiplier `mult` (6 decimals) after `elapsed` s: stake x mult minus interest. */
+function net(stake, mult, elapsed) {
+  const paid = BigInt(Math.round(stake * USDC)), gross = (paid * BigInt(mult)) / BigInt(SCALE);
+  const i = (paid * APR_BPS * borrowedTenthSeconds(Math.max(0, Math.floor(elapsed)))) / INTEREST_DIVISOR;
+  const charged = i < gross ? i : gross;
+  return { value: Number(gross - charged) / USDC, interest: Number(charged) / USDC };
+}
+const multOf = acc => Math.max(0, Math.round((1 + acc) * SCALE));
+
 function makeRun({ id, cid = null, assetId, side, stake, startedAt, entryPrice }) {
   const run = { id: String(id), cid: cid == null ? null : String(cid), assetId, side, stake, startedAt, entryPrice, ladder: LADDER, stepEvery: STEP_SECONDS, duration: RUN_SECONDS,
     acc: 0, last: entryPrice, maxLev: 1, status: 'live', subs: new Set(), endedAt: 0, local: null, chain: null, waiters: [], settleWaiters: [],
@@ -190,8 +215,10 @@ function advance(run, price, ts) {
   const u = update(run, ts); run.subs.forEach(cb => cb(u));
 }
 function update(run, ts) {
-  const t = run.pending ? 0 : Math.max(0, (Math.min(ts, run.endedAt || ts) - run.startedAt) / 1000), step = stepAt(t), value = run.stake * (1 + run.acc);
-  return { t, price: run.last, step, leverage: LADDER[step], value, pnl: value - run.stake, pnlPct: run.acc * 100, risk: Math.min(1, Math.max(0, -run.acc)), status: run.status, pending: !!run.pending };
+  const t = run.pending ? 0 : Math.max(0, (Math.min(ts, run.endedAt || ts) - run.startedAt) / 1000), step = stepAt(t);
+  const { value, interest } = net(run.stake, multOf(run.acc), t);
+  return { t, price: run.last, step, leverage: LADDER[step], value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, risk: Math.min(1, Math.max(0, -run.acc)),
+    borrowed: run.stake * (LADDER[step] - 1), interest, status: run.status, pending: !!run.pending };
 }
 /** The run is over on screen; the chain settles it (cash out or expiry tx) and `whenSettled` follows. */
 const refineSubs = new Set();
@@ -202,8 +229,8 @@ function endLocal(run, st, ts = Date.now(), frozen = null) {
   run.status = st; run.endedAt = ts;
   clearInterval(run.cpTimer);
   if (frozen) run.acc = frozen.mult - 1;
-  const value = run.stake * (1 + run.acc);
-  run.local = { status: st, value, pnl: value - run.stake, pnlPct: run.acc * 100, maxLeverage: run.maxLev, duration: Math.min(run.duration, (ts - run.startedAt) / 1000),
+  const duration = Math.min(run.duration, (ts - run.startedAt) / 1000), { value, interest } = net(run.stake, multOf(run.acc), duration);
+  run.local = { status: st, value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, maxLeverage: run.maxLev, duration, interest, borrowed: run.stake * (run.maxLev - 1),
     entryPrice: run.entryPrice, exitPrice: frozen?.exit ?? run.last, pending: true, runId: run.cid ?? run.id };
   run.waiters.splice(0).forEach(r => r(run.local));
   if (st === 'expired') autopilot.kick();            // anyone may settle at the 60th second; this browser does it now
@@ -310,8 +337,8 @@ async function sendCashOut(run, frozenPyth, after = null) {
     await run.pull(true, landed?.block ?? null);
     const exact = chainValue(run, Date.now(), pyth ? { mantissa: pyth.mantissa, expo: pyth.expo } : null);
     if (exact) {
-      const value = run.stake * exact.mult;
-      Object.assign(run.local, { value, pnl: value - run.stake, pnlPct: (exact.mult - 1) * 100, exitPrice: exact.exit });
+      const { value, interest } = net(run.stake, multOf(exact.mult - 1), run.local.duration);
+      Object.assign(run.local, { value, interest, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, exitPrice: exact.exit });
       refineSubs.forEach(cb => cb(run.id, run.local));
     }
   }
@@ -331,11 +358,12 @@ export async function settleFromChain(run) {
   for (let i = 0; i < 40; i++) {
     const r = await game.getRun(BigInt(run.cid));
     if (Number(r.status) === 2) {
-      const mult = Number(run.side === 'long' ? r.multLong : r.multShort) / SCALE;
-      const value = run.stake * mult;
+      const m = run.side === 'long' ? r.multLong : r.multShort, mult = Number(m) / SCALE;
+      const { value, interest } = net(run.stake, m, Number(r.endAt - r.startAt));
       const step = Number(r.topStep);
       run.chain = { status: mult === 0 ? 'busted' : run.local?.status === 'busted' ? 'cashed' : run.local?.status || (Number(r.endAt) >= Number(r.startAt) + RUN_SECONDS ? 'expired' : 'cashed'),
-        value, pnl: value - run.stake, pnlPct: (mult - 1) * 100, maxLeverage: LADDER[step], duration: Number(r.endAt - r.startAt),
+        value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, maxLeverage: LADDER[step], duration: Number(r.endAt - r.startAt),
+        interest, borrowed: run.stake * (LADDER[step] - 1),
         entryPrice: Number(r.entryPrice) / 10 ** PRICE_DECIMALS, exitPrice: Number(r.exitPrice) / 10 ** PRICE_DECIMALS,
         multLong: Number(r.multLong) / SCALE, multShort: Number(r.multShort) / SCALE, chain: true, runId: run.cid, tx: run.tx };
       if (!run.local) { run.status = run.chain.status; run.local = run.chain; run.waiters.splice(0).forEach(f => f(run.chain)); }
