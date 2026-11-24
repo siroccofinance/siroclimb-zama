@@ -10,17 +10,15 @@ from `js/chain/deployments.json` (written by `npm run export -- sepolia`).
 
 | Contract | Address | Role |
 | --- | --- | --- |
-| `Siroclimb` | [`0x074aE03f93B912178F14e52F25Ab7801addDD1A0`](https://sepolia.etherscan.io/address/0x074aE03f93B912178F14e52F25Ab7801addDD1A0) | Solo runs and rounds with an encrypted side and stake, encrypted payouts, sealed standings, packs, sessions |
-| `ClimbPriceOracle` | [`0x4e8089656593558d300b7004aEc61c4E74a78720`](https://sepolia.etherscan.io/address/0x4e8089656593558d300b7004aEc61c4E74a78720) | Per-market price checkpoints: Pyth (trustless) or the bounded public fallback |
-| `ClimbLadder` | [`0x004604E9396ff5934389336Bdd81825C3E6537D5`](https://sepolia.etherscan.io/address/0x004604E9396ff5934389336Bdd81825C3E6537D5) | Run rules in clear: long and short multipliers on the oracle path (game scale 25x) |
-| `ClimbFaucet` | [`0x7A123FE051f33B393AE55Ba99F3dc044F36F69D8`](https://sepolia.etherscan.io/address/0x7A123FE051f33B393AE55Ba99F3dc044F36F69D8) | Mints USDCMock and wraps it into cUSDC for any account: 1,000 per claim, every 10 min |
+| `Siroclimb` | [`0xf280D0B11E57BAe4Fd959E8E3b8b53FE33C8DE8c`](https://sepolia.etherscan.io/address/0xf280D0B11E57BAe4Fd959E8E3b8b53FE33C8DE8c) | Solo runs and rounds with an encrypted side and stake, encrypted payouts, sealed standings, packs, sessions |
+| `ClimbPriceOracle` | [`0xFB3Be33B9b1589df87FB4E132B334cEC67De19b1`](https://sepolia.etherscan.io/address/0xFB3Be33B9b1589df87FB4E132B334cEC67De19b1) | Per-market price checkpoints: Pyth (trustless) or the bounded public fallback |
+| `ClimbLadder` | [`0xcb916F937dcaB2f0bb09BE2845593cCD316b1D0a`](https://sepolia.etherscan.io/address/0xcb916F937dcaB2f0bb09BE2845593cCD316b1D0a) | Run rules in clear: long and short multipliers on the oracle path (game scale 25x) |
+| `ClimbFaucet` | [`0x9a61CF739874c52785f923488F37ceF9817A3C10`](https://sepolia.etherscan.io/address/0x9a61CF739874c52785f923488F37ceF9817A3C10) | Mints USDCMock and wraps it into cUSDC for any account: 1,000 per claim, every 10 min |
 
-Earlier versions, replaced after findings from the battery (see FINDINGS.md), held only test runs:
-`Siroclimb` `0x42EA…65aF` (F10, single-transaction starts), `0x0A6b…018d` with `ClimbLadder`
-`0xc84B…29F1` (F15, index-bounded paths), and `0x205A…81E2` (F24, rounds over the gas cap; its
-round 2 keeps 170 battery cUSDC that can never be paid out, F25).
+Earlier test deployments (made while fixing F10, F15 and F24, and with keys shared with another
+project) are retired; every contract above was redeployed from Siroclimb's own keys.
 
-Deployed by `0x599490b003820a882f988C05Ff0323Ff663DC229` (Siroclimb's own deployer key). It owns
+Deployed by `0x6d3376996531a23aBe413AA9D1aC5902644a2A5d` (Siroclimb's dedicated deployer, also the creator of the mirrors). It owns
 `Siroclimb` and `ClimbPriceOracle` and is the only trusted price updater, used once to seed the
 first prices.
 
@@ -45,9 +43,9 @@ owner-only.
 
 | Market | Confidential token | Underlying | Mainnet xStock |
 | --- | --- | --- | --- |
-| Tesla | `cTSLAx` [`0x6a9b0628378DcbE094164C29577D9e53D031d7E1`](https://sepolia.etherscan.io/address/0x6a9b0628378DcbE094164C29577D9e53D031d7E1) | Tesla xStock (TSLAx) [`0xd5Fd…373E`](https://sepolia.etherscan.io/address/0xd5Fde06DdbA04b289839fb0d362F15aa3E72373E) | `0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0` |
-| NVIDIA | `cNVDAx` [`0x2C4a032CD3A8f895B31dc32aB1f3a4CdF65e3E81`](https://sepolia.etherscan.io/address/0x2C4a032CD3A8f895B31dc32aB1f3a4CdF65e3E81) | NVIDIA xStock (NVDAx) [`0x738F…62A3`](https://sepolia.etherscan.io/address/0x738F3128b18A09e460Ef4bB16A473F76F51a62A3) | `0xc845b2894dBddd03858fd2D643B4eF725fE0849d` |
-| Apple | `cAAPLx` [`0x1881F38510f5B8040966312535C80Cb94c5e6433`](https://sepolia.etherscan.io/address/0x1881F38510f5B8040966312535C80Cb94c5e6433) | Apple xStock (AAPLx) [`0x2f12…92da`](https://sepolia.etherscan.io/address/0x2f12893FEcDA47b694EB56459a4039Ddb57792da) | `0x9d275685dC284C8eB1C79f6ABA7a63Dc75ec890a` |
+| Tesla | `cTSLAx` [`0xaDDb52A774647E8C28ce2CF7f86Ba48E9beFf96a`](https://sepolia.etherscan.io/address/0xaDDb52A774647E8C28ce2CF7f86Ba48E9beFf96a) | Tesla xStock (TSLAx) [`0x28F9…C23E`](https://sepolia.etherscan.io/address/0x28F90781Ce9Af15d070C81DC27C439c39f25C23E) | `0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0` |
+| NVIDIA | `cNVDAx` [`0x82Be7e7C57473867e80a32596911eF58fdceF1B4`](https://sepolia.etherscan.io/address/0x82Be7e7C57473867e80a32596911eF58fdceF1B4) | NVIDIA xStock (NVDAx) [`0xA31c…4c72`](https://sepolia.etherscan.io/address/0xA31c505C280793f0d32c15Ccbc54e5db7A2f4c72) | `0xc845b2894dBddd03858fd2D643B4eF725fE0849d` |
+| Apple | `cAAPLx` [`0x5bc5E456A4e3628Bf2da5FF088671E2BeAF164C9`](https://sepolia.etherscan.io/address/0x5bc5E456A4e3628Bf2da5FF088671E2BeAF164C9) | Apple xStock (AAPLx) [`0x4530…a1b4`](https://sepolia.etherscan.io/address/0x4530495F1dECc8f02C067460EBd6a758E3fBa1b4) | `0x9d275685dC284C8eB1C79f6ABA7a63Dc75ec890a` |
 
 ### Game parameters
 
