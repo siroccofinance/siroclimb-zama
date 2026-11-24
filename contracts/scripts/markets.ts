@@ -14,6 +14,7 @@ export interface Market {
   pyth: string;
   yahoo?: string;
   binance?: string;
+  kraken?: string;
   token: { symbol: string; origin: "zama" | "mirror"; sepolia?: string; underlying?: { name: string; symbol: string; decimals: number; mainnet: string } };
 }
 
@@ -40,6 +41,12 @@ async function yahoo(symbol: string): Promise<number> {
   return closes.length ? closes[closes.length - 1] : r.meta.regularMarketPrice;
 }
 
+async function kraken(pair: string): Promise<number> {
+  const res = await fetch(`https://api.kraken.com/0/public/Ticker?pair=${pair}`);
+  const d = (await res.json()) as { result: Record<string, { c: string[] }> };
+  return Number(Object.values(d.result)[0].c[0]);
+}
+
 async function binance(symbol: string): Promise<number> {
   const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
   return Number(((await res.json()) as { price: string }).price);
@@ -48,6 +55,6 @@ async function binance(symbol: string): Promise<number> {
 /** Seed prices, 10 decimals, in market order. */
 export async function seedPrices(): Promise<bigint[]> {
   const out: bigint[] = [];
-  for (const m of MARKETS) out.push(toFixed10(m.yahoo ? await yahoo(m.yahoo) : await binance(m.binance!)));
+  for (const m of MARKETS) out.push(toFixed10(m.yahoo ? await yahoo(m.yahoo) : m.kraken ? await kraken(m.kraken) : await binance(m.binance!)));
   return out;
 }
