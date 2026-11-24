@@ -60,19 +60,6 @@ function grainTexture(size = 1024) {
   return t;
 }
 
-// coin edge reeding: fine ridges on the lathe's outer wall only (UV v of that band), as a bump map.
-// The lathe's u runs around the coin, so the ridges roll with the body and show the coin turning.
-function reedingTexture() {
-  const w = 2048, h = 256, c = document.createElement('canvas'); c.width = w; c.height = h;
-  const g = c.getContext('2d'); g.fillStyle = '#808080'; g.fillRect(0, 0, w, h);
-  const v0 = Math.floor(h * 6 / 13) + 2, v1 = Math.ceil(h * 7 / 13) - 2, N = 180;   // the straight wall of the profile
-  for (let i = 0; i < N; i++) {
-    const x = (i / N) * w, gr = g.createLinearGradient(x, 0, x + w / N, 0);
-    gr.addColorStop(0, '#3a3a3a'); gr.addColorStop(0.5, '#e8e8e8'); gr.addColorStop(1, '#3a3a3a');
-    g.fillStyle = gr; g.fillRect(x, v0, w / N, v1 - v0);
-  }
-  const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; t.anisotropy = 8; return t;
-}
 const FLOOR_FRAG = /* glsl */`
 uniform vec3 uBase; uniform vec3 uLine; uniform vec3 uShade; varying vec2 vP;
 void main(){
@@ -149,7 +136,7 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
   // coin
   // the body rolls, the face (the mark) does not: it stays upright while the coin turns under it
   const coin = new THREE.Group(), face = new THREE.Group();
-  const coinMat = new THREE.MeshPhysicalMaterial({ color: SIROCCO_COLORS.coin, metalness: 1, roughness: 0.3, clearcoat: 0.35, clearcoatRoughness: 0.15, envMapIntensity: G ? TH.coinEnv : 1.0, bumpMap: reedingTexture(), bumpScale: 2.2 });
+  const coinMat = new THREE.MeshPhysicalMaterial({ color: SIROCCO_COLORS.coin, metalness: 1, roughness: 0.3, clearcoat: 0.35, clearcoatRoughness: 0.15, envMapIntensity: G ? TH.coinEnv : 1.0 });
   const logoMat = new THREE.MeshPhysicalMaterial({ color: SIROCCO_COLORS.coinLogo, metalness: 1, roughness: 0.12, clearcoat: 0.8, clearcoatRoughness: 0.1, envMapIntensity: G ? TH.coinEnv + 0.1 : 1.1 });
   {
     const k = RC / 0.30, t = TC / 2, hf = t - 0.008, pts = [];
@@ -158,7 +145,7 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
     add(0.285, -t); add(0.296, -t + 0.004); add(0.30, -t + 0.012);
     add(0.30, t - 0.012); add(0.296, t - 0.004); add(0.285, t);
     add(0.252, t); add(0.246, t - 0.001); add(0.238, hf); add(0, hf);
-    const g = new THREE.LatheGeometry(pts, 192); g.rotateX(Math.PI / 2);
+    const g = new THREE.LatheGeometry(pts, 160); g.rotateX(Math.PI / 2);
     const body = new THREE.Mesh(g, coinMat); body.castShadow = true; body.receiveShadow = true; coin.add(body);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="14 14 250 309"><path d="${SIROCCO_LOGO_PATH}"/></svg>`;
     const shapes = new SVGLoader().parse(svg).paths.flatMap(p => SVGLoader.createShapes(p));
