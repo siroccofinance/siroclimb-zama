@@ -281,17 +281,47 @@ export function whenEnded(id) { const r = runs.get(String(id)); return r.local ?
 /** Resolves with the chain-verified result once the run is settled on chain. */
 export function whenSettled(id) { const r = runs.get(String(id)); return r.chain ? Promise.resolve(r.chain) : new Promise(res => r.settleWaiters.push(res)); }
 
+/**
+ * Cash out: the value is frozen at the click with the signed price the transaction will carry, so
+ * the number on screen is the number paid (unless another checkpoint lands first, F44).
+ */
 export async function cashOut(id) {
   const run = runs.get(String(id));
-  if (run.status === 'live') endLocal(run, 'cashed');
+  if (run.status !== 'live') return run.local;
+  if (run.pending) await new Promise(r => { const t = setInterval(() => { if (!run.pending || run.failed) { clearInterval(t); r(); } }, 200); });
+  if (run.status !== 'live') return run.local;
+  if (!run.cps && run.pull) await run.pull();                       // a run that was still locking its entry
+  const pyth = await pythFor(run.market).catch(() => null);
+  const now = Date.now(), live = pyth ? { mantissa: pyth.mantissa, expo: pyth.expo } : null;
+  const cv = chainValue(run, now, live);
+  // the result shows now; the transaction leaves now, or right after a checkpoint this browser is
+  // still writing on the market; the value is then re-checked against the exact path the contract reads
+  const after = autopilot.inflight(run.market);
+  endLocal(run, 'cashed', now, { ...(cv || { mult: 1 + run.acc, exit: run.last }), pyth, after });
   return run.local;
 }
-async function sendCashOut(run) {
+async function sendCashOut(run, frozenPyth, after = null) {
   const s = await session();
-  const pyth = await pythFor(indexOf(run.assetId));
+  // a checkpoint this browser is writing on the market lands first: in the same block it would take
+  // the cash out's place as the exit price and the paid value would differ from the frozen one
+  const landed = after ? await after : null;
+  let pyth = frozenPyth === undefined ? await pythFor(run.market) : frozenPyth;
+  if (after && run.local && !run.chain && run.pull) {
+    // re-check the value against the exact path the contract will read, with a signed price fresh
+    // enough to still be accepted when the block lands (Pyth max age 25 s)
+    // the frozen signed price stays, unless it would be too old for the oracle when the block lands
+    if (pyth && Date.now() / 1000 - pyth.publishTime > 15) pyth = (await pythFor(run.market).catch(() => null)) ?? pyth;
+    await run.pull(true, landed?.block ?? null);
+    const exact = chainValue(run, Date.now(), pyth ? { mantissa: pyth.mantissa, expo: pyth.expo } : null);
+    if (exact) {
+      const value = run.stake * exact.mult;
+      Object.assign(run.local, { value, pnl: value - run.stake, pnlPct: (exact.mult - 1) * 100, exitPrice: exact.exit });
+      refineSubs.forEach(cb => cb(run.id, run.local));
+    }
+  }
   status({ kind: 'chain', text: run.mode === 'solo' ? 'Cashing out: encrypted payout on Sepolia…' : 'Locking your exit on Sepolia…' });
   try {
-    const rc = await s.send(game, 'cashOut', [BigInt(run.id), pyth ? pyth.updateData : []], pyth ? pyth.fee : 0n, 'cashOut');
+    const rc = await s.send(game, 'cashOut', [BigInt(run.cid), pyth ? pyth.updateData : []], pyth ? pyth.fee : 0n, 'cashOut');
     run.tx = rc.hash;
     run.txBlock = rc.blockNumber;
   } catch (e) {
