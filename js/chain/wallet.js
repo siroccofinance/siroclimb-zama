@@ -36,7 +36,7 @@ export class Sender {
           const tx = await c[method](...args, { value, gasLimit: gas, nonce, ...(await fees()) });
           this.nonce = nonce + 1;
           emitTx({ label, hash: tx.hash, from: this.address, state: 'sent' });
-          const rc = await rpc.waitForTransaction(tx.hash, 1, 180_000);
+          const rc = await receipt(tx.hash);
           if (!rc || rc.status !== 1) throw new Error(`${label} reverted`);
           emitTx({ label, hash: tx.hash, from: this.address, state: 'mined' });
           return rc;
@@ -59,7 +59,7 @@ export class Sender {
       const nonce = this.nonce == null ? pending : Math.max(this.nonce, pending);
       const tx = await this.wallet.sendTransaction({ to, value: parseEther(String(eth)), nonce });
       this.nonce = nonce + 1;
-      await rpc.waitForTransaction(tx.hash, 1, 180_000);
+      if (!(await receipt(tx.hash))) throw new Error('transfer not mined');
     };
     const p = this.queue.then(run, run).catch(e => { this.nonce = null; throw e; });
     this.queue = p.catch(() => {});
@@ -79,6 +79,17 @@ async function fees() {
   const fd = await rpc.getFeeData();
   const tip = (fd.maxPriorityFeePerGas ?? 0n) > MIN_TIP ? fd.maxPriorityFeePerGas : MIN_TIP;
   return { maxPriorityFeePerGas: tip, maxFeePerGas: (fd.maxFeePerGas ?? fd.gasPrice ?? 0n) + tip };
+}
+
+/** Polls for a receipt every second (ethers' waitForTransaction can miss blocks behind a load balancer). */
+export async function receipt(hash, ms = 180_000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    const rc = await rpc.getTransactionReceipt(hash).catch(() => null);
+    if (rc) return rc;
+    await sleep(1000);
+  }
+  return null;
 }
 
 const txSubs = new Set();
@@ -138,7 +149,7 @@ async function walletSend(contract, method, args, value = 0n) {
   const c = contract.connect(wallet.signer);
   const tx = await c[method](...args, { value });
   emitTx({ label: method, hash: tx.hash, from: wallet.address, state: 'sent' });
-  const rc = await rpc.waitForTransaction(tx.hash, 1, 300_000);
+  const rc = await receipt(tx.hash, 300_000);
   if (!rc || rc.status !== 1) throw new Error(`${method} failed`);
   return rc;
 }
@@ -200,7 +211,7 @@ export async function setup(step = () => {}) {
   } else if (needs.includes('gas')) {
     step('Top up the session gas (wallet)');
     const tx = await wallet.signer.sendTransaction({ to: s.address, value: parseEther(fund.toFixed(6)) });
-    await rpc.waitForTransaction(tx.hash, 1, 300_000);
+    await receipt(tx.hash, 300_000);
   }
   return s;
 }
