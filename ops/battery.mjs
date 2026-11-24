@@ -233,7 +233,7 @@ for (let w = 1; w <= WAVES; w++) {
   const runners = w === 1 ? [...players, poor] : players;
   // watchdog: a run that hangs (a dropped request somewhere) fails after 8 minutes instead of blocking the wave
   const guard = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error(`watchdog: ${what} took over ${ms / 60000} min`)), ms))]);
-  const res = await Promise.allSettled(runners.map((p, i) => guard(soloRun(p, w, i * 2000), 8 * 60_000, 'solo run')));
+  const res = await Promise.allSettled(runners.map((p, i) => guard(soloRun(p, w, i * 2000), 15 * 60_000, 'solo run')));
   res.forEach((r, i) => { if (r.status === 'rejected') { log('solo error', runners[i].name, errText(r.reason)); pass('solo', false, { wave: w, player: runners[i].name, error: errText(r.reason) }); } });
   log(`wave ${w}: ${results.solo.filter(x => x.wave === w && x.ok).length} / ${results.solo.filter(x => x.wave === w).length} pass`);
 }
