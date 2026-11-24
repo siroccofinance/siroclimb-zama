@@ -12,7 +12,8 @@ import { ADDR, JOIN_SECONDS, LADDER, MARKETS, MAX_STAKE, MOVE_SCALE, PRICE_DECIM
 import * as feed from './feed.js';
 import { encryptRun, hasGrant, publicDecrypt, userDecrypt, warmUp } from './fhe.js';
 import * as W from './wallet.js';
-import { fallbackFor, pythFor } from './prices.js';
+import { fallbackFor, pythFor, pythNow } from './prices.js';
+import { multipliers, pythToFixed10 } from './ladder.js';
 import * as autopilot from './autopilot.js';
 import * as bots from './bots.js';
 
@@ -135,40 +136,101 @@ const runs = new Map();        // id -> local run
 const sideSign = s => (s === 'short' ? -1 : 1);
 const stepAt = t => Math.min(LADDER.length - 1, Math.max(0, Math.floor(t / STEP_SECONDS)));
 
-function makeRun({ id, mode, assetId, side, stake, startedAt, entryPrice, roundId = null }) {
-  const run = { id: String(id), mode, assetId, side, stake, startedAt, entryPrice, roundId, ladder: LADDER, stepEvery: STEP_SECONDS, duration: RUN_SECONDS,
-    acc: 0, last: entryPrice, maxLev: 1, status: 'live', subs: new Set(), endedAt: 0, local: null, chain: null, waiters: [], settleWaiters: [], finalWaiters: [] };
+function makeRun({ id, cid = null, mode, assetId, side, stake, startedAt, entryPrice, roundId = null }) {
+  const run = { id: String(id), cid: cid == null ? null : String(cid), mode, assetId, side, stake, startedAt, entryPrice, roundId, ladder: LADDER, stepEvery: STEP_SECONDS, duration: RUN_SECONDS,
+    acc: 0, last: entryPrice, maxLev: 1, status: 'live', subs: new Set(), endedAt: 0, local: null, chain: null, waiters: [], settleWaiters: [], finalWaiters: [],
+    cps: null, market: indexOf(assetId), pending: cid == null };
   runs.set(run.id, run);
-  run.unsub = feed.subscribe(indexOf(assetId), ({ price, ts }) => advance(run, price, ts));
+  run.unsub = feed.subscribe(run.market, ({ price, ts }) => advance(run, price, ts));
   return run;
 }
+
+// ── the value on screen is the value the contract will pay: ClimbLadder's rules over the oracle
+//    checkpoints since the entry, plus, for a Pyth market, the live signed price the cash out will
+//    carry (FINDINGS F44). Markets on the bounded fallback settle on their last checkpoint.
+async function trackCheckpoints(run) {
+  if (run.cpTimer) return;
+  // atBlock: read as of a block known to hold a new checkpoint (a lagging node retries until it has it)
+  const pull = run.pull = async (force = false, atBlock = null) => {
+    if ((!force && run.status !== 'live') || !run.cid) return;
+    try {
+      if (run.entryIndex == null) {
+        // a round's entry is the last checkpoint at or before the bell, known once the bell has rung
+        if (run.mode === 'round') { if (Date.now() < run.startedAt + 1000) return; run.entryIndex = Number(await W.oracle.indexAtOrBefore(run.market, Math.floor(run.startedAt / 1000))); }
+        else run.entryIndex = Number((await W.view(() => game.getRun(BigInt(run.cid)))).entryIndex);
+      }
+      const [ts, px] = atBlock
+        ? await W.view(() => W.oracle.path(run.market, run.entryIndex, 2n ** 256n - 1n, 64, { blockTag: atBlock }))
+        : await W.oracle.path(run.market, run.entryIndex, 2n ** 256n - 1n, 64);
+      run.cps = ts.map((t, i) => ({ ts: Number(t), price: px[i] }));
+    } catch {}
+  };
+  await pull();
+  run.cpTimer = setInterval(pull, 2500);
+}
+function chainValue(run, nowMs, live = pythNow(run.market)) {
+  if (!run.cps || !run.cps.length) return null;
+  const pts = run.cps.slice();
+  const nowS = Math.floor(nowMs / 1000), last = pts[pts.length - 1];
+  if (live && live.mantissa != null && nowS > last.ts) pts.push({ ts: nowS, price: pythToFixed10(live.mantissa, live.expo) });
+  const m = multipliers(pts, Math.floor(run.startedAt / 1000), MOVE_SCALE);
+  const mult = Number(run.side === 'long' ? m.long : m.short) / SCALE;
+  return { mult, exit: Number(pts[pts.length - 1].price) / 10 ** PRICE_DECIMALS };
+}
 function advance(run, price, ts) {
-  const t = (ts - run.startedAt) / 1000;
   if (run.status !== 'live') return;
-  if (t < 0) { run.entryPrice = run.last = price; return; }           // a round fixes its entry on the bell
+  const t = (ts - run.startedAt) / 1000;
+  run.last = price;
+  if (run.pending || t < 0) { if (t < 0 && run.mode === 'round') run.entryPrice = price; const u = update(run, ts); run.subs.forEach(cb => cb(u)); return; }
   const lev = LADDER[stepAt(t)];
-  run.acc += MOVE_SCALE * lev * sideSign(run.side) * (price / run.last - 1);
-  run.last = price; run.maxLev = Math.max(run.maxLev, lev);
-  if (run.acc <= -1) { run.acc = -1; endLocal(run, 'busted', ts); }
+  run.maxLev = Math.max(run.maxLev, lev);
+  const cv = chainValue(run, ts);
+  if (cv) run.acc = cv.mult - 1;
+  if (cv && cv.mult === 0) { run.acc = -1; endLocal(run, 'busted', ts); }
   else if (t >= run.duration) endLocal(run, 'expired', ts);
   const u = update(run, ts); run.subs.forEach(cb => cb(u));
 }
 function update(run, ts) {
-  const t = Math.max(0, (Math.min(ts, run.endedAt || ts) - run.startedAt) / 1000), step = stepAt(t), value = run.stake * (1 + run.acc);
-  return { t, price: run.last, step, leverage: LADDER[step], value, pnl: value - run.stake, pnlPct: run.acc * 100, risk: Math.min(1, Math.max(0, -run.acc)), status: run.status };
+  const t = run.pending ? 0 : Math.max(0, (Math.min(ts, run.endedAt || ts) - run.startedAt) / 1000), step = stepAt(t), value = run.stake * (1 + run.acc);
+  return { t, price: run.last, step, leverage: LADDER[step], value, pnl: value - run.stake, pnlPct: run.acc * 100, risk: Math.min(1, Math.max(0, -run.acc)), status: run.status, pending: !!run.pending };
 }
 /** The run is over on screen; the chain settles it (cash out or expiry tx) and `whenSettled` follows. */
-function endLocal(run, st, ts = Date.now()) {
+const refineSubs = new Set();
+/** cb(runId, result) when a cashed-out value is re-checked against the exact on-chain path. */
+export function onRefine(cb) { refineSubs.add(cb); return () => refineSubs.delete(cb); }
+function endLocal(run, st, ts = Date.now(), frozen = null) {
   if (run.status !== 'live') return;
   run.status = st; run.endedAt = ts;
+  clearInterval(run.cpTimer);
+  if (frozen) run.acc = frozen.mult - 1;
   const value = run.stake * (1 + run.acc);
   run.local = { status: st, value, pnl: value - run.stake, pnlPct: run.acc * 100, maxLeverage: run.maxLev, duration: Math.min(run.duration, (ts - run.startedAt) / 1000),
-    entryPrice: run.entryPrice, exitPrice: run.last, pending: true, runId: run.id };
+    entryPrice: run.entryPrice, exitPrice: frozen?.exit ?? run.last, pending: true, runId: run.cid ?? run.id };
   run.waiters.splice(0).forEach(r => r(run.local));
   if (run.mode === 'solo') {
     if (st === 'expired') autopilot.kick();          // anyone may settle at the 60th second; this browser does it now
-    else sendCashOut(run).catch(e => status({ kind: 'error', text: `Cash out: ${friendly(e)}` }));
-  } else if (st !== 'expired') sendCashOut(run).catch(e => status({ kind: 'error', text: `Cash out: ${friendly(e)}` }));
+    else sendCashOut(run, frozen?.pyth, frozen?.after).catch(e => status({ kind: 'error', text: `Cash out: ${friendly(e)}` }));
+  } else if (st !== 'expired') sendCashOut(run, frozen?.pyth, frozen?.after).catch(e => status({ kind: 'error', text: `Cash out: ${friendly(e)}` }));
+}
+
+// ── pre-encryption: side and stake are encrypted in the background as soon as they are picked in the
+//    lobby, so the click only sends the transaction (F45)
+const preEnc = new Map();
+const encKey = (mode, long, units) => (mode === 'round' ? `r:${long}` : `s:${long}:${units}`);
+export function prepare({ mode = 'solo', side = 'long', stake = 10 } = {}) {
+  const s = W.currentSession(); if (!s) return;
+  const long = side === 'long', units = mode === 'round' ? null : Math.round(stake * USDC), k = `${s.address}:${encKey(mode, long, units)}`;
+  if (preEnc.has(k)) return;
+  const p = encryptRun(s.address, long, units);
+  p.catch(() => preEnc.delete(k));
+  preEnc.set(k, p);
+}
+function takeEncryption(s, mode, long, units) {
+  const k = `${s.address}:${encKey(mode, long, units)}`;
+  const p = preEnc.get(k) || encryptRun(s.address, long, units);
+  preEnc.delete(k);
+  setTimeout(() => prepare({ mode, side: long ? 'long' : 'short', stake: units == null ? 0 : units / USDC }), 0);   // ready for the next one
+  return p;
 }
 
 export async function startRun({ mode = 'solo', assetId, side = 'long', stake }) {
@@ -427,4 +489,8 @@ export async function shareCard() { return null; }
 
 export const _debug = { runs, roundCache: () => roundCache, feed, bots, autopilot };
 
-const api = { runs, liveRuns, settleFromChain, roundData, pollRound, focused, status, myRoundRuns };
+/** A checkpoint this browser wrote just landed: the runs on that market re-read their path now. */
+function checkpointed(m) {
+  for (const run of runs.values()) if (run.market === m && run.status === 'live' && run.pull) { run.pull(); setTimeout(() => run.pull?.(), 2500); }
+}
+const api = { runs, liveRuns, settleFromChain, roundData, pollRound, focused, status, myRoundRuns, checkpointed };
