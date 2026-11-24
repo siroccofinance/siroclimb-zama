@@ -109,10 +109,10 @@ async function soloRun(p, wave, delay = 0) {
   step('exit sent');
   const r = await view(() => game.getRun(id), x => Number(x.status) === 2, 30);
   step('settled seen');
-  await view(() => game.runHandles(id), h => !/^0x0+$/.test(h[3]), 30);
+  const handles = await view(() => game.runHandles(id), h => !/^0x0+$/.test(h[3]) && !/^0x0+$/.test(h[2]), 30);
   const sb = await settledBlock(id, rc.blockNumber);       // recompute at the settlement block (lagging nodes)
   const [mL, mS] = await view(() => ladder.multipliers(market, r.entryIndex, r.exitIndex, r.startAt, 6, { blockTag: sb }));
-  const [, paidH, valueH, multH, , capH] = await game.runHandles(id);
+  const [, paidH, valueH, multH, , capH] = handles;              // the same read that showed them set
   step('decrypting');
   const [paid, value, mult, cap] = await userDecrypt(p.wallet, [{ handle: paidH, contract: ADDR.Siroclimb }, { handle: valueH, contract: ADDR.Siroclimb }, { handle: multH, contract: ADDR.Siroclimb }, { handle: capH, contract: ADDR.Siroclimb }]);
   let expMult = long ? r.multLong : r.multShort;
