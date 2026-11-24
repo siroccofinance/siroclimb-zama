@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Contract, HDNodeWallet, JsonRpcProvider, Mnemonic, Wallet, formatEther, parseEther } from 'ethers';
+import { Contract, FetchRequest, HDNodeWallet, JsonRpcProvider, Mnemonic, Wallet, formatEther, parseEther } from 'ethers';
 import { pythUpdate } from '../api/pyth.js';
 import { prices } from '../api/prices.js';
 
@@ -14,7 +14,10 @@ export const ADDR = json('js/chain/deployments.json')['11155111'];
 export const ABI = json('js/chain/abi.json');
 export const MARKETS = json('js/chain/markets.json').markets;
 export const RPC_URL = process.env.RPC_URL || 'https://sepolia.gateway.tenderly.co';
-export const provider = new JsonRpcProvider(RPC_URL, 11155111, { staticNetwork: true, batchMaxCount: 1, cacheTimeout: -1, pollingInterval: 2000 });
+// a request the RPC never answers fails after 20 s (ethers waits 5 minutes by default), and is retried
+const rpcRequest = new FetchRequest(RPC_URL);
+rpcRequest.timeout = 20_000;
+export const provider = new JsonRpcProvider(rpcRequest, 11155111, { staticNetwork: true, batchMaxCount: 1, cacheTimeout: -1, pollingInterval: 2000 });
 export const game = new Contract(ADDR.Siroclimb, ABI.Siroclimb, provider);
 export const oracle = new Contract(ADDR.ClimbPriceOracle, ABI.ClimbPriceOracle, provider);
 export const ladder = new Contract(ADDR.ClimbLadder, ABI.ClimbLadder, provider);
