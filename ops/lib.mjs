@@ -122,6 +122,16 @@ export async function encryptRun(sender, long, stakeUnits) {
     } catch (e) { if (attempt >= 4) throw e; await sleep(2000 + attempt * 2000); }   // relayer busy: retry
   }
 }
+// The relayer's user decryption slows down sharply with many concurrent requests (F31): at most
+// RELAYER_SLOTS run at once, the others queue.
+const RELAYER_SLOTS = Number(process.env.RELAYER_SLOTS || 4);
+let active = 0;
+const waiting = [];
+async function slot(fn) {
+  if (active >= RELAYER_SLOTS) await new Promise(r => waiting.push(r));
+  active++;
+  try { return await fn(); } finally { active--; waiting.shift()?.(); }
+}
 const grants = new Map();
 /** User decryption by a wallet we hold (EIP-712 grant signed in Node). */
 export async function userDecrypt(wallet, items) {
@@ -139,7 +149,7 @@ export async function userDecrypt(wallet, items) {
   if (live.length) {
     for (let attempt = 0; ; attempt++) {
       try {
-        const res = await withTimeout(f.userDecrypt(live.map(i => ({ handle: i.handle, contractAddress: i.contract })), g.kp.privateKey, g.kp.publicKey, g.sig.replace('0x', ''), g.contracts, wallet.address, g.start, 1), 45_000, 'relayer user decryption');
+        const res = await slot(() => withTimeout(f.userDecrypt(live.map(i => ({ handle: i.handle, contractAddress: i.contract })), g.kp.privateKey, g.kp.publicKey, g.sig.replace('0x', ''), g.contracts, wallet.address, g.start, 1), 90_000, 'relayer user decryption'));
         for (const i of live) out.set(i.handle, BigInt(res[i.handle]));
         break;
       } catch (e) { if (process.env.TRACE) console.log('    user decryption retry', attempt, e.message?.slice(0, 80)); if (attempt >= 5) throw e; await sleep(3000 + attempt * 2000); }
