@@ -152,10 +152,17 @@ export async function userDecrypt(wallet, items) {
   if (live.length) {
     for (let attempt = 0; ; attempt++) {
       try {
-        const res = await slot(() => withTimeout(f.userDecrypt(live.map(i => ({ handle: i.handle, contractAddress: i.contract })), g.kp.privateKey, g.kp.publicKey, g.sig.replace('0x', ''), g.contracts, wallet.address, g.start, 1), 90_000, 'relayer user decryption'));
+        const fi = await fhe();
+        const res = await slot(() => withTimeout(fi.userDecrypt(live.map(i => ({ handle: i.handle, contractAddress: i.contract })), g.kp.privateKey, g.kp.publicKey, g.sig.replace('0x', ''), g.contracts, wallet.address, g.start, 1), 90_000, 'relayer user decryption'));
         for (const i of live) out.set(i.handle, BigInt(res[i.handle]));
         break;
-      } catch (e) { if (process.env.TRACE) console.log('    user decryption retry', attempt, e.message?.slice(0, 80)); if (attempt >= 5) throw e; await sleep(3000 + attempt * 2000); }
+      } catch (e) {
+        if (process.env.TRACE) console.log('    user decryption retry', attempt, e.message?.slice(0, 80));
+        // a wedged relayer client stays wedged: the next attempt starts from a fresh SDK instance (F33)
+        if (/timeout/.test(e.message)) { fheP = null; grants.delete(wallet.address); }
+        if (attempt >= 5) throw e;
+        await sleep(3000 + attempt * 2000);
+      }
     }
   }
   return items.map(i => out.get(i.handle) ?? 0n);
