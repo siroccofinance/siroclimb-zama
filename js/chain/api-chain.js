@@ -464,21 +464,21 @@ export function whenRoundFinal(runId) {
           const n = Number(await game.resultCount());
           const list = await game.results(Math.max(0, n - 80), 80);
           const mine = list.find(x => x.inRound && Number(x.ref) === run.roundId && x.player.toLowerCase() === W.player().toLowerCase());
+          // a lagging node can report the round final before it serves its results: read again
+          if (!mine && (run.finalTries = (run.finalTries || 0) + 1) < 10) throw new Error('results not served yet');
           if (!run.chain) await settleFromChain(run).catch(() => {});
-          let claimBlock = null;
-          // the prize is a pull payment (one encrypted transfer per claim): the session claims it
-          if (Number(await game.prizeOf(BigInt(run.id))) > 0 && !(await game.claimed(BigInt(run.id)))) {
-            status({ kind: 'chain', text: 'Claiming your prize: encrypted transfer…' });
-            const rc = await W.currentSession().send(game, 'claim', [BigInt(run.id)], 0n, 'claim').catch(() => null);
-            if (rc) claimBlock = rc.blockNumber;
-            status(null);
-          }
           const base = run.chain || run.local;
           const out = { ...base, rank: mine ? Number(mine.rank) : null, of: Number(r.fundedCount), prize: mine ? Number(mine.prize) / USDC : 0, pnlPct: mine ? Number(mine.pnlPpm) / 1e4 : base.pnlPct, final: true };
           lastRoundId = run.roundId;
-          if (bal != null && out.prize) setBal(bal + out.prize);
-          refreshSoon(claimBlock ?? true);
-          return res(out);
+          res(out);
+          // the prize is a pull payment (one encrypted transfer per claim): the game account claims it
+          // in the background, the standings are already on screen
+          if (out.prize && !(await game.claimed(BigInt(run.cid)))) {
+            const rc = await W.currentSession().send(game, 'claim', [BigInt(run.cid)], 0n, 'claim').catch(() => null);
+            if (rc && bal != null) setBal(bal + out.prize);
+            refreshSoon(rc ? rc.blockNumber : true);
+          } else refreshSoon(true);
+          return;
         }
       } catch {}
       setTimeout(check, 3000);
