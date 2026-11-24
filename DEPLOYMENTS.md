@@ -12,7 +12,8 @@ from `js/chain/deployments.json` (written by `npm run export -- sepolia`).
 
 | Contract | Address | Role |
 | --- | --- | --- |
-| `Siroclimb` | [`0x422ff882a432f87bBeF48161eBC99f219BaD2B85`](https://sepolia.etherscan.io/address/0x422ff882a432f87bBeF48161eBC99f219BaD2B85) | Runs with an encrypted side and stake, encrypted payouts, KMS-verified posted results, packs, sessions (solo only) |
+| `Siroclimb` | [`0x890b2bAb3f2EC280FcD4761cC0C655eaE13f03a0`](https://sepolia.etherscan.io/address/0x890b2bAb3f2EC280FcD4761cC0C655eaE13f03a0) | Runs with an encrypted side and stake, leverage borrowed from the Sirocco Reserve with interest, encrypted payouts, KMS-verified posted results, packs, sessions (solo only) |
+| `SiroccoReserve` | [`0x0E59E03fa74728DE740444D0D976616Cd3080628`](https://sepolia.etherscan.io/address/0x0E59E03fa74728DE740444D0D976616Cd3080628) | The Sirocco Reserve: confidential cUSDC lending pool, encrypted `rcUSDC` shares (ERC-7984), loans to runs, KMS-verified reveals of its totals |
 | `ClimbPriceOracle` | [`0x9eAf890d59Bf5F38DE42FE92901E0F8607eFab07`](https://sepolia.etherscan.io/address/0x9eAf890d59Bf5F38DE42FE92901E0F8607eFab07) | Per-market price checkpoints: Pyth (trustless) or the bounded public fallback |
 | `ClimbLadder` | [`0x66119f55A4f7baC3c697684c114280917Cf0E366`](https://sepolia.etherscan.io/address/0x66119f55A4f7baC3c697684c114280917Cf0E366) | Run rules in clear: long and short multipliers on the oracle path (game scale 25x) |
 | `ClimbFaucet` | [`0x9a61CF739874c52785f923488F37ceF9817A3C10`](https://sepolia.etherscan.io/address/0x9a61CF739874c52785f923488F37ceF9817A3C10) | Mints USDCMock and wraps it into cUSDC for any account: 1,000 per claim, every 10 min |
@@ -21,11 +22,13 @@ Earlier test deployments (made while fixing F10, F15, F24 and F44, and with keys
 project) are retired with nothing left open, and so is the five-market game that ran before AMZNx was
 added (`Siroclimb` `0x92e5…7649`, oracle `0xFB3B…19b1`, ladder `0xd6E0…bc20`: 44 runs, 2 rounds, all
 settled and claimed), and the six-market game with rounds that followed it (`Siroclimb` `0x8544…f0a6`:
-3 runs, all settled, no round ever opened). The oracle, the ladder, the faucet and the mirrors carried over; every contract above was deployed from Siroclimb's own keys.
+3 runs, all settled, no round ever opened), and the solo-only game that paid from an auto-minted house
+bankroll (`Siroclimb` `0x422f…2B85`: 3 runs, all settled). The oracle, the ladder, the faucet and the mirrors carried over; every contract above was deployed from Siroclimb's own keys.
 
 Deployed by `0x6d3376996531a23aBe413AA9D1aC5902644a2A5d` (Siroclimb's dedicated deployer, also the creator of the mirrors). It owns
-`Siroclimb` and `ClimbPriceOracle` and is the only trusted price updater, used once to seed the
-first prices.
+`Siroclimb`, `ClimbPriceOracle` and `SiroccoReserve` and is the only trusted price updater, used once to seed the
+first prices. Its only power over the reserve was wiring the game, once (`setGame`); it cannot move
+lenders' cUSDC. It is also the reserve's first lender (250,000 cUSDC).
 
 ### Zama contracts used
 
@@ -62,6 +65,11 @@ owner-only.
 | Ladder | 1x, 1.5x, 2x, 2.5x, 3x, 3.5x, 4x, one step every 6 s, 60 s runs |
 | Game scale | 25x: a 0.1 % move counts 2.5 % at 1x, 10 % at 4x |
 | Stake | Encrypted, clamped to 100 cUSDC on ciphertexts |
+| Leverage | Borrowed from the Sirocco Reserve: S x (L - 1) for a stake S at leverage L |
+| Borrow APR | 20 % (`borrowAprBps` 2000, fixed at deployment); interest = paid x 2000 x borrowed tenth-seconds / 3.1536e12 |
+| Liquidity per live run | 1,000 cUSDC lent into the game at the start (the public bound of a run), returned with the PnL at the end |
+| Reserve seed | 250,000 cUSDC, deposited by the deployer as first lender (public deposit of the underlying) |
+| Reserve reveals | At most every 10 min (`SYNC_INTERVAL`), KMS proof checked by `finalizeSync`; a stuck one can be asked again after 1 h |
 | Packs | One per 10 min, Bronze 45 % / Silver 28 % / Gold 18 % / Diamond 9 % (1.5x / 2x / 3x / 4x cap) |
 | Entry | At most 60 s old; a Pyth update or a bounded public price can ride along with `startRun` |
 | Oracle | Pyth max age 25 s; fallback at most every 10 s, +/-0.5 % per checkpoint, +/-3 % from the last Pyth price |

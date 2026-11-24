@@ -2,7 +2,7 @@
 //  - encryption of the player's inputs (side, stake) through the relayer, bound to the sender;
 //  - user decryption of the player's own handles (balance, run value) with an EIP-712 grant the
 //    wallet signs once a week (the keypair never leaves this browser);
-//  - public decryption (published runs) with the KMS proof the contract checks.
+//  - public decryption (published runs, the reserve's synced totals) with the KMS proof the contract checks.
 import { ADDR, RPC_URL } from './config.js';
 
 export const RELAYER_SDK_URL = 'https://cdn.zama.org/relayer-sdk-js/0.4.1/relayer-sdk-js.umd.cjs';
@@ -53,10 +53,21 @@ export async function encryptRun(sender, long, stakeUnits) {
   return { handles: enc.handles.map(hex), proof: hex(enc.inputProof) };
 }
 
+/** Encrypts one amount (euint64, 6 decimals) for `contract`, bound to `sender` (reserve deposits, withdrawals). */
+export async function encryptAmount(contract, sender, units) {
+  const fhe = await getFhe();
+  const enc = await relayer(() => {
+    const input = fhe.createEncryptedInput(contract, sender);
+    input.add64(BigInt(units));
+    return input.encrypt();
+  }, 40_000, 'encryption');
+  return { handle: hex(enc.handles[0]), proof: hex(enc.inputProof) };
+}
+
 // ── user decryption grant (one wallet signature per day, kept in this tab's local storage)
 const DAYS = 7;   // one decryption signature a week
 const grantKey = user => `siroclimb:fhe-grant:${user.toLowerCase()}`;
-const CONTRACTS = () => [ADDR.Siroclimb, ADDR.StakeToken];
+const CONTRACTS = () => [ADDR.Siroclimb, ADDR.StakeToken, ADDR.SiroccoReserve];
 function loadGrant(user) {
   try {
     const g = JSON.parse(localStorage.getItem(grantKey(user)) || 'null');

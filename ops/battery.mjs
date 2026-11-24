@@ -8,8 +8,8 @@
 //          (clamped on ciphertexts), an unfunded player (moves 0, paid 0), leverage packs (capped
 //          path selected on ciphertexts), published runs (KMS proof).
 //          Checks: the public multipliers equal ClimbLadder's recomputation on the oracle path;
-//          the player's decrypted multiplier is the one of its side; the decrypted balance moved
-//          by exactly paid x mult - paid.
+//          the player's decrypted multiplier is the one of its side; the decrypted interest is the
+//          borrow interest of the run; the decrypted balance moved by exactly paid x mult - interest - paid.
 //
 // usage: node battery.mjs [players=16] [soloWaves=2]
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -72,6 +72,17 @@ async function settlerTick() {
 
 // ── solo
 function expectedPaid(stake) { return stake > 100n * USDC ? 100n * USDC : stake; }
+// borrow interest on S x (L - 1) over the run's seconds (Siroclimb.borrowedTenthSeconds, Sirocco Reserve APR)
+const APR_BPS = await game.borrowAprBps(), INTEREST_DIVISOR = await game.interestDivisor();
+function borrowedTenthSeconds(elapsed, cap = 6) {
+  let total = 0n;
+  for (let i = 0n; i <= 6n; i++) {
+    const from = i * 6n; if (elapsed <= from) break;
+    let to = i === 6n ? elapsed : (i + 1n) * 6n; if (to > elapsed) to = elapsed;
+    total += 5n * (i > BigInt(cap) ? BigInt(cap) : i) * (to - from);
+  }
+  return total;
+}
 async function soloRun(p, wave, delay = 0) {
   await sleep(delay);                                    // staggered starts: the relayer is shared
   let open = await openMarkets();
@@ -115,24 +126,28 @@ async function soloRun(p, wave, delay = 0) {
   const handles = await view(() => game.runHandles(id), h => !/^0x0+$/.test(h[3]) && !/^0x0+$/.test(h[2]), 30);
   const sb = await settledBlock(id, rc.blockNumber);       // recompute at the settlement block (lagging nodes)
   const [mL, mS] = await view(() => ladder.multipliers(market, r.entryIndex, r.exitIndex, r.startAt, 6, { blockTag: sb }));
-  const [, paidH, valueH, multH, , capH] = handles;              // the same read that showed them set
+  const [, paidH, valueH, multH, capH, , interestH] = handles;  // the same read that showed them set
   step('decrypting');
-  const [paid, value, mult, cap] = await userDecrypt(p.wallet, [{ handle: paidH, contract: ADDR.Siroclimb }, { handle: valueH, contract: ADDR.Siroclimb }, { handle: multH, contract: ADDR.Siroclimb }, { handle: capH, contract: ADDR.Siroclimb }]);
+  const [paid, value, mult, cap, charged] = await userDecrypt(p.wallet, [paidH, valueH, multH, capH, interestH].map(handle => ({ handle, contract: ADDR.Siroclimb })));
   let expMult = long ? r.multLong : r.multShort;
   if (scenario === 'pack') { const [cl, cs] = await ladder.multipliers(market, r.entryIndex, r.exitIndex, r.startAt, Number(cap)); expMult = long ? cl : cs; }
   const expPaid = scenario === 'unfunded' ? 0n : expectedPaid(stake);
-  const expValue = (expPaid * expMult) / SCALE;
+  const gross = (expPaid * expMult) / SCALE;
+  const owed = (expPaid * APR_BPS * borrowedTenthSeconds(r.endAt - r.startAt, scenario === 'pack' ? Number(cap) : 6)) / INTEREST_DIVISOR;
+  const expInterest = owed < gross ? owed : gross;
+  const expValue = gross - expInterest;
   const after = p === poor ? 0n : await balanceAt(p.wallet, sb);
   const checks = {
     pathMatchesLadder: mL === r.multLong && mS === r.multShort,
     sideMultiplier: mult === expMult,
     paid: paid === expPaid,
+    interest: charged === expInterest,
     payout: value === expValue,
     balance: p === poor ? after === 0n : after - before === expValue - expPaid,
   };
   log(`solo w${wave} ${p.name.padEnd(18)} run ${id} ${Object.values(checks).every(Boolean) ? 'PASS' : 'FAIL'} mult ${Number(mult) / 1e6} payout ${Number(value) / 1e6}`);
   pass('solo', Object.values(checks).every(Boolean), { wave, player: p.name, run: Number(id), market: MARKETS[market].id, side: long ? 'long' : 'short', stake: Number(stake) / 1e6, scenario,
-    mult: Number(mult) / 1e6, multLong: Number(r.multLong) / 1e6, multShort: Number(r.multShort) / 1e6, payout: Number(value) / 1e6, seconds: Number(r.endAt - r.startAt), checks });
+    mult: Number(mult) / 1e6, multLong: Number(r.multLong) / 1e6, multShort: Number(r.multShort) / 1e6, payout: Number(value) / 1e6, interest: Number(charged) / 1e6, seconds: Number(r.endAt - r.startAt), checks });
   if (scenario !== 'unfunded' && Math.random() < 0.15) {        // publish: reveal the multiplier with a KMS proof
     await p.send(game, 'publishRun', [id]);
     const { values, proof } = await publicDecrypt([multH]);

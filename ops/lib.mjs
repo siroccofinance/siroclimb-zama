@@ -61,7 +61,7 @@ export async function receipt(hash, ms = 240_000) {
   return null;
 }
 /** Gas limits of game calls measured on Sepolia (about 2x the largest use seen). */
-const FIXED_GAS = { startRun: 6_000_000n, cashOut: 4_500_000n, settleRun: 4_000_000n, publishRun: 400_000n, recordRun: 1_500_000n };
+const FIXED_GAS = { startRun: 6_000_000n, cashOut: 6_000_000n, settleRun: 6_000_000n, publishRun: 400_000n, recordRun: 1_500_000n };
 const MIN_TIP = 200_000_000n;
 export async function fees() {
   const fd = await provider.getFeeData();

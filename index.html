@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="play.css?v=9">
+  <link rel="stylesheet" href="play.css?v=10">
 </head>
 <body data-screen="intro">
   <div class="stage" id="stage" aria-hidden="true">
@@ -35,6 +35,9 @@
       </button>
       <button class="icon" data-open="board" aria-label="Leaderboard" title="Leaderboard">
         <svg viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8.5 20h7M10 17h4"/></svg>
+      </button>
+      <button class="icon" data-open="reserve" aria-label="Sirocco Reserve" title="Sirocco Reserve: lend cUSDC">
+        <svg viewBox="0 0 24 24"><path d="M3 9.5L12 4l9 5.5M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3.5 20.5h17"/></svg>
       </button>
       <button class="icon" id="sound" aria-label="Sound" title="Sound" aria-pressed="true">
         <svg viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10z"/><path class="on" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="off" d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
@@ -130,6 +133,7 @@
         <div class="pnl__v"><span id="pV">+0.00</span><small>cUSDC</small></div>
         <div class="pnl__s"><span id="pP">+0.00%</span><span class="pnl__lev">at <b id="pL">1x</b></span></div>
         <div class="safety"><div class="safety__bar"><i id="sBar"></i></div><span id="sTxt">Stake safe</span></div>
+        <div class="borrow" id="borrow">Borrowed <b id="bV">0.00</b> cUSDC from the Sirocco Reserve</div>
       </div>
       <button class="cta cta--cash" id="cash"><span>Cash out</span><b id="cashV">0.00</b></button>
     </div>
@@ -157,12 +161,29 @@
       <ol class="steps">
         <li><b>Pick a market, a direction and a stake.</b> Tokenized stocks (Tesla, NVIDIA, Apple, Amazon), gold or the pound, long or short.</li>
         <li><b>The coin rolls on the live price.</b> When the price goes your way it climbs a step, when it turns it steps down. Big moves, big jumps. Your leverage grows every 6 seconds, from 1x to 4x.</li>
+        <li><b>The leverage is borrowed.</b> At 3x on a 50 cUSDC stake you borrow 100 cUSDC from the Sirocco Reserve, a lending pool, and pay interest on it for the seconds you hold it.</li>
         <li><b>Cash out whenever you want.</b> If the price runs too far against you, the stairs give way and the coin falls. You lose your stake, never more.</li>
       </ol>
       <h3>Private by design</h3>
       <p>Your direction and your stake are encrypted on chain with Zama's FHE. Nobody can copy or fade you. Your result is computed on ciphertexts and paid in the same transaction.</p>
       <p class="fine">Sepolia test network, Zama's confidential test USDC. Real prices (Pyth and public market data); every move counts 25x, then your leverage. Stocks trade during US market hours (4:00 to 20:00 New York time, US trading days).</p>
       <button class="cta sheet__ok" data-close>Got it</button>
+    </div>
+  </div>
+
+  <div class="sheet" id="reserve" role="dialog" aria-modal="true" aria-labelledby="reserve-title" hidden>
+    <div class="sheet__card" tabindex="-1">
+      <button class="icon sheet__x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <h2 id="reserve-title">Sirocco Reserve</h2>
+      <p>The lending pool behind every run's leverage. Lenders earn the borrow interest and carry the players' gains and losses. Deposits and shares are encrypted: only you can read yours.</p>
+      <dl class="kpis" id="rvStats"></dl>
+      <div class="rv__me"><span>Your position</span><b id="rvMe">Connect to see it</b></div>
+      <div class="rv__form">
+        <input id="rvAmt" type="number" min="1" step="1" inputmode="decimal" placeholder="Amount in cUSDC" aria-label="Amount in cUSDC">
+        <button class="rv__btn rv__btn--main" id="rvDep">Deposit</button>
+        <button class="rv__btn" id="rvWd">Withdraw</button>
+      </div>
+      <p class="fine" id="rvNote">Totals are revealed by Zama's KMS at most every 10 minutes and checked on chain. Deposits and withdrawals use the share price of the last reveal. A withdrawal is all or nothing: it waits if the cash is lent to live runs.</p>
     </div>
   </div>
 

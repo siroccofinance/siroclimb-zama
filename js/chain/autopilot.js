@@ -2,10 +2,13 @@
 // session key, without wallet pop-ups. Nothing has to run on our side:
 //  - price checkpoints for the market being played (Pyth when covered, bounded fallback else),
 //    and for the market the lobby shows, so a start finds a fresh entry price;
-//  - settles the player's runs at their 60th second.
+//  - settles the player's runs at their 60th second;
+//  - syncs the Sirocco Reserve's totals every 10 minutes: asks for the reveal, then the KMS decrypts
+//    them and the browser records them with the proof (share price, TVL, interest earned).
 // An optional ops keeper (ops/) does the same; whoever is first wins, the others' calls revert
 // harmlessly (WrongRunStatus, TooSoon) and are ignored.
 import { MARKETS, RUN_SECONDS, indexOf } from './config.js';
+import { publicDecrypt } from './fhe.js';
 import { pushIfStale as push } from './prices.js';
 
 // checkpoints this browser is writing, per market: a cash out waits for them so its frozen value
@@ -22,7 +25,7 @@ async function pushIfStale(s, m, maxAge) {
 import * as W from './wallet.js';
 
 const TICK_MS = 3000;
-const IGNORE = /WrongRunStatus|RunNotOver|TooSoon|PythIsFresh|not allowed|not ready|404|NoCheckpoint/i;
+const IGNORE = /WrongRunStatus|RunNotOver|SyncTooSoon|NoSyncPending|TooSoon|PythIsFresh|not allowed|not ready|404|NoCheckpoint/i;
 let timer = null, api = null, busy = false, watched = new Set();
 let lastFocusPush = 0;
 
@@ -60,6 +63,8 @@ async function tick() {
       lastFocusPush = now;
       await duty(null, () => pushIfStale(s, indexOf(f), 20));
     }
+    // 3. the reserve's synced totals, when no run of this player is live
+    if (!api.liveRuns().length) await reserveSync(s);
   } finally { busy = false; }
 }
 
@@ -75,6 +80,25 @@ async function gasOk(k) {
   }
   gasCheck.ok = eth > 0.0005;
   return gasCheck.ok;
+}
+
+// many browsers may run this: a random back-off keeps the race small, the losers revert harmlessly
+let lastSyncCheck = 0;
+async function reserveSync(s) {
+  const now = Date.now() / 1000;
+  if (now - lastSyncCheck < 30 + Math.random() * 30) return;
+  lastSyncCheck = now;
+  const [requested, synced, interval] = await Promise.all([W.reserve.syncRequestedAt(), W.reserve.syncedAt(), W.reserve.SYNC_INTERVAL()]);
+  if (Number(requested) > 0) {
+    await duty('KMS revealing the Sirocco Reserve totals…', async () => {
+      const [a, sh, i] = await W.reserve.pendingSync();
+      const { values, proof } = await publicDecrypt([a, sh, i]);
+      await s.send(W.reserve, 'finalizeSync', [values[0], values[1], values[2], proof], 0n, 'finalizeSync');
+      api?.reserveStats?.(true).catch(() => {});
+    });
+  } else if (now >= Number(synced) + Number(interval)) {
+    await duty(null, () => s.send(W.reserve, 'requestSync', [], 0n, 'requestSync'));
+  }
 }
 
 export const marketName = i => MARKETS[i].name;

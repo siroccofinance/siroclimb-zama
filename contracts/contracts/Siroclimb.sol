@@ -4,17 +4,12 @@ pragma solidity ^0.8.27;
 import {FHE, ebool, euint8, euint32, euint64, externalEbool, externalEuint64} from "@fhevm/solidity/lib/FHE.sol";
 import {ZamaEthereumConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {IERC7984} from "@openzeppelin/confidential-contracts/interfaces/IERC7984.sol";
-import {IERC7984ERC20Wrapper} from "@openzeppelin/confidential-contracts/interfaces/IERC7984ERC20Wrapper.sol";
 import {ClimbPriceOracle} from "./ClimbPriceOracle.sol";
 import {ClimbLadder} from "./ClimbLadder.sol";
-
-interface IMintable {
-    function mint(address to, uint256 amount) external;
-}
+import {SiroccoReserve} from "./SiroccoReserve.sol";
 
 /// @title Siroclimb
 /// @notice The Sirocco climbing game on the Zama Protocol: pick a market, go long or short, the
@@ -28,8 +23,12 @@ interface IMintable {
 ///    a short would have made on the public oracle path (`multLong`, `multShort`), then picks one
 ///    with the encrypted side (`FHE.select`) and multiplies the encrypted stake by it. The payout
 ///    is an encrypted transfer in the same transaction: money never waits for a decryption;
+///  - leverage is borrowed from the Sirocco Reserve (`SiroccoReserve`), a confidential cUSDC lending
+///    pool: a run of stake S at leverage L borrows S x (L - 1), and pays interest on it for the
+///    time it is borrowed. The borrowed amount and the interest follow the encrypted stake, so they
+///    stay encrypted; the reserve commits liquidity in clear with the public bound of a run;
 ///  - leverage packs are drawn with the on-chain encrypted PRNG and stay private: a packed run's
-///    leverage cap is selected on ciphertexts.
+///    leverage cap is selected on ciphertexts (and so is the interest of its capped path).
 ///
 /// Every lifecycle step after a player's own action is permissionless (`settleRun`, `recordRun`,
 /// price pushes), so the players' browsers can run the game with nothing else.
@@ -48,8 +47,6 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
     ///         a few blocks); a fallback price can ride along to refresh it in the same transaction.
     uint64 public constant MAX_ENTRY_AGE = 60;
     uint64 public constant PACK_COOLDOWN = 10 minutes;
-    /// @notice House bankroll top-up (testnet: USDCMock is publicly mintable), in token units.
-    uint256 public constant RESERVE_REFILL = 1_000_000 * 1e6;
 
     // ---------------------------------------------------------------- types
 
@@ -81,7 +78,9 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
     struct Sealed {
         ebool long;
         euint64 paid; // stake actually transferred (ERC-7984 moves 0 on insufficient balance)
-        euint64 value; // payout of the run
+        euint64 value; // payout of the run (net of interest)
+        euint64 lent; // liquidity the reserve lent for the run: MAX_PAYOUT, or 0 if it was short
+        euint64 interest; // borrow interest charged at the end
         euint32 mult; // the player's own multiplier (selected with the encrypted side)
         euint8 cap; // packed runs: encrypted top ladder step
     }
@@ -104,6 +103,11 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
     ClimbPriceOracle public immutable oracle;
     /// @notice The ladder rules: what a long and a short make on the oracle path of a run.
     ClimbLadder public immutable ladder;
+    /// @notice The Sirocco Reserve: lends the leverage of every run, receives its PnL and interest.
+    SiroccoReserve public immutable reserve;
+    /// @notice Borrow rate (reserve's APR in basis points) and its divisor, see `interestOf`.
+    uint64 public immutable borrowAprBps;
+    uint64 public immutable interestDivisor;
     uint256 public immutable marketCount;
 
     Run[] private _runs;
@@ -117,9 +121,6 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
     mapping(address player => euint8) private _packTier;
     mapping(address player => bool) public hasPack;
     mapping(address player => uint64) public lastPackAt;
-
-    /// @notice Lower bound of the house's cUSDC that is not yet promised to a live run.
-    uint256 public reserveFloor;
 
     // ---------------------------------------------------------------- errors / events
 
@@ -160,16 +161,19 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
     event ResultRecorded(uint256 indexed index, address indexed player, int32 pnlPpm, uint32 runId);
     event PackOpened(address indexed player, bytes32 tierHandle);
     event PublishRequested(uint256 indexed runId, bytes32 multHandle);
-    event ReserveRefilled(uint256 amount);
+    event Borrowed(uint256 indexed runId, bytes32 lentHandle);
+    event InterestCharged(uint256 indexed runId, bytes32 interestHandle);
 
-    constructor(address owner_, IERC7984 token_, ClimbLadder ladder_) Ownable(owner_) {
+    constructor(address owner_, IERC7984 token_, ClimbLadder ladder_, SiroccoReserve reserve_) Ownable(owner_) {
         token = token_;
         ladder = ladder_;
+        reserve = reserve_;
         oracle = ladder_.oracle();
         marketCount = oracle.marketCount();
-        address underlying = IERC7984ERC20Wrapper(address(token_)).underlying();
+        borrowAprBps = reserve_.borrowAprBps();
+        interestDivisor = reserve_.interestDivisor();
         if (ladder_.SCALE() != SCALE || ladder_.MAX_MULT() != MAX_MULT) revert BadLadder();
-        IERC20(underlying).approve(address(token_), type(uint256).max);
+        if (address(reserve_.asset()) != address(token_)) revert BadLadder();
     }
 
     // ---------------------------------------------------------------- players and sessions
@@ -284,7 +288,10 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
             FHE.allow(s.cap, player);
         }
 
-        _reserve();
+        // the leverage: the reserve lends the run's public bound into the game (encrypted transfer)
+        s.lent = reserve.lend(runId, MAX_PAYOUT);
+        FHE.allowThis(s.lent);
+        emit Borrowed(runId, FHE.toBytes32(s.lent));
         emit RunStarted(runId, player, market, r.startAt, price, r.packed, FHE.toBytes32(s.long), FHE.toBytes32(s.paid));
     }
 
@@ -371,9 +378,31 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
 
     function runHandles(
         uint256 runId
-    ) external view returns (bytes32 long, bytes32 paid, bytes32 value, bytes32 mult, bytes32 cap) {
+    ) external view returns (bytes32 long, bytes32 paid, bytes32 value, bytes32 mult, bytes32 cap, bytes32 lent, bytes32 interest) {
         Sealed storage s = _sealed[runId];
-        return (FHE.toBytes32(s.long), FHE.toBytes32(s.paid), FHE.toBytes32(s.value), FHE.toBytes32(s.mult), FHE.toBytes32(s.cap));
+        return (
+            FHE.toBytes32(s.long),
+            FHE.toBytes32(s.paid),
+            FHE.toBytes32(s.value),
+            FHE.toBytes32(s.mult),
+            FHE.toBytes32(s.cap),
+            FHE.toBytes32(s.lent),
+            FHE.toBytes32(s.interest)
+        );
+    }
+
+    /// @notice What a run borrows over `elapsed` seconds, in (leverage - 1) x seconds, tenths: the
+    ///         ladder is 1x, 1.5x ... 4x (10 + 5 x step tenths), one step every 6 s, capped at `cap`.
+    ///         Interest = paid x borrowAprBps x this / interestDivisor.
+    function borrowedTenthSeconds(uint64 elapsed, uint8 cap) public pure returns (uint64 total) {
+        for (uint64 i; i <= TOP_STEP; ++i) {
+            uint64 from = i * STEP_SECONDS;
+            if (elapsed <= from) break;
+            uint64 to = i == TOP_STEP ? elapsed : (i + 1) * STEP_SECONDS;
+            if (to > elapsed) to = elapsed;
+            uint64 step = i > cap ? cap : i;
+            total += 5 * step * (to - from);
+        }
     }
 
     function resultCount() external view returns (uint256) {
@@ -414,33 +443,41 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
                 mult = FHE.select(FHE.eq(s.cap, caps[k]), FHE.select(s.long, FHE.asEuint32(cl), FHE.asEuint32(cs)), mult);
             }
         }
+        // interest on the borrowed part, S x (L - 1) over time; a packed run borrows along its cap
+        euint64 rate = FHE.asEuint64(borrowAprBps * borrowedTenthSeconds(t, TOP_STEP));
+        if (r.packed) {
+            uint8[3] memory caps = [uint8(1), 2, 4];
+            for (uint256 k; k < 3; ++k)
+                rate = FHE.select(FHE.eq(s.cap, caps[k]), FHE.asEuint64(borrowAprBps * borrowedTenthSeconds(t, caps[k])), rate);
+        }
+        euint64 interest = FHE.div(FHE.mul(s.paid, rate), interestDivisor);
+        euint64 gross = FHE.div(FHE.mul(s.paid, FHE.asEuint64(mult)), SCALE);
+        // the reserve could not lend: no leverage was taken, the stake goes back as it came
+        ebool funded = FHE.eq(s.lent, MAX_PAYOUT);
+        euint64 charged = FHE.select(funded, FHE.min(interest, gross), FHE.asEuint64(0));
+        euint64 value = FHE.select(funded, FHE.sub(gross, charged), s.paid);
+        mult = FHE.select(funded, mult, FHE.asEuint32(SCALE));
+
         s.mult = mult;
         FHE.allowThis(mult);
         FHE.allow(mult, r.player);
-
-        euint64 value = FHE.div(FHE.mul(s.paid, FHE.asEuint64(mult)), SCALE);
         s.value = value;
+        s.interest = charged;
         _own64(value, r.player);
+        _own64(charged, r.player);
         _pay(r.player, value);
+        // everything else goes back to the reserve: stake + lent - payout (interest included)
+        _pay(address(reserve), FHE.sub(FHE.add(s.paid, s.lent), value));
+        FHE.allowTransient(s.lent, address(reserve));
+        FHE.allowTransient(charged, address(reserve));
+        reserve.repaid(runId, MAX_PAYOUT, s.lent, charged);
+        emit InterestCharged(runId, FHE.toBytes32(charged));
         emit RunEnded(runId, r.player, exitAt, exitPrice, ml, ms, FHE.toBytes32(s.value));
     }
 
     function _record(address player, int32 pnlPpm, uint32 runId) private {
         _results.push(Result({player: player, timestamp: uint64(block.timestamp), pnlPpm: pnlPpm, runId: runId}));
         emit ResultRecorded(_results.length - 1, player, pnlPpm, runId);
-    }
-
-    /// @dev Keeps the house able to pay every live run at its maximum (testnet bankroll:
-    ///      the underlying is publicly mintable and wrapped into the confidential token).
-    function _reserve() private {
-        if (reserveFloor < MAX_PAYOUT) {
-            IERC7984ERC20Wrapper w = IERC7984ERC20Wrapper(address(token));
-            IMintable(w.underlying()).mint(address(this), RESERVE_REFILL);
-            w.wrap(address(this), RESERVE_REFILL);
-            reserveFloor += RESERVE_REFILL / w.rate();
-            emit ReserveRefilled(RESERVE_REFILL);
-        }
-        reserveFloor -= MAX_PAYOUT;
     }
 
     function _pay(address to, euint64 amount) private {

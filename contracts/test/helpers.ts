@@ -10,6 +10,7 @@ import type {
   MirrorToken,
   MockPyth,
   Siroclimb,
+  SiroccoReserve,
 } from "../types";
 
 /** Market order on chain: stocks and real world assets. */
@@ -32,6 +33,30 @@ export const SCALE = 1_000_000n;
 export const MOVE_SCALE = 25n;
 export const RUN_SECONDS = 60;
 export const FAUCET_AMOUNT = 1000n * USDC;
+/** Sirocco Reserve: borrow APR (basis points), the lenders' seed, the public bound lent per run. */
+export const APR_BPS = 2000n;
+export const SEED = 200_000n * USDC;
+export const MAX_PAYOUT = 1000n * USDC;
+export const INTEREST_DIVISOR = 10_000n * 10n * 365n * 86_400n;
+
+/** (leverage - 1) x seconds borrowed over `elapsed` seconds, in tenths (mirror of the contract). */
+export function borrowed(elapsed: number, cap = 6): bigint {
+  let total = 0;
+  for (let i = 0; i <= 6; i++) {
+    const from = i * 6;
+    if (elapsed <= from) break;
+    const to = Math.min(i === 6 ? elapsed : (i + 1) * 6, elapsed);
+    total += 5 * Math.min(i, cap) * (to - from);
+  }
+  return BigInt(total);
+}
+export const interest = (paid: bigint, elapsed: number, cap = 6) => (paid * APR_BPS * borrowed(elapsed, cap)) / INTEREST_DIVISOR;
+/** What a funded run pays: stake x multiplier, minus the borrow interest (never below 0). */
+export function payout(paid: bigint, mult: bigint, elapsed: number, cap = 6) {
+  const gross = (paid * mult) / SCALE;
+  const i = interest(paid, elapsed, cap);
+  return gross - (i < gross ? i : gross);
+}
 
 export interface Fixture {
   deployer: HardhatEthersSigner;
@@ -46,11 +71,13 @@ export interface Fixture {
   oracle: ClimbPriceOracle;
   ladder: ClimbLadder;
   game: Siroclimb;
+  reserve: SiroccoReserve;
+  reserveAddress: string;
   gameAddress: string;
   tokenAddress: string;
 }
 
-export async function deployFixture(opts: { fund?: number } = {}): Promise<Fixture> {
+export async function deployFixture(opts: { fund?: number; seed?: bigint } = {}): Promise<Fixture> {
   const [deployer, ...players] = await ethers.getSigners();
   const usdc = (await (await ethers.getContractFactory("MirrorToken")).deploy("Test USDC", "USDC", 6)) as MirrorToken;
   const token = (await (
@@ -64,11 +91,26 @@ export async function deployFixture(opts: { fund?: number } = {}): Promise<Fixtu
     PYTH_FEEDS,
   )) as ClimbPriceOracle;
   const ladder = (await (await ethers.getContractFactory("ClimbLadder")).deploy(await oracle.getAddress(), MOVE_SCALE)) as ClimbLadder;
+  const reserve = (await (await ethers.getContractFactory("SiroccoReserve")).deploy(
+    deployer.address,
+    await token.getAddress(),
+    APR_BPS,
+  )) as SiroccoReserve;
+  const reserveAddress = await reserve.getAddress();
   const game = (await (await ethers.getContractFactory("Siroclimb")).deploy(
     deployer.address,
     await token.getAddress(),
     await ladder.getAddress(),
+    reserveAddress,
   )) as Siroclimb;
+  await reserve.setGame(await game.getAddress());
+  // the deployer is the first lender
+  if (opts.seed !== 0n) {
+    const seed = opts.seed ?? SEED;
+    await usdc.mint(deployer.address, seed);
+    await usdc.approve(reserveAddress, seed);
+    await reserve.depositUnderlying(seed);
+  }
   await oracle.setUpdater(deployer.address, true);
   await oracle.pushPrices(MARKETS.map((_, i) => i), BASE);
 
@@ -79,7 +121,7 @@ export async function deployFixture(opts: { fund?: number } = {}): Promise<Fixtu
     await faucet.claimFor(p.address);
     await token.connect(p).setOperator(gameAddress, until);
   }
-  return { deployer, players, alice: players[0], bob: players[1], carol: players[2], usdc, token, faucet, pyth, oracle, ladder, game, gameAddress, tokenAddress };
+  return { deployer, players, alice: players[0], bob: players[1], carol: players[2], usdc, token, faucet, pyth, oracle, ladder, game, reserve, reserveAddress, gameAddress, tokenAddress };
 }
 
 /** Pushes BASE prices scaled per market in basis points (10000 = unchanged), one block later. */

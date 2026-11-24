@@ -6,16 +6,18 @@
 //    start, cash out (with a fresh signed Pyth price riding along), faucet;
 //  - the screen runs a local estimate of the run on live prices, the chain settles it on oracle
 //    checkpoints (`ClimbLadder`) and pays it in the same transaction with an encrypted amount;
-//  - this browser is also the keeper (autopilot.js): price checkpoints and expired runs.
+//  - the leverage of every run is borrowed from the Sirocco Reserve (SiroccoReserve), a confidential
+//    cUSDC lending pool: S x (L - 1) is borrowed, interest is charged on it, the PnL goes to lenders;
+//  - this browser is also the keeper (autopilot.js): price checkpoints, expired runs, reserve syncs.
 import { ADDR, LADDER, MARKETS, MAX_STAKE, MOVE_SCALE, PRICE_DECIMALS, RUN_SECONDS, SCALE, STEP_SECONDS, USDC, indexOf, txUrl } from './config.js';
 import * as feed from './feed.js';
-import { encryptRun, hasGrant, publicDecrypt, userDecrypt, warmUp } from './fhe.js';
+import { encryptAmount, encryptRun, hasGrant, publicDecrypt, userDecrypt, warmUp } from './fhe.js';
 import * as W from './wallet.js';
 import { fallbackFor, pythFor, pythNow } from './prices.js';
 import { multipliers, pythToFixed10 } from './ladder.js';
 import * as autopilot from './autopilot.js';
 
-const { game, faucet: faucetC, token, rpc, store, friendly, sleep } = W;
+const { game, faucet: faucetC, token, reserve, rpc, store, friendly, sleep } = W;
 
 export const rules = { ladder: LADDER, stepEvery: STEP_SECONDS, duration: RUN_SECONDS, moveScale: MOVE_SCALE, maxStake: MAX_STAKE };
 export const chain = true;
@@ -46,6 +48,10 @@ export const lastTransaction = () => (lastTx ? { ...lastTx, url: txUrl(lastTx.ha
 let bal = null;               // decrypted balance in cUSDC, null = still encrypted
 const balSubs = new Set();
 const setBal = v => { bal = v == null ? null : Math.round(v * 100) / 100; balSubs.forEach(cb => cb(bal)); };
+// every local change (stake out, payout in) bumps the epoch: a decryption that read the balance
+// before it is stale and must not overwrite it (it is read again instead)
+let balEpoch = 0;
+const moveBal = d => { balEpoch++; if (bal != null) setBal(bal + d); };
 export const balance = () => bal;
 export const balanceSealed = () => bal == null;
 export function onBalance(cb) { balSubs.add(cb); return () => balSubs.delete(cb); }
@@ -96,6 +102,7 @@ export function disconnect() { W.disconnectWallet(); ready = false; setBal(null)
 let balHandle = null;
 export async function refreshBalance(expectChange = false) {
   const a = W.player(); if (!a) return null;
+  const epoch = balEpoch;
   let h = await (typeof expectChange === 'number' ? W.view(() => token.confidentialBalanceOf(a, { blockTag: expectChange })) : token.confidentialBalanceOf(a));
   // after a transfer, a lagging RPC node can still serve the old balance handle: wait for the new one
   for (let i = 0; expectChange === true && h === balHandle && i < 10; i++) { await sleep(2000); h = await token.confidentialBalanceOf(a); }
@@ -103,6 +110,7 @@ export async function refreshBalance(expectChange = false) {
   status({ kind: 'decrypt', text: 'Decrypting your balance…' });
   try {
     const [v] = await userDecrypt(a, W.signTyped, [{ handle: h, contract: ADDR.StakeToken }]);
+    if (epoch !== balEpoch) { refreshSoon(true); return bal; }
     balHandle = h;
     setBal(Number(v) / USDC);
     return bal;
@@ -118,7 +126,7 @@ export async function faucet() {
   try { await s.send(faucetC, 'claimFor', [W.player()], 0n, 'faucet'); }
   catch (e) { throw new Error(friendly(e)); }
   finally { status(null); }
-  if (bal != null) setBal(bal + 1000);
+  moveBal(1000);
   refreshSoon();
   return bal;
 }
@@ -132,6 +140,31 @@ async function session() {
 const runs = new Map();        // id -> local run
 const sideSign = s => (s === 'short' ? -1 : 1);
 const stepAt = t => Math.min(LADDER.length - 1, Math.max(0, Math.floor(t / STEP_SECONDS)));
+
+// ── borrowing: a run of stake S at leverage L borrows S x (L - 1) from the Sirocco Reserve and pays
+//    interest on it for the time it is borrowed (Siroclimb.borrowedTenthSeconds, same integer math)
+let APR_BPS = 2000n;
+const INTEREST_DIVISOR = 10_000n * 10n * 365n * 86_400n;
+game.borrowAprBps().then(v => { APR_BPS = BigInt(v); }).catch(() => {});
+export const borrowAprPct = () => Number(APR_BPS) / 100;
+function borrowedTenthSeconds(elapsed, cap = LADDER.length - 1) {
+  let total = 0;
+  for (let i = 0; i < LADDER.length; i++) {
+    const from = i * STEP_SECONDS;
+    if (elapsed <= from) break;
+    const to = Math.min(i === LADDER.length - 1 ? elapsed : (i + 1) * STEP_SECONDS, elapsed);
+    total += 5 * Math.min(i, cap) * (to - from);
+  }
+  return BigInt(total);
+}
+/** What the contract pays for `stake` (cUSDC) at multiplier `mult` (6 decimals) after `elapsed` s: stake x mult minus interest. */
+function net(stake, mult, elapsed) {
+  const paid = BigInt(Math.round(stake * USDC)), gross = (paid * BigInt(mult)) / BigInt(SCALE);
+  const i = (paid * APR_BPS * borrowedTenthSeconds(Math.max(0, Math.floor(elapsed)))) / INTEREST_DIVISOR;
+  const charged = i < gross ? i : gross;
+  return { value: Number(gross - charged) / USDC, interest: Number(charged) / USDC };
+}
+const multOf = acc => Math.max(0, Math.round((1 + acc) * SCALE));
 
 function makeRun({ id, cid = null, assetId, side, stake, startedAt, entryPrice }) {
   const run = { id: String(id), cid: cid == null ? null : String(cid), assetId, side, stake, startedAt, entryPrice, ladder: LADDER, stepEvery: STEP_SECONDS, duration: RUN_SECONDS,
@@ -184,8 +217,10 @@ function advance(run, price, ts) {
   const u = update(run, ts); run.subs.forEach(cb => cb(u));
 }
 function update(run, ts) {
-  const t = run.pending ? 0 : Math.max(0, (Math.min(ts, run.endedAt || ts) - run.startedAt) / 1000), step = stepAt(t), value = run.stake * (1 + run.acc);
-  return { t, price: run.last, step, leverage: LADDER[step], value, pnl: value - run.stake, pnlPct: run.acc * 100, risk: Math.min(1, Math.max(0, -run.acc)), status: run.status, pending: !!run.pending };
+  const t = run.pending ? 0 : Math.max(0, (Math.min(ts, run.endedAt || ts) - run.startedAt) / 1000), step = stepAt(t);
+  const { value, interest } = net(run.stake, multOf(run.acc), t);
+  return { t, price: run.last, step, leverage: LADDER[step], value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, risk: Math.min(1, Math.max(0, -run.acc)),
+    borrowed: run.stake * (LADDER[step] - 1), interest, status: run.status, pending: !!run.pending };
 }
 /** The run is over on screen; the chain settles it (cash out or expiry tx) and `whenSettled` follows. */
 const refineSubs = new Set();
@@ -196,8 +231,8 @@ function endLocal(run, st, ts = Date.now(), frozen = null) {
   run.status = st; run.endedAt = ts;
   clearInterval(run.cpTimer);
   if (frozen) run.acc = frozen.mult - 1;
-  const value = run.stake * (1 + run.acc);
-  run.local = { status: st, value, pnl: value - run.stake, pnlPct: run.acc * 100, maxLeverage: run.maxLev, duration: Math.min(run.duration, (ts - run.startedAt) / 1000),
+  const duration = Math.min(run.duration, (ts - run.startedAt) / 1000), { value, interest } = net(run.stake, multOf(run.acc), duration);
+  run.local = { status: st, value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, maxLeverage: run.maxLev, duration, interest, borrowed: run.stake * (run.maxLev - 1),
     entryPrice: run.entryPrice, exitPrice: frozen?.exit ?? run.last, pending: true, runId: run.cid ?? run.id };
   run.waiters.splice(0).forEach(r => r(run.local));
   if (st === 'expired') autopilot.kick();            // anyone may settle at the 60th second; this browser does it now
@@ -231,7 +266,7 @@ export async function startRun({ assetId, side = 'long', stake }) {
   if (bal != null && stake > bal) throw new Error('Not enough cUSDC: use the faucet');
   const s = await session();
   const units = Math.round(stake * USDC);
-  if (!preEnc.has(`${s.address}:${encKey('solo', side === 'long', units)}`)) status({ kind: 'fhe', text: 'Encrypting your side and stake…' });
+  if (!preEnc.has(`${s.address}:${encKey(side === 'long', units)}`)) status({ kind: 'fhe', text: 'Encrypting your side and stake…' });
   const enc = await takeEncryption(s, side === 'long', units);
   // entry price, in the same transaction: a fresh signed Pyth price, or a bounded public one
   const pyth = await pythFor(m);
@@ -243,7 +278,7 @@ export async function startRun({ assetId, side = 'long', stake }) {
   const run = makeRun({ id: `tx:${sent.hash}`, assetId, side, stake, startedAt: Date.now(), entryPrice: pyth ? pyth.price : feed.last(m) });
   run.tx = sent.hash;
   status({ kind: 'chain', text: 'Locking your entry on Sepolia…' });
-  if (bal != null) setBal(bal - stake);
+  moveBal(-stake);
   sent.mined.then(rc => {
     const ev = parseEvent(rc, 'RunStarted');
     Object.assign(run, { cid: String(ev.runId), startedAt: Number(ev.startAt) * 1000, entryPrice: Number(ev.entryPrice) / 10 ** PRICE_DECIMALS, pending: false });
@@ -252,7 +287,7 @@ export async function startRun({ assetId, side = 'long', stake }) {
     autopilot.watchRun(run);
   }).catch(e => {
     status({ kind: 'error', text: `Start failed: ${friendly(e)}. Nothing was staked` });
-    if (bal != null) setBal(bal + stake);
+    moveBal(stake);
     run.failed = true;
     endLocal(run, 'failed');
   });
@@ -304,8 +339,8 @@ async function sendCashOut(run, frozenPyth, after = null) {
     await run.pull(true, landed?.block ?? null);
     const exact = chainValue(run, Date.now(), pyth ? { mantissa: pyth.mantissa, expo: pyth.expo } : null);
     if (exact) {
-      const value = run.stake * exact.mult;
-      Object.assign(run.local, { value, pnl: value - run.stake, pnlPct: (exact.mult - 1) * 100, exitPrice: exact.exit });
+      const { value, interest } = net(run.stake, multOf(exact.mult - 1), run.local.duration);
+      Object.assign(run.local, { value, interest, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, exitPrice: exact.exit });
       refineSubs.forEach(cb => cb(run.id, run.local));
     }
   }
@@ -325,17 +360,18 @@ export async function settleFromChain(run) {
   for (let i = 0; i < 40; i++) {
     const r = await game.getRun(BigInt(run.cid));
     if (Number(r.status) === 2) {
-      const mult = Number(run.side === 'long' ? r.multLong : r.multShort) / SCALE;
-      const value = run.stake * mult;
+      const m = run.side === 'long' ? r.multLong : r.multShort, mult = Number(m) / SCALE;
+      const { value, interest } = net(run.stake, m, Number(r.endAt - r.startAt));
       const step = Number(r.topStep);
       run.chain = { status: mult === 0 ? 'busted' : run.local?.status === 'busted' ? 'cashed' : run.local?.status || (Number(r.endAt) >= Number(r.startAt) + RUN_SECONDS ? 'expired' : 'cashed'),
-        value, pnl: value - run.stake, pnlPct: (mult - 1) * 100, maxLeverage: LADDER[step], duration: Number(r.endAt - r.startAt),
+        value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, maxLeverage: LADDER[step], duration: Number(r.endAt - r.startAt),
+        interest, borrowed: run.stake * (LADDER[step] - 1),
         entryPrice: Number(r.entryPrice) / 10 ** PRICE_DECIMALS, exitPrice: Number(r.exitPrice) / 10 ** PRICE_DECIMALS,
         multLong: Number(r.multLong) / SCALE, multShort: Number(r.multShort) / SCALE, chain: true, runId: run.cid, tx: run.tx };
       if (!run.local) { run.status = run.chain.status; run.local = run.chain; run.waiters.splice(0).forEach(f => f(run.chain)); }
       run.unsub?.();
       run.settleWaiters.splice(0).forEach(f => f(run.chain));
-      if (bal != null) setBal(bal - 0 + value);
+      moveBal(value);
       refreshSoon(run.txBlock ?? true); record(run);
       return run.chain;
     }
@@ -380,6 +416,75 @@ export async function leaderboard(scope = 'today') {
   return [...best.values()].sort((p, q) => Number(q.pnlPpm) - Number(p.pnlPpm)).slice(0, 12).map(row);
 }
 
+// ───────────────────────────── Sirocco Reserve (the lending pool behind the leverage)
+let reserveCache = { at: 0, v: null }, launchTs = null;
+/** Public figures: synced TVL, share price, interest earned, committed liquidity, utilization, APR, APY. */
+export async function reserveStats(force = false) {
+  if (!force && reserveCache.v && Date.now() - reserveCache.at < 10_000) return reserveCache.v;
+  const [assets, shares, earned, syncedAt, locked, loans, pending] = await Promise.all([
+    reserve.syncedAssets(), reserve.syncedShares(), reserve.syncedInterest(), reserve.syncedAt(), reserve.lockedAssets(), reserve.openLoans(), reserve.syncRequestedAt(),
+  ]);
+  if (launchTs == null) launchTs = Number((await rpc.getBlock(ADDR.deployBlock).catch(() => null))?.timestamp ?? 0) || null;
+  const tvl = Number(assets) / USDC, price = Number(shares) ? Number(assets) / Number(shares) : 1;
+  const days = launchTs ? (Date.now() / 1000 - launchTs) / 86400 : 0;
+  const v = {
+    tvl, shares: Number(shares) / USDC, sharePrice: price, interestEarned: Number(earned) / USDC,
+    syncedAt: Number(syncedAt) * 1000, syncPending: Number(pending) > 0, locked: Number(locked) / USDC, openLoans: Number(loans),
+    utilization: tvl ? Number(locked) / Number(assets) : 0, aprPct: borrowAprPct(),
+    apyPct: days >= 1 ? (Math.pow(price, 365 / days) - 1) * 100 : null, returnPct: (price - 1) * 100, days,
+  };
+  reserveCache = { at: Date.now(), v };
+  return v;
+}
+
+/** The player's encrypted reserve shares, decrypted in the browser, and what they are worth at the synced price.
+ *  `atBlock`: as of the block of a deposit or withdrawal (exact even on a lagging node). */
+export async function reservePosition(atBlock = null) {
+  const a = W.player(); if (!a) return null;
+  const h = atBlock ? await W.view(() => reserve.confidentialBalanceOf(a, { blockTag: atBlock })) : await reserve.confidentialBalanceOf(a);
+  const [units] = await userDecrypt(a, W.signTyped, [{ handle: h, contract: ADDR.SiroccoReserve }]);
+  const st = await reserveStats();
+  const shares = Number(units) / USDC;
+  return { shares, value: shares * st.sharePrice };
+}
+
+/** Deposits `amount` cUSDC, encrypted, from the game account; the reserve becomes its ERC-7984 operator once. */
+export async function reserveDeposit(amount) {
+  const s = await session();
+  const units = Math.round(amount * USDC);
+  if (!(units > 0)) throw new Error('Enter an amount');
+  status({ kind: 'fhe', text: 'Encrypting the deposit…' });
+  try {
+    const [enc] = await Promise.all([encryptAmount(ADDR.SiroccoReserve, s.address, units), W.ensureOperatorFor(ADDR.SiroccoReserve, s)]);
+    status({ kind: 'chain', text: 'Depositing into the Sirocco Reserve…' });
+    const rc = await s.send(reserve, 'deposit', [enc.handle, enc.proof], 0n, 'deposit');
+    refreshSoon(rc.blockNumber);
+    return { tx: rc.hash, block: rc.blockNumber };
+  } catch (e) { throw new Error(friendly(e)); }
+  finally { status(null); }
+}
+
+/** Withdraws about `amount` cUSDC: the matching shares (at the synced price) are encrypted and redeemed, all or nothing. */
+export async function reserveWithdraw(amount) {
+  const s = await session();
+  const st = await reserveStats(true);
+  const shares = Math.floor((amount / st.sharePrice) * USDC);
+  if (!(shares > 0)) throw new Error('Enter an amount');
+  status({ kind: 'fhe', text: 'Encrypting the withdrawal…' });
+  try {
+    const enc = await encryptAmount(ADDR.SiroccoReserve, s.address, shares);
+    status({ kind: 'chain', text: 'Withdrawing from the Sirocco Reserve…' });
+    const rc = await s.send(reserve, 'withdraw', [enc.handle, enc.proof], 0n, 'withdraw');
+    // all or nothing on ciphertexts: the amount that moved is decrypted here, for this player only
+    const ev = rc.logs.map(l => { try { return reserve.interface.parseLog(l); } catch { return null; } }).find(e => e?.name === 'WithdrawRequested');
+    let out = null;
+    if (ev) { const [v] = await userDecrypt(s.address, W.signTyped, [{ handle: ev.args.assetsHandle, contract: ADDR.SiroccoReserve }]).catch(() => [null]); out = v == null ? null : Number(v) / USDC; }
+    refreshSoon(rc.blockNumber);
+    return { tx: rc.hash, block: rc.blockNumber, out };
+  } catch (e) { throw new Error(friendly(e)); }
+  finally { status(null); }
+}
+
 export async function setName(name) { const s = await session(); await s.send(game, 'setName', [name.slice(0, 24)], 0n, 'setName'); names.set(W.player().toLowerCase(), name); }
 
 // ───────────────────────────── leverage packs (encrypted PRNG on chain). UI off for now.
@@ -404,4 +509,4 @@ export const _debug = { runs, feed, autopilot };
 function checkpointed(m) {
   for (const run of runs.values()) if (run.market === m && run.status === 'live' && run.pull) { run.pull(); setTimeout(() => run.pull?.(), 2500); }
 }
-const api = { runs, liveRuns, settleFromChain, focused, status, checkpointed };
+const api = { runs, liveRuns, settleFromChain, focused, status, checkpointed, reserveStats };
