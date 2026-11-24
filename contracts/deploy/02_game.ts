@@ -62,12 +62,18 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     const wrapper = await hre.ethers.getContractAt(["function underlying() view returns (address)"], stake);
     const underlying = await wrapper.underlying();
     const usdc = await hre.ethers.getContractAt(
-      ["function mint(address,uint256)", "function approve(address,uint256) returns (bool)", "function allowance(address,address) view returns (uint256)"],
+      [
+        "function mint(address,uint256)",
+        "function approve(address,uint256) returns (bool)",
+        "function allowance(address,address) view returns (uint256)",
+        "function balanceOf(address) view returns (uint256)",
+      ],
       underlying,
       await hre.ethers.getSigner(deployer),
     );
-    await (await usdc.mint(deployer, RESERVE_SEED)).wait();
-    await (await usdc.approve(reserve.address, RESERVE_SEED)).wait();
+    // a rerun after a lagging node picks up where the last one stopped
+    if ((await usdc.balanceOf(deployer)) < RESERVE_SEED) await (await usdc.mint(deployer, RESERVE_SEED)).wait();
+    if ((await usdc.allowance(deployer, reserve.address)) < RESERVE_SEED) await (await usdc.approve(reserve.address, RESERVE_SEED)).wait();
     for (let i = 0; i < 20 && (await usdc.allowance(deployer, reserve.address)) < RESERVE_SEED; i++) await new Promise((r) => setTimeout(r, 3000));
     await execute("SiroccoReserve", { from: deployer, log: true }, "depositUnderlying", RESERVE_SEED);
   }
