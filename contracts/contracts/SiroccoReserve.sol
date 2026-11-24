@@ -55,8 +55,8 @@ contract SiroccoReserve is ERC7984, ZamaEthereumConfig, Ownable2Step {
     uint256 public openLoans;
 
     // encrypted running totals (6 decimals)
-    euint64 private _outstanding; // lent to live runs and not back yet
-    euint64 private _interest; // borrow interest earned since launch
+    euint64 private _outstanding; // lent to live runs and not back yet (uninitialized = 0)
+    euint64 private _interest; // borrow interest earned since launch (uninitialized = 0)
 
     // last synced aggregates (public, KMS-verified)
     uint64 public syncedAssets;
@@ -88,10 +88,6 @@ contract SiroccoReserve is ERC7984, ZamaEthereumConfig, Ownable2Step {
     ) ERC7984("Sirocco Reserve cUSDC", "rcUSDC", "") Ownable(owner_) {
         asset = asset_;
         borrowAprBps = borrowAprBps_;
-        _outstanding = FHE.asEuint64(0);
-        _interest = FHE.asEuint64(0);
-        FHE.allowThis(_outstanding);
-        FHE.allowThis(_interest);
         IERC20(asset_.underlying()).forceApprove(address(asset_), type(uint256).max);
     }
 
@@ -189,8 +185,8 @@ contract SiroccoReserve is ERC7984, ZamaEthereumConfig, Ownable2Step {
         if (syncRequestedAt != 0 && nowTs < syncRequestedAt + SYNC_TIMEOUT) revert SyncTooSoon(syncRequestedAt + SYNC_TIMEOUT);
         if (syncedAt != 0 && nowTs < syncedAt + SYNC_INTERVAL) revert SyncTooSoon(syncedAt + SYNC_INTERVAL);
         euint64 assets = FHE.add(asset.confidentialBalanceOf(address(this)), _outstanding);
-        euint64 supply = confidentialTotalSupply();
-        euint64 interest = _interest;
+        euint64 interest = FHE.add(_interest, FHE.asEuint64(0)); // a handle even before the first run
+        euint64 supply = FHE.add(confidentialTotalSupply(), FHE.asEuint64(0));
         FHE.makePubliclyDecryptable(assets);
         FHE.makePubliclyDecryptable(supply);
         FHE.makePubliclyDecryptable(interest);
