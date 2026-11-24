@@ -64,7 +64,7 @@ encrypted transfer." Click "View the transaction".*
 the standings…". The result shows the rank and the prize.*
 
 > "At the bell my own browser closes the round. Zama's KMS decrypts the standings, and the contract
-> checks the KMS proof on chain before it ranks us and pays the pot. No server, no keeper. Every step
+> checks the KMS proof on chain before it ranks us; then my session claims my prize. No server, no keeper. Every step
 > is permissionless."
 
 *Open the leaderboard: Last round.*
