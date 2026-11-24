@@ -2,7 +2,9 @@
 
 Pick a market, go long or short, and the Sirocco coin climbs a staircase that follows the price.
 Your leverage climbs from 1x to 4x every 6 seconds over a 60-second run, and you cash out whenever
-you want. Every run is solo, against the house.
+you want. Every run is solo, and its leverage is real: it is borrowed from the **Sirocco Reserve**,
+a confidential cUSDC lending pool. Lenders earn the borrow interest and carry the players' gains and
+losses.
 
 Siroclimb is about real world assets. The markets are tokenized stocks (Tesla, NVIDIA, Apple and
 Amazon xStocks), gold (XAUt) and the British pound. Stakes and payouts are in **Zama's confidential USDC**.
@@ -44,8 +46,14 @@ Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain 
    The contract computes your payout on ciphertexts and sends it as an encrypted transfer in the
    same transaction; the result screen then adds the transaction link. You can
    post your return to the leaderboard: the return becomes public, your stake stays private.
+   While you climb, the HUD shows what you borrow: at 3x on a 50 cUSDC stake, 100 cUSDC comes from
+   the Sirocco Reserve. The result screen shows the interest you paid on it.
 5. The trophy icon shows the leaderboards (today, all time). They list public results only: the
    runs players chose to post.
+6. The bank icon opens the **Sirocco Reserve**: its value locked, utilization, share price, APY,
+   borrow APR and interest earned. You can lend your test cUSDC to it (an encrypted deposit) and
+   withdraw (an encrypted, all-or-nothing withdrawal). Your position is decrypted in your browser
+   only.
 
 Stocks trade during US market hours (4:00 to 20:00 New York time, pre and post market included,
 US trading days only: weekends and exchange holidays are closed). Outside those hours their chips
@@ -55,7 +63,9 @@ show *Closed*, while gold and the pound stay open.
 browser does each one itself (autopilot):
 
 - price checkpoints;
-- settling a run at its 60th second.
+- settling a run at its 60th second;
+- revealing the Sirocco Reserve's totals every 10 minutes (`requestSync`, then the KMS decrypts them
+  and `finalizeSync` checks the proof).
 
 An optional ops keeper (`ops/keeper.mjs`) does the same duties.
 
@@ -81,30 +91,44 @@ waits for it on screen.
 | Step | Who signs | Kind | Waits | Gas |
 | --- | --- | --- | --- | --- |
 | Encrypt side and stake (relayer proof) | browser | off chain | no, done in the lobby when picked | none |
-| `startRun` with the signed Pyth price (or a bounded public price) | game account | transaction | the coin moves at the click; the entry snaps in when mined | up to 3.77M |
+| `startRun` with the signed Pyth price (or a bounded public price); the reserve lends the run's liquidity in the same transaction | game account | transaction | the coin moves at the click; the entry snaps in when mined | 3.65M to 3.96M |
 | Price checkpoints (`pushPyth` / `pushPublic`) | game account (autopilot) | transaction | no, background | 340k (Pyth) |
-| `cashOut` with the signed Pyth price frozen at the click | game account | transaction | no: the result shows in 1.5 s, marked "Settling on chain" | 2.21M |
-| `settleRun` at the 60th second, if not cashed out | game account (autopilot, anyone) | transaction | no, background | 1.88M |
+| `cashOut` with the signed Pyth price frozen at the click: payout net of interest to the player, the rest back to the reserve | game account | transaction | no: the result shows in 1.5 s, marked "Settling on chain" | 3.65M to 4.07M |
+| `settleRun` at the 60th second, if not cashed out | game account (autopilot, anyone) | transaction | no, background | 3.64M to 3.67M |
 | Balance decryption after the payout | game account | off chain | no, automatic | none |
 | `publishRun` then `recordRun` with the KMS proof | game account | 2 transactions | only when the player clicks **Post** | small |
 
 So a player waits for two things only: the first visit's gas transfer, and the start (`startRun`).
-A run costs two transactions (start and cash out); posting it adds two more, on demand.
+A run costs two transactions (start and cash out); posting it adds two more, on demand. Borrowing
+adds no transaction: the loan rides along with the start and is repaid by the cash out.
+
+**Sirocco Reserve** (never in the play flow)
+
+| Step | Who signs | Kind | Waits | Gas |
+| --- | --- | --- | --- | --- |
+| `setOperator(SiroccoReserve)` on cUSDC, once | game account | transaction | with the first deposit | 136k |
+| Encrypt the amount (relayer proof) | browser | off chain | yes | none |
+| `deposit` (encrypted amount, shares at the synced price) | game account | transaction | yes, one block | 1.98M to 2.08M |
+| `withdraw` (encrypted shares, all or nothing) | game account | transaction | yes, one block | 2.08M |
+| Decrypt the position | game account | off chain | yes, in the panel | none |
+| `requestSync`, then `finalizeSync` with the KMS proof | any browser (autopilot) | 2 transactions | no, background, every 10 minutes | 0.66M to 0.97M + 0.37M |
 
 There are no rounds: Siroclimb is solo only. Timed rounds with sealed standings were removed to
 keep the game, the contract and the play flow small (F49).
 
 ## Confidentiality design
 
-*Would the game break if this were public?* Yes, in three places, and each one is encrypted.
+*Would the game break if this were public?* Yes, in four places, and each one is encrypted.
 
 | What | Why it must be private | How (FHEVM) |
 | --- | --- | --- |
 | **Side of a run** (long / short) | A visible side is copied or faded: a known whale going long is a free signal for everyone else. | `externalEbool` with an input proof (`FHE.fromExternal`), stored as `ebool`. ACL: the contract and the player only. Never decrypted for anyone else during the run. |
 | **Stake** | Bankrolls and position sizes are private information, and whales get front-run. | `externalEuint64`, clamped to 100 cUSDC **on ciphertexts** (`FHE.min`), pulled with ERC-7984 `confidentialTransferFrom`. The amount actually moved (`paid`) stays encrypted: an unfunded stake moves 0 and earns 0, without revealing any balance. |
 | **Value and payout** | The payout reveals the stake and the side. | The contract works out in clear, from the public oracle path, what a long and what a short would have made (`multLong`, `multShort`, see `ClimbLadder`). It then selects one with the encrypted side (`FHE.select`) and multiplies the encrypted stake by it (`FHE.mul`, `FHE.div`). The payout is an ERC-7984 transfer of that ciphertext **in the same transaction**. Money never waits for a decryption. |
+| **Borrowing** | The amount borrowed is the stake times (leverage - 1): a public loan would reveal the stake. Interest follows the loan, so it would too. | The loan is never a number in clear: the reserve lends the run's **public bound** (`MAX_PAYOUT`, what a 100 cUSDC stake can be paid at most) into the game as an encrypted transfer, the same for every run. Interest is computed on the encrypted stake: `paid x APR x borrowed time / divisor` (`FHE.mul`, `FHE.div`), where the borrowed time follows the public ladder (selected on ciphertexts for a packed run). The payout is `min(stake x multiplier - interest, ...)` floored at 0, and the game sends `stake + lent - payout` back to the reserve, all encrypted. |
+| **Lender positions** | Who lends how much is private, like any balance. | Reserve shares are an ERC-7984 token (`rcUSDC`): every share balance is encrypted. Deposits and withdrawals take encrypted amounts. A withdrawal is all or nothing on ciphertexts (`FHE.le` on the shares held and on the cUSDC the reserve holds, then `FHE.select`), so a failed one moves 0 and reveals nothing. |
 | **Leverage packs** | A known cap would let rivals size you up. | The tier is drawn with the on-chain encrypted PRNG (`FHE.randEuint8`, then `FHE.lt` / `FHE.select` into 45 / 28 / 18 / 9 %), and only the player can decrypt it. A packed run picks among the capped paths on ciphertexts (`FHE.eq` on the encrypted cap). |
-| **Balances** | Private by nature. | Zama's cUSDC (ERC-7984): every balance and transfer is an `euint64`. The house bankroll is encrypted too, and even the deployer cannot read it. |
+| **Balances** | Private by nature. | Zama's cUSDC (ERC-7984): every balance and transfer is an `euint64`. The reserve's cUSDC is encrypted too, and even the deployer cannot read it. |
 
 What becomes public, and when:
 
@@ -113,11 +137,59 @@ What becomes public, and when:
 | Market, start time, exit time of a run | Public (transactions) |
 | Long and short multipliers of a finished run | Public: both are computed from public prices, and the encrypted side picks one |
 | Side, stake, value of a run | Player only, forever. If the player posts the run, the multiplier becomes public with a KMS proof, and the stake stays private |
+| Borrowed amount and interest of a run | Player only (encrypted handles the player can decrypt; the screen computes them from the stake the player chose) |
+| Liquidity committed to live runs | Public: 1,000 cUSDC per live run (`lockedAssets`), whatever the stake. That is the price of a private stake: the reserve commits the worst case of every run |
+| Reserve totals: assets, shares, interest earned | Encrypted between reveals; public at each reveal, at most every 10 minutes, with a KMS proof. Share price, value locked, utilization and APY come from them |
+| Deposit and withdrawal amounts, lender shares | Encrypted (ERC-7984), owner only |
 | Pack tier | Player only |
 | Balances | Owner only (ERC-7984) |
 
-Honest limit: once a run ends, an observer knows its value is one of two numbers (long or
-short). The side and the stake stay hidden, and so does the amount paid.
+Honest limits:
+
+- Once a run ends, an observer knows its value is one of two numbers (long or short). The side and
+  the stake stay hidden, and so does the amount paid.
+- A reserve reveal shows the change in total assets since the last one. If a single run settled in
+  between and no lender moved, that change is the run's stake minus its payout, which together with
+  the two public multipliers can point to the stake. Reveals are at most every 10 minutes so that
+  each one mixes many runs and lender flows; on a quiet testnet that mix can be thin.
+- Deposits and withdrawals use the share price of the last reveal, which can be up to 10 minutes
+  old. Someone who saw a big win since then could deposit before the next reveal at the old price.
+  The reveal window bounds it.
+
+## The Sirocco Reserve: real leverage, borrowed
+
+`SiroccoReserve` is a cUSDC lending pool, and it is the only source of a run's leverage.
+
+- **Borrowing.** A run of stake S at leverage L has a notional of S x L; S x (L - 1) of it is
+  borrowed. The leverage climbs the ladder (1x, 1.5x ... 4x, a step every 6 s), so the loan grows
+  with it. The HUD shows it live; the contract never needs it as a number.
+- **Interest.** `interest = paid x APR x B / (10,000 x 10 x 365 days)`, where B, the borrowed
+  time, is the sum over the run's seconds of (leverage - 1), in tenths (`borrowedTenthSeconds`, in
+  clear, from the exit time). With the stated **20 % APR**, a 100 cUSDC stake held to the 60th
+  second (B = 1,170) pays 0.000074 cUSDC. A minute of borrowing is cheap: the APR is a yearly rate.
+- **Payout.** `stake x multiplier - interest`, floored at 0, paid as an encrypted transfer in the
+  cash-out transaction. The most a player loses is the stake; there is no liquidation, the reserve
+  absorbs a shortfall. Everything else (`stake + lent - payout`) goes back to the reserve in the same
+  transaction, so the players' losses and the interest accrue to lenders and their wins are paid by
+  them.
+- **Liquidity guard.** The stake is encrypted, so the reserve commits liquidity with the public
+  bound of a run: at the start it lends 1,000 cUSDC (`MAX_PAYOUT`) into the game, as an encrypted
+  transfer of a public amount. Every live run is fully funded on its own: whatever lenders withdraw
+  meanwhile, its payout is already in the game. A start is refused (`ReserveFull`) when the
+  committed liquidity would exceed the reserve's last revealed assets. If the reserve still cannot
+  lend (lenders withdrew since the reveal), the ERC-7984 transfer moves 0 and the run becomes a plain
+  refund, without leverage or interest; the outcome stays encrypted.
+- **Shares.** Lenders hold `rcUSDC`, an ERC-7984 token, worth `assets / shares` cUSDC each at the
+  last reveal. Deposits mint shares at that price, withdrawals burn them at it. The deployer seeded
+  the reserve with 250,000 cUSDC as its first lender (a public deposit of the underlying USDC).
+- **Reveals.** Every 10 minutes at most, anyone can call `requestSync`: the reserve's assets (cUSDC
+  held + lent to live runs), its share supply and the interest earned become publicly decryptable;
+  the KMS decrypts them and `finalizeSync` checks the proof (`FHE.checkSignatures`) before it
+  records them. The players' browsers do it in the background.
+- **Packs** need no budget: a pack only caps the leverage, so a packed run borrows less, and its
+  interest follows the capped path, selected on ciphertexts like its multiplier.
+- **No rounds.** Rounds (player against player pots) would not borrow; they were removed when the
+  game became solo only (F49), so the reserve has a single path.
 
 ## Prices: Pyth, with a bounded fallback
 
@@ -151,11 +223,13 @@ and at -100 % the coin falls and the run is worth 0 for good.
  browser (static site)                                    Sepolia
  ┌─────────────────────────────────────┐   tx   ┌──────────────────────────────────────────┐
  │ wallet: 1 signature, 1 gas transfer ├───────►│ Siroclimb ── FHE ops (Zama coprocessor)  │
- │ game account: every game tx         │        │   ├─ cUSDCMock (Zama, ERC-7984)          │
+ │ game account: every game tx         │        │   ├─ SiroccoReserve (lends the leverage, │
+ │                                     │        │   │    rcUSDC shares, KMS-synced totals)  │
+ │                                     │        │   ├─ cUSDCMock (Zama, ERC-7984)          │
  │ relayer SDK: encrypt, user/public    │        │   ├─ ClimbLadder ── ClimbPriceOracle      │
  │   decrypt (KMS proofs)               │        │   │                    └─ Pyth (Wormhole) │
  │ autopilot: checkpoints, settle,      │        │ ClimbFaucet ─► USDCMock.mint + wrap      │
- │   (permissionless duties)            │        └──────────────────────────────────────────┘
+ │   reserve reveals                    │        └──────────────────────────────────────────┘
  └───────────────┬─────────────────────┘
                  │ /api/pyth (signed Hermes update, key server-side)
                  │ /api/prices (reference prices, market hours)
@@ -164,7 +238,8 @@ and at -100 % the coin falls and the run is worth 0 for good.
 
 | Path | Content |
 | --- | --- |
-| `contracts/contracts/Siroclimb.sol` | Runs, packs, sessions, encrypted payouts, KMS-verified posted results |
+| `contracts/contracts/Siroclimb.sol` | Runs, packs, sessions, borrowing and interest, encrypted payouts, KMS-verified posted results |
+| `contracts/contracts/SiroccoReserve.sol` | The lending pool: encrypted deposits and shares (ERC-7984), loans to runs, KMS-verified reveals |
 | `contracts/contracts/ClimbLadder.sol` | Run rules: long and short multipliers on the oracle path |
 | `contracts/contracts/ClimbPriceOracle.sol` | Per-market checkpoints: Pyth, bounded fallback, seeding |
 | `contracts/contracts/ClimbFaucet.sol` | Mint + wrap test cUSDC for any account |
@@ -183,10 +258,13 @@ handles a single run.
 
 | Transaction | Global HCU | Depth |
 | --- | --- | --- |
-| `startRun` (encrypted side and stake, clamp, transfer) | 1.32M | 0.68M |
-| `cashOut` (select, mul, div, encrypted payout) | 1.95M | 1.74M |
-| `cashOut` packed (4 capped paths selected on ciphertexts) | 2.45M | 1.90M |
+| `startRun` (encrypted side and stake, clamp, transfer, the reserve's loan) | 1.48M | 0.68M |
+| `cashOut` (select, mul, div, interest, encrypted payout, repayment to the reserve) | 5.13M | 2.44M |
+| `cashOut` packed (4 capped paths and 4 interest rates selected on ciphertexts) | 5.95M | 2.61M |
 | `openPack` (encrypted PRNG) | 0.34M | 0.24M |
+| reserve `deposit` (encrypted amount, shares at the synced price) | 3.09M | 2.66M |
+| reserve `withdraw` (all or nothing on ciphertexts) | 3.53M | 2.52M |
+| reserve `requestSync` (three totals made publicly decryptable) | 0.49M | 0.16M |
 
 ## Running it
 
@@ -201,7 +279,7 @@ key, every market uses the bounded fallback.
 ### Contracts
 
 ```bash
-cd contracts && npm i && npx hardhat test          # 29 tests on the FHEVM mock, HCU budget
+cd contracts && npm i && npx hardhat test          # 39 tests on the FHEVM mock, HCU budget
 npm run deploy:sepolia && npm run verify:sourcify  # key: ~/.config/siroclimb/sepolia/deployer.key
 ```
 
@@ -217,6 +295,8 @@ variable. No secret ever reaches the bundle. Contract addresses come from
 ```bash
 node tests/chain/solo.mjs     # connect, faucet, decrypt, encrypted run, cash out, settlement
 node tests/chain/timing.mjs   # click to coin, cash out to result, cash out to settled
+node tests/chain/reserve.mjs  # reserve panel: encrypted deposit, decrypted position, encrypted withdrawal
+node tests/reserve.mjs . out  # the same panel, borrowed line and interest in the simulation (no chain)
 cd ops && npm i
 caffeinate -i node battery.mjs 24 2     # 24 concurrent players, every payout checked by decryption
 node audit.mjs                          # recompute every settled run from public chain data
@@ -231,8 +311,11 @@ in the same folder, and the ops keeper uses `keeper.key`. No key is ever committ
 
 - Fallback markets (NVDA, AAPL, AMZN, XAUT, GBP with the current key) rely on semi-trusted, bounded
   reporters. A wider Pyth entitlement makes them trustless with no code change.
-- Runs pay from a house bankroll that the testnet auto-mints (`_reserve`). A mainnet version
-  would need a real liquidity pool.
+- The Sirocco Reserve commits 1,000 cUSDC per live run whatever the stake, because the stake is
+  private: capital efficiency is traded for confidentiality. A mainnet version could tighten the
+  bound with stake tiers, or reveal a coarse stake bucket.
+- The borrow APR is fixed at deployment (20 %). A mainnet pool would want a utilization curve, which
+  needs utilization in clear more often than every 10 minutes.
 - The game account key lives in the browser's local storage and holds only test cUSDC and a little
   gas. It is derived from a wallet signature, so the same wallet recovers it in any browser. A
   mainnet version would want a passkey or a smart account instead.
