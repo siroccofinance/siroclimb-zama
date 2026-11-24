@@ -377,7 +377,8 @@ export function whenRoundFinal(runId) {
 let lastRoundId = null;
 export async function leaderboard(scope = 'today') {
   const n = Number(await game.resultCount());
-  const list = n ? await game.results(Math.max(0, n - 400), 400) : [];
+  // plain objects: ethers' Result arrays are read-only, so sorting them throws
+  const list = (n ? [...(await game.results(Math.max(0, n - 400), 400))] : []).map(x => ({ player: x.player, timestamp: x.timestamp, pnlPpm: x.pnlPpm, inRound: x.inRound, rank: x.rank, ref: x.ref, prize: x.prize }));
   await loadNames(list.map(x => x.player));
   const a = W.account()?.toLowerCase();
   const row = x => ({ name: x.player.toLowerCase() === a ? 'You' : nameOf(x.player), pnlPct: Number(x.pnlPpm) / 1e4, prize: Number(x.prize) / USDC, you: x.player.toLowerCase() === a, rank: Number(x.rank) });
