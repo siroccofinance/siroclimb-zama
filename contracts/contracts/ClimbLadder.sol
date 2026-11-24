@@ -8,8 +8,8 @@ import {ClimbPriceOracle} from "./ClimbPriceOracle.sol";
 ///         run's entry and its exit, what would a long and what would a short have made?
 ///
 /// Every move between two consecutive checkpoints counts `moveScale` times (the game scale) at
-/// the leverage of the ladder step the checkpoint lands on: 1x, 1.5x, 2x ... 4x, one step every
-/// 6 seconds from the start. PnL adds up on the stake, like a position of constant notional; when
+/// the leverage of the ladder step the move began on: 1x, 1.5x, 2x ... 4x, one step every 6 seconds
+/// from the start. PnL adds up on the stake, like a position of constant notional; when
 /// it reaches -100 % the coin falls and the run is worth 0 for good.
 ///
 /// Both results are public (anyone can recompute them from the oracle); which one a player gets
@@ -62,7 +62,9 @@ contract ClimbLadder {
             int256 move = ((int256(uint256(px[j])) - int256(uint256(px[j - 1]))) * one) / int256(uint256(px[j - 1]));
             if (move > MAX_SEGMENT_MOVE) move = MAX_SEGMENT_MOVE;
             if (move < -MAX_SEGMENT_MOVE) move = -MAX_SEGMENT_MOVE;
-            uint64 step = (ts[j] > start ? ts[j] - start : 0) / STEP_SECONDS;
+            // the leverage of a move is the leverage when the move began (the previous checkpoint), so the
+            // value at a cash out is known at the click: the last move runs at the current step
+            uint64 step = (ts[j - 1] > start ? ts[j - 1] - start : 0) / STEP_SECONDS;
             if (step > capStep) step = capStep;
             int256 d = (move * int256(uint256(moveScale)) * int256(uint256(10 + 5 * step))) / 10;
             if (!fellL) {
