@@ -25,6 +25,8 @@ export const pythContract = new Contract(ADDR.Pyth, ['function getUpdateFee(byte
 
 // ───────────────────────────── senders (session key, bots)
 const TX_GAS_CAP = 16_000_000n;
+/** Gas limits of game calls, about 1.5x to 2x the peak measured on Sepolia (FINDINGS F35). */
+const FIXED_GAS = { startRun: 6_000_000n, cashOut: 4_500_000n, settleRun: 4_000_000n, joinRound: 5_000_000n, exitAtBell: 2_500_000n, claim: 2_500_000n };
 // 'unknown custom error': right after the operator approval, a lagging node can still refuse the
 // token transfer (the error comes from the token contract); a few seconds later it goes through
 const RETRY = /nonce|underpriced|already known|replacement|timeout|failed to fetch|network|ECONNRESET|503|502|429|insufficient funds|unknown custom error|Panic\(50\)/i;
@@ -32,21 +34,35 @@ const RETRY = /nonce|underpriced|already known|replacement|timeout|failed to fet
 export class Sender {
   constructor(key) { this.wallet = new Wallet(key, rpc); this.address = this.wallet.address; this.queue = Promise.resolve(); this.nonce = null; }
   /** Sends `contract.method(...args)` from this key, serialized with its other transactions. */
-  send(contract, method, args = [], value = 0n, label = method) {
+  /**
+   * `fast`: resolves as soon as the transaction is broadcast, with { hash, mined } (mined = the
+   * receipt promise), so the screen can move on while Sepolia includes it.
+   */
+  send(contract, method, args = [], value = 0n, label = method, { fast = false } = {}) {
     const run = async () => {
       for (let attempt = 0; ; attempt++) {
         try {
           const c = contract.connect(this.wallet);
-          const est = await c[method].estimateGas(...args, { value });
-          const gas = est * 2n > TX_GAS_CAP ? TX_GAS_CAP : est * 2n;     // the FHE cost depends on the state it lands on
-          const pending = await rpc.getTransactionCount(this.address, 'pending');
-          const nonce = this.nonce == null ? pending : Math.max(this.nonce, pending);
+          // game calls with a known cost skip the estimate (one round trip less, and no stale-state
+          // estimate right after a previous transaction); a call that would revert is caught by its receipt
+          let gas = FIXED_GAS[method];
+          if (!gas) {
+            const est = await c[method].estimateGas(...args, { value });
+            gas = est * 2n > TX_GAS_CAP ? TX_GAS_CAP : est * 2n;     // the FHE cost depends on the state it lands on
+          }
+          const nonce = this.nonce ?? (await rpc.getTransactionCount(this.address, 'pending'));
           const tx = await c[method](...args, { value, gasLimit: gas, nonce, ...(await fees()) });
           this.nonce = nonce + 1;
           emitTx({ label, hash: tx.hash, from: this.address, state: 'sent' });
-          const rc = await receipt(tx.hash);
+          const check = async () => {
+            const rc = await receipt(tx.hash);
+            if (!rc || rc.status !== 1) { this.nonce = null; throw new Error(`${label} reverted`); }
+            emitTx({ label, hash: tx.hash, from: this.address, state: 'mined' });
+            return rc;
+          };
+          if (fast) return { hash: tx.hash, mined: check() };
+          const rc = await check();
           if (!rc || rc.status !== 1) throw new Error(`${label} reverted`);
-          emitTx({ label, hash: tx.hash, from: this.address, state: 'mined' });
           return rc;
         } catch (e) {
           this.nonce = null;
