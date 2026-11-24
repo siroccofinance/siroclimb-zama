@@ -22,6 +22,8 @@ const MINUS = '−';
 const money = v => nf.format(v);
 const sgn = v => (v < -0.0049 ? MINUS : '+');
 const signed = v => sgn(v) + nf.format(Math.abs(v));
+/** Small amounts (interest on a minute of borrowing) keep their 6 decimals. */
+const tiny = v => (v > 0 && v < 0.01 ? v.toFixed(6) : money(v));
 const pct = v => sgn(v) + Math.abs(v).toFixed(2) + '%';
 const price = p => (p >= 1000 ? nf.format(p) : p >= 10 ? p.toFixed(2) : p.toFixed(4));
 const levTxt = x => (x % 1 ? x.toFixed(1) : String(x)) + 'x';
@@ -328,6 +330,7 @@ function hudFrame(dt) {
   $('#pP').textContent = pct(D.pct);
   $('#pL').textContent = levTxt(run.ladder[shownStep]);
   $('#cashV').textContent = money(Math.max(0, D.value));
+  $('#bV').textContent = money(u && u.borrowed != null ? u.borrowed : 0);
   const left = Math.max(0, 1 - D.danger);
   $('#sBar').style.transform = `scaleX(${left})`;
   $('#sTxt').textContent = D.danger < 0.02 ? 'Stake safe' : `${Math.round(left * 100)}% of stake left`;
@@ -402,6 +405,7 @@ function showResult(res) {
   const a = byId[run.assetId];
   const stats = [['Return', pct(res.pnlPct)], ['Top leverage', levTxt(res.maxLeverage)], ['Time', `${Math.max(1, Math.round(res.duration))}s`],
     [`${a.ticker} entry`, price(res.entryPrice)], ['Exit', price(res.exitPrice)]];
+  if (res.interest != null) stats.push(['Borrowed', `${money(res.borrowed || 0)} cUSDC`], ['Interest paid', `${tiny(res.interest)} cUSDC`]);
   $('#rS').innerHTML = stats.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
   const rr = $('#rR'); rr.hidden = !res.pending;
   if (res.status === 'failed') rr.innerHTML = 'The start transaction did not go through, so your stake never left your account.';
@@ -516,6 +520,7 @@ function openSheet(id) {
   const el = document.getElementById(id); el.hidden = false; openSheetEl = el; lastFocus = document.activeElement;
   el.querySelector('.sheet__card').focus({ preventScroll: true });
   if (id === 'board') loadBoard(store.get('board', 'today') === 'all' ? 'all' : 'today');
+  if (id === 'reserve') loadReserve();
 }
 function closeSheet(now) {
   const el = openSheetEl; if (!el) return; openSheetEl = null;
@@ -536,6 +541,38 @@ async function loadBoard(scope) {
     `<li class="${s.you ? 'is-you' : ''}"><span class="n">${i + 1}</span><span>${s.you ? 'You' : s.name}</span><span class="v">${pct(s.pnlPct)}</span></li>`).join('')
     : `<li class="empty">No run posted yet. Cash out, then post your return.</li>`;
 }
+
+// ── Sirocco Reserve: public synced figures, the player's own position, deposit and withdraw
+const ago = ms => { const m = Math.round((Date.now() - ms) / 60000); return !ms ? 'never' : m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
+async function loadReserve(atBlock = null) {
+  const stats = $('#rvStats'), me = $('#rvMe');
+  if (api.account()) me.textContent = 'Decrypting…';
+  try {
+    const r = await api.reserveStats();
+    stats.innerHTML = [['Total value locked, cUSDC', money(r.tvl)], ['Utilization', `${(r.utilization * 100).toFixed(1)}%`], ['Share price, cUSDC', r.sharePrice.toFixed(6)],
+      ['APY', r.apyPct == null ? `${pct(r.returnPct)} so far` : pct(r.apyPct)], ['Borrow APR', `${r.aprPct.toFixed(0)}%`], ['Interest earned, cUSDC', tiny(r.interestEarned)],
+      ['In live runs, cUSDC', money(r.locked)], ['Open loans', String(r.openLoans)], ['Last reveal', r.syncPending ? 'in progress' : ago(r.syncedAt)]]
+      .map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  } catch (e) { stats.innerHTML = `<div><dt>Reserve</dt><dd>unavailable</dd></div>`; }
+  if (!api.account()) { me.textContent = 'Connect to see it'; return; }
+  try { const p = await api.reservePosition(atBlock); me.textContent = p ? `${money(p.value)} cUSDC (${money(p.shares)} shares)` : '—'; }
+  catch { me.textContent = 'Could not decrypt'; }
+}
+async function reserveAction(kind) {
+  const amt = Number($('#rvAmt').value);
+  if (!(amt > 0)) { toast('Enter an amount in cUSDC'); return; }
+  if (!(await connect(true))) return;
+  const btns = [$('#rvDep'), $('#rvWd')]; btns.forEach(b => (b.disabled = true));
+  let block = null;
+  try {
+    if (kind === 'deposit') { const r = await api.reserveDeposit(amt); block = r?.block ?? null; toast(`Deposited ${money(amt)} cUSDC, encrypted`); }
+    else { const r = await api.reserveWithdraw(amt); block = r?.block ?? null; toast(r && r.out === 0 ? 'Not withdrawn: not enough shares, or the cash is lent to live runs' : `Withdrew ${money(r?.out ?? amt)} cUSDC`); }
+    $('#rvAmt').value = '';
+  } catch (e) { toast(e.message); }
+  finally { btns.forEach(b => (b.disabled = false)); loadReserve(block); }
+}
+$('#rvDep').onclick = () => reserveAction('deposit');
+$('#rvWd').onclick = () => reserveAction('withdraw');
 
 // ── resize, boot
 addEventListener('resize', () => { if (sc) sc.setSize(innerWidth, innerHeight, dpr(), cover()); });
