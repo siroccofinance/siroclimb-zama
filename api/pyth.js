@@ -42,7 +42,8 @@ export async function pythUpdate() {
       updateData: d.binary.data.map(x => '0x' + x),
       prices: d.parsed.map(p => {
         const id = '0x' + p.id.toLowerCase();
-        return { market: MARKETS.findIndex(m => m.pyth.toLowerCase() === id), price: Number(p.price.price) * 10 ** p.price.expo, publishTime: p.price.publish_time };
+        // mantissa and expo too: the front converts them exactly like the oracle does
+        return { market: MARKETS.findIndex(m => m.pyth.toLowerCase() === id), price: Number(p.price.price) * 10 ** p.price.expo, mantissa: p.price.price, expo: p.price.expo, publishTime: p.price.publish_time };
       }),
       notEntitled: MARKETS.map((m, i) => (notEntitled.has(m.pyth.toLowerCase()) ? i : -1)).filter(i => i >= 0),
     };
