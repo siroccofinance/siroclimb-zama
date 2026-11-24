@@ -26,7 +26,7 @@ export const pythContract = new Contract(ADDR.Pyth, ['function getUpdateFee(byte
 // ───────────────────────────── senders (session key, keeper key)
 const TX_GAS_CAP = 16_000_000n;
 /** Gas limits of game calls, about 1.5x to 2x the peak measured on Sepolia (FINDINGS F35). */
-const FIXED_GAS = { startRun: 6_000_000n, cashOut: 4_500_000n, settleRun: 4_000_000n, joinRound: 5_000_000n, exitAtBell: 2_500_000n, claim: 2_500_000n };
+const FIXED_GAS = { startRun: 6_000_000n, cashOut: 4_500_000n, settleRun: 4_000_000n };
 // 'unknown custom error': right after the operator approval, a lagging node can still refuse the
 // token transfer (the error comes from the token contract); a few seconds later it goes through
 const RETRY = /nonce|underpriced|already known|replacement|timeout|failed to fetch|network|ECONNRESET|503|502|429|insufficient funds|unknown custom error|Panic\(50\)/i;
