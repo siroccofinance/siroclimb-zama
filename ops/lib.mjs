@@ -47,6 +47,8 @@ export function errText(e) {
   return e?.shortMessage || e?.message || String(e);
 }
 
+/** A relayer request can hang without an answer: give up after `ms` so the caller retries. */
+export const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout: ${what}`)), ms))]);
 /** Polls for a receipt (ethers' waitForTransaction can miss blocks behind a load balancer). */
 export async function receipt(hash, ms = 240_000) {
   const t0 = Date.now();
@@ -72,12 +74,16 @@ export class Sender {
       for (let attempt = 0; ; attempt++) {
         try {
           const c = contract.connect(this.wallet);
-          const est = await c[method].estimateGas(...args, { value });
+          const tr = (what) => process.env.TRACE && console.log(`    ${this.name || this.label || this.address.slice(0, 8)} ${method} ${what}`);
+          tr('estimating');
+          const est = await withTimeout(c[method].estimateGas(...args, { value }), 60_000, `estimate ${method}`);
+          tr('estimated');
           const gasLimit = est * 2n > 16_000_000n ? 16_000_000n : est * 2n;
           const pending = await provider.getTransactionCount(this.address, 'pending');
           const nonce = this.nonce == null ? pending : Math.max(this.nonce, pending);
-          const tx = await c[method](...args, { value, gasLimit, nonce, ...(await fees()) });
+          const tx = await withTimeout(c[method](...args, { value, gasLimit, nonce, ...(await fees()) }), 60_000, `send ${method}`);
           this.nonce = nonce + 1;
+          tr(`sent ${tx.hash.slice(0, 10)} nonce ${nonce}`);
           const rc = await receipt(tx.hash);
           if (!rc) throw new Error(`timeout waiting for ${method} ${tx.hash}`);
           if (rc.status !== 1) throw new Error(`${method} reverted ${tx.hash}`);
@@ -110,8 +116,6 @@ export class Sender {
   async eth() { return Number(formatEther(await provider.getBalance(this.address))); }
 }
 
-/** A relayer request can hang without an answer: give up after `ms` so the caller retries. */
-export const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout: ${what}`)), ms))]);
 
 // ── FHE (Zama relayer SDK, Node build)
 let fheP = null;
