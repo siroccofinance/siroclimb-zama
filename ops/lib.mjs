@@ -39,6 +39,16 @@ export function errText(e) {
   return e?.shortMessage || e?.message || String(e);
 }
 
+/** Polls for a receipt (ethers' waitForTransaction can miss blocks behind a load balancer). */
+export async function receipt(hash, ms = 240_000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    const rc = await provider.getTransactionReceipt(hash).catch(() => null);
+    if (rc) return rc;
+    await sleep(2000);
+  }
+  return null;
+}
 const MIN_TIP = 200_000_000n;
 export async function fees() {
   const fd = await provider.getFeeData();
@@ -60,7 +70,7 @@ export class Sender {
           const nonce = this.nonce == null ? pending : Math.max(this.nonce, pending);
           const tx = await c[method](...args, { value, gasLimit, nonce, ...(await fees()) });
           this.nonce = nonce + 1;
-          const rc = await provider.waitForTransaction(tx.hash, 1, 240_000);
+          const rc = await receipt(tx.hash);
           if (!rc) throw new Error(`timeout waiting for ${method} ${tx.hash}`);
           if (rc.status !== 1) throw new Error(`${method} reverted ${tx.hash}`);
           this.gasSpent += rc.gasUsed * (rc.gasPrice ?? 0n);
@@ -82,7 +92,7 @@ export class Sender {
           const nonce = this.nonce == null ? pending : Math.max(this.nonce, pending);
           const tx = await this.wallet.sendTransaction({ to, value: parseEther(String(eth)), nonce, ...(await fees()) });
           this.nonce = nonce + 1;
-          await provider.waitForTransaction(tx.hash, 1, 240_000);
+          if (!(await receipt(tx.hash))) throw new Error(`timeout waiting for transfer ${tx.hash}`);
           return tx.hash;
         } catch (e) { this.nonce = null; if (attempt < 4 && RETRY.test(errText(e))) { await sleep(3000); continue; } throw e; }
       }
