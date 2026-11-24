@@ -1,6 +1,7 @@
 // Shared by the ops scripts (battery, keeper): Sepolia provider, contracts, nonce-safe senders,
 // the Zama relayer SDK (Node build), price checkpoints (same server code as the site's routes).
 import { readFileSync, existsSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -136,36 +137,35 @@ async function slot(fn) {
   try { return await fn(); } finally { active--; waiting.shift()?.(); }
 }
 const grants = new Map();
-/** User decryption by a wallet we hold (EIP-712 grant signed in Node). */
+/** User decryption by a wallet we hold, in a child process (see decrypt-worker.mjs), queued. */
 export async function userDecrypt(wallet, items) {
-  const f = await fhe();
-  let g = grants.get(wallet.address);
-  if (!g) {
-    const kp = f.generateKeypair(), start = Math.floor(Date.now() / 1000), contracts = [ADDR.Siroclimb, ADDR.StakeToken];
-    const t = f.createEIP712(kp.publicKey, contracts, start, 1);
-    const types = { ...t.types }; delete types.EIP712Domain;
-    const sig = await wallet.signTypedData(t.domain, types, t.message);
-    g = { kp, start, contracts, sig }; grants.set(wallet.address, g);
-  }
   const live = items.filter(i => !/^0x0+$/.test(i.handle));
   const out = new Map();
   if (live.length) {
     for (let attempt = 0; ; attempt++) {
       try {
-        const fi = await fhe();
-        const res = await slot(() => withTimeout(fi.userDecrypt(live.map(i => ({ handle: i.handle, contractAddress: i.contract })), g.kp.privateKey, g.kp.publicKey, g.sig.replace('0x', ''), g.contracts, wallet.address, g.start, 1), 90_000, 'relayer user decryption'));
-        for (const i of live) out.set(i.handle, BigInt(res[i.handle]));
+        const values = await slot(() => worker(wallet.privateKey, live, 60_000));
+        live.forEach((i, k) => out.set(i.handle, BigInt(values[k])));
         break;
       } catch (e) {
         if (process.env.TRACE) console.log('    user decryption retry', attempt, e.message?.slice(0, 80));
-        // a wedged relayer client stays wedged: the next attempt starts from a fresh SDK instance (F33)
-        if (/timeout/.test(e.message)) { fheP = null; grants.delete(wallet.address); }
         if (attempt >= 5) throw e;
-        await sleep(3000 + attempt * 2000);
+        await sleep(2000 + attempt * 2000);
       }
     }
   }
   return items.map(i => out.get(i.handle) ?? 0n);
+}
+function worker(key, items, ms) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'decrypt-worker.mjs')], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, TRACE: '' } });
+    let out = '', err = '';
+    const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('timeout: relayer user decryption')); }, ms);
+    child.stdout.on('data', d => (out += d));
+    child.stderr.on('data', d => (err += d));
+    child.on('close', code => { clearTimeout(timer); if (code === 0) { try { resolve(JSON.parse(out)); } catch (e) { reject(e); } } else reject(new Error(err.trim().split('\n').pop() || `worker exit ${code}`)); });
+    child.stdin.end(JSON.stringify({ key, items }));
+  });
 }
 export async function balanceOf(wallet, notHandle = null) {
   // a lagging RPC node can still serve the previous balance handle: wait until it changed
