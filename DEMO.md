@@ -6,7 +6,7 @@ open (or use gold and GBP), and a second tab on Sepolia Etherscan.
 
 ## 0:00 to 0:20 · The hook
 
-*Screen: the landing page, the coin rolling on the terracotta stairs. Click "Start playing".*
+*Screen: https://climb.sirocco.finance, the landing page, the coin rolling on the terracotta stairs. Click "Start playing".*
 
 > "This is Siroclimb by Sirocco. You pick a real world asset (Tesla, NVIDIA, Apple, gold or the
 > pound), go long or short, and the coin climbs the stairs with the price. Every 6 seconds your
