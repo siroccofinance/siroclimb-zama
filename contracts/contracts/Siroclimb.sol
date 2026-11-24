@@ -690,7 +690,7 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
                 uint256 i = order[k];
                 if (scores[i] == 0) continue; // unfunded entry: paid nothing, ranks last, wins nothing
                 address player = _runs[ids[i]].player;
-                if (prize != 0) _pay(player, FHE.asEuint64(prize));
+                prizeOf[ids[i]] = prize;          // paid by `claim`, one transfer per transaction
                 int32 pnl = int32(int256(uint256(scores[i])) - 1 - int256(uint256(SCALE)));
                 _record(player, pnl, true, uint8(pos + 1), uint32(roundId), prize);
             }
