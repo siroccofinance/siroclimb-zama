@@ -511,9 +511,24 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
         if (rd.status != RoundStatus.Closed) revert WrongRoundStatus(roundId);
         if (block.timestamp < rd.endsAt + ROUND_REFUND_AFTER) revert TooEarly(rd.endsAt + ROUND_REFUND_AFTER);
         rd.status = RoundStatus.Refunded;
-        uint256[] storage ids = _roundRuns[roundId];
-        for (uint256 i; i < ids.length; ++i) _pay(_runs[ids[i]].player, _sealed[ids[i]].paid);
         emit RoundRefunded(roundId);
+    }
+
+    /// @notice Permissionless: pays a round run what it is owed, its prize once the round is
+    ///         finalized, or its entry back (the encrypted amount it paid) if the round was refunded.
+    ///         One transfer per transaction keeps every payout under the per-transaction gas cap,
+    ///         even when many players tie for a prize.
+    function claim(uint256 runId) external {
+        Run storage r = _runs[runId];
+        if (!r.inRound || claimed[runId]) revert WrongRunStatus(runId);
+        RoundStatus st = _rounds[r.roundId].status;
+        claimed[runId] = true;
+        if (st == RoundStatus.Finalized) {
+            uint64 prize = prizeOf[runId];
+            if (prize == 0) revert WrongRunStatus(runId);
+            _pay(r.player, FHE.asEuint64(prize));
+        } else if (st == RoundStatus.Refunded) _pay(r.player, _sealed[runId].paid);
+        else revert WrongRoundStatus(r.roundId);
     }
 
     // ---------------------------------------------------------------- leverage packs
