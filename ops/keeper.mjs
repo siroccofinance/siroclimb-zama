@@ -4,16 +4,11 @@
 //  - price checkpoints every ~12 s for open markets with a live run or round;
 //  - settles solo runs past their 60th second;
 //  - closes rounds at the bell, KMS-decrypts the standings and finalizes with the proof.
-// Key: ~/.config/zama/siroclimb-keeper.key (created on first run, fund it with a little Sepolia ETH).
-import { existsSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { Wallet } from 'ethers';
+// Key: ~/.config/siroclimb/sepolia/keeper.key (fund it with a little Sepolia ETH). Do not run it
+// at the same time as the battery, which pushes prices with the same key.
 import { MARKETS, Sender, errText, game, key, publicDecrypt, pushIfStale, sleep } from './lib.mjs';
 
-const file = join(homedir(), '.config', 'zama', 'siroclimb-keeper.key');
-if (!existsSync(file)) { writeFileSync(file, Wallet.createRandom().privateKey + '\n', { mode: 0o600 }); }
-const k = new Sender(key('siroclimb-keeper.key'), 'keeper');
+const k = new Sender(key('keeper.key'), 'keeper');
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const IGNORE = /WrongRoundStatus|WrongRunStatus|RunNotOver|RoundNotOver|TooSoon|PythIsFresh/;
 log('keeper', k.address, (await k.eth()).toFixed(4), 'ETH');
