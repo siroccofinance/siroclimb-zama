@@ -196,9 +196,14 @@ await deployer.sendEth(keeper.address, 0.05).catch(() => {});
 log('setup done');
 keeperLoop();
 // a few players draw an encrypted leverage pack first
-await Promise.all(players.slice(0, Math.ceil(N / 3)).map(async p => { await p.send(game, 'openPack').then(() => { p.hasPack = true; }).catch(e => { if (/PackCooldown/.test(errText(e))) p.hasPack = (async () => game.hasPack(p.address))(); }); if (p.hasPack instanceof Promise) p.hasPack = await p.hasPack; }));
+const guard0 = (pr, ms) => Promise.race([pr, sleep(ms)]);
+await guard0(Promise.all(players.slice(0, Math.ceil(N / 3)).map(async p => {
+  try { await p.send(game, 'openPack'); p.hasPack = true; } catch (e) { p.hasPack = await game.hasPack(p.address).catch(() => false); }
+})), 4 * 60_000);
+log('packs', players.filter(p => p.hasPack === true).length);
 for (let w = 1; w <= WAVES; w++) {
-  await Promise.all(players.map(p => topUp(p).catch(() => {})));
+  await guard0(Promise.all(players.map(p => topUp(p).catch(() => {}))), 4 * 60_000);
+  log(`wave ${w}: start`);
   const runners = w === 1 ? [...players, poor] : players;
   // watchdog: a run that hangs (a dropped request somewhere) fails after 8 minutes instead of blocking the wave
   const guard = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error(`watchdog: ${what} took over ${ms / 60000} min`)), ms))]);
