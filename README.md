@@ -199,7 +199,10 @@ variable. No secret ever reaches the bundle. Contract addresses come from
 ```bash
 node tests/chain/solo.mjs     # connect, faucet, decrypt, encrypted solo run, cash out, settlement
 node tests/chain/round.mjs    # open a round, practice bots, sealed standings, KMS reveal, prize
-cd ops && npm i && node battery.mjs 16 2 2    # many concurrent players, every payout checked
+cd ops && npm i
+caffeinate -i node battery.mjs 24 2 2   # 24 concurrent players, every payout checked by decryption
+node audit.mjs                          # recompute every settled run from public chain data
+node sweep.mjs                          # finish anything left open (settle, exit, close, reveal, claim)
 ```
 
 The browser tests inject a test wallet (an EIP-1193 provider backed by a key in Node). The
