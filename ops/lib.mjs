@@ -18,6 +18,9 @@ export const RPC_URL = process.env.RPC_URL || 'https://sepolia.gateway.tenderly.
 // a request the RPC never answers fails after 20 s (ethers waits 5 minutes by default), and is retried
 const rpcRequest = new FetchRequest(RPC_URL);
 rpcRequest.timeout = 20_000;
+// on HTTP 429 ethers retries up to 12 times with growing back-off (minutes of silence): keep it short,
+// our own senders retry rate limits anyway (F34)
+rpcRequest.setThrottleParams({ maxAttempts: 3, slotInterval: 500 });
 export const provider = new JsonRpcProvider(rpcRequest, 11155111, { staticNetwork: true, batchMaxCount: 1, cacheTimeout: -1, pollingInterval: 2000 });
 export const game = new Contract(ADDR.Siroclimb, ABI.Siroclimb, provider);
 export const oracle = new Contract(ADDR.ClimbPriceOracle, ABI.ClimbPriceOracle, provider);
