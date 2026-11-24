@@ -25,7 +25,9 @@ export const pythContract = new Contract(ADDR.Pyth, ['function getUpdateFee(byte
 
 // ───────────────────────────── senders (session key, bots)
 const TX_GAS_CAP = 16_000_000n;
-const RETRY = /nonce|underpriced|already known|replacement|timeout|failed to fetch|network|ECONNRESET|503|502|429|insufficient funds/i;
+// 'unknown custom error': right after the operator approval, a lagging node can still refuse the
+// token transfer (the error comes from the token contract); a few seconds later it goes through
+const RETRY = /nonce|underpriced|already known|replacement|timeout|failed to fetch|network|ECONNRESET|503|502|429|insufficient funds|unknown custom error|Panic\(50\)/i;
 
 export class Sender {
   constructor(key) { this.wallet = new Wallet(key, rpc); this.address = this.wallet.address; this.queue = Promise.resolve(); this.nonce = null; }
@@ -150,13 +152,16 @@ export async function signTyped(t) {
   return wallet.signer.signTypedData(t.domain, types, t.message);
 }
 
-/** One transaction from the wallet itself (operator approval, session grant). */
-async function walletSend(contract, method, args, value = 0n) {
+/** One transaction from the wallet itself (operator approval, session grant). Returns the hash. */
+async function walletSend(contract, method, args, value = 0n, gasLimit) {
   const c = contract.connect(wallet.signer);
-  const tx = await c[method](...args, { value });
+  const tx = await c[method](...args, { value, ...(gasLimit ? { gasLimit } : {}) });
   emitTx({ label: method, hash: tx.hash, from: wallet.address, state: 'sent' });
-  const rc = await receipt(tx.hash, 300_000);
-  if (!rc || rc.status !== 1) throw new Error(`${method} failed`);
+  return tx.hash;
+}
+async function mined(hash, what) {
+  const rc = await receipt(hash, 300_000);
+  if (!rc || rc.status !== 1) throw new Error(`${what} failed`);
   return rc;
 }
 
@@ -198,9 +203,11 @@ export async function setupNeeds(player) {
 export async function setup(step = () => {}) {
   const player = wallet.address, s = sessionFor(player);
   const needs = await setupNeeds(player);
+  // both wallet transactions are signed back to back and mined together: one wait instead of two
+  const pending = [];
   if (needs.includes('operator')) {
     step('Approve the game for your cUSDC (wallet 1/2)');
-    await walletSend(token, 'setOperator', [ADDR.Siroclimb, Math.floor(Date.now() / 1000) + 30 * 86400]);
+    pending.push([await walletSend(token, 'setOperator', [ADDR.Siroclimb, Math.floor(Date.now() / 1000) + 30 * 86400]), 'operator approval']);
   }
   // gas for the session key: what the wallet can spare, at most SESSION_FUND_ETH (a wallet that cannot
   // pay gets a clear message instead of the node's "missing revert data")
@@ -213,12 +220,15 @@ export async function setup(step = () => {}) {
     const expiry = Math.floor(Date.now() / 1000) + 7 * 86400;
     const digest = await game.sessionDigest(player, expiry);
     const sig = await s.wallet.signMessage(getBytes(digest));
-    await walletSend(game, 'authorizeSession', [s.address, expiry, sig], parseEther(fund.toFixed(6)));
+    // the two transactions do not depend on each other, so each one's estimate stands on its own
+    pending.push([await walletSend(game, 'authorizeSession', [s.address, expiry, sig], parseEther(fund.toFixed(6))), 'session grant']);
   } else if (needs.includes('gas')) {
     step('Top up the session gas (wallet)');
     const tx = await wallet.signer.sendTransaction({ to: s.address, value: parseEther(fund.toFixed(6)) });
-    await receipt(tx.hash, 300_000);
+    pending.push([tx.hash, 'gas top-up']);
   }
+  if (pending.length) step('Confirming on Sepolia…');
+  await Promise.all(pending.map(([h, what]) => mined(h, what)));
   return s;
 }
 

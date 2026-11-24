@@ -1,13 +1,15 @@
 // Test wallet for the real front: an EIP-1193 provider injected into the page whose requests are
 // answered in Node by an ethers Wallet (signing) and the Sepolia RPC (everything else), the way
 // MetaMask would. Never used outside tests; the key comes from the caller.
-import { JsonRpcProvider, Wallet, getBytes, toUtf8String, isHexString } from 'ethers';
+import { JsonRpcProvider, NonceManager, Wallet, getBytes, isHexString } from 'ethers';
 
 export const RPC = process.env.RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
 
 export async function injectWallet(page, key) {
   const provider = new JsonRpcProvider(RPC, 11155111, { staticNetwork: true, batchMaxCount: 1 });
   const w = new Wallet(key, provider);
+  // like a wallet extension, nonces are tracked locally: back-to-back transactions must not collide
+  const sender = new NonceManager(w);
   const log = [];
   await page.exposeFunction('__scWallet', async (method, params = []) => {
     try {
@@ -25,7 +27,7 @@ export async function injectWallet(page, key) {
         }
         case 'eth_sendTransaction': {
           const tx = params[0];
-          const sent = await w.sendTransaction({ to: tx.to, data: tx.data, value: tx.value ? BigInt(tx.value) : 0n, gasLimit: tx.gas ? BigInt(tx.gas) : undefined });
+          const sent = await sender.sendTransaction({ to: tx.to, data: tx.data, value: tx.value ? BigInt(tx.value) : 0n, gasLimit: tx.gas ? BigInt(tx.gas) : undefined });
           log.push(`tx ${sent.hash}`);
           return sent.hash;
         }
