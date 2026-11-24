@@ -13,7 +13,7 @@ const json = p => JSON.parse(readFileSync(join(root, p), 'utf8'));
 export const ADDR = json('js/chain/deployments.json')['11155111'];
 export const ABI = json('js/chain/abi.json');
 export const MARKETS = json('js/chain/markets.json').markets;
-export const RPC_URL = process.env.RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
+export const RPC_URL = process.env.RPC_URL || 'https://sepolia.gateway.tenderly.co';
 export const provider = new JsonRpcProvider(RPC_URL, 11155111, { staticNetwork: true, batchMaxCount: 1, cacheTimeout: -1, pollingInterval: 2000 });
 export const game = new Contract(ADDR.Siroclimb, ABI.Siroclimb, provider);
 export const oracle = new Contract(ADDR.ClimbPriceOracle, ABI.ClimbPriceOracle, provider);
