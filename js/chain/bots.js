@@ -70,10 +70,23 @@ async function playRound(b, roundId, startsAt, endsAt) {
   for (const l of rc.logs) { try { const e = W.game.interface.parseLog(l); if (e?.name === 'RoundJoined') runId = e.args.runId; } catch {} }
   if (runId == null) return;
   // strategy: 35 % ride to the bell, the rest cash out somewhere in the minute
-  if (Math.random() < 0.35) return;
+  if (Math.random() < 0.35) return claimLater(b, runId, roundId);
   const at = startsAt + (10 + Math.random() * (RUN_SECONDS - 18)) * 1000;
   await W.sleep(Math.max(0, at - Date.now()));
   if (Date.now() < endsAt - 3000) await b.send(W.game, 'cashOut', [runId, []], 0n, 'bot cash out').catch(() => {});
+  claimLater(b, runId, roundId);
+}
+
+/** After the reveal, a bot claims its prize (if any) like any player would. */
+async function claimLater(b, runId, roundId) {
+  for (let i = 0; i < 60; i++) {
+    await W.sleep(10_000);
+    const [r] = await W.game.getRound(roundId).catch(() => [null]);
+    if (r && Number(r.status) === 3) {
+      if (Number(await W.game.prizeOf(runId)) > 0 && !(await W.game.claimed(runId))) await b.send(W.game, 'claim', [runId], 0n, 'bot claim').catch(() => {});
+      return;
+    }
+  }
 }
 
 export const roster = () => bots().map(b => ({ address: b.address, name: b.handle }));
