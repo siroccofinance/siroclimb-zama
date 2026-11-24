@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="play.css?v=10">
+  <link rel="stylesheet" href="play.css?v=11">
 </head>
 <body data-screen="intro">
   <div class="stage" id="stage" aria-hidden="true">
@@ -107,7 +107,7 @@
   <!-- ───────── game ───────── -->
   <section class="screen hud" aria-label="Game">
     <div class="hud__market">
-      <div class="mk"><span class="mk__t" id="hT">BTC</span><span class="pill" id="hSide">Long</span></div>
+      <div class="mk"><span class="mk__t" id="hT">cTSLAx</span><span class="mk__n" id="hN">Tesla</span><span class="pill" id="hSide">Long</span></div>
       <div class="mk__p" id="hP">0.00</div>
       <div class="mk__c" id="hC">+0.00%</div>
       <canvas class="spark" id="spark" aria-hidden="true"></canvas>
@@ -159,7 +159,7 @@
       <button class="icon sheet__x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       <h2 id="rules-title">How it works</h2>
       <ol class="steps">
-        <li><b>Pick a market, a direction and a stake.</b> Tokenized stocks (Tesla, NVIDIA, Apple, Amazon), gold or the pound, long or short.</li>
+        <li><b>Pick a confidential token, a direction and a stake.</b> cTSLAx, cNVDAx, cAAPLx, cAMZNx (Tesla, NVIDIA, Apple, Amazon), cXAUt (gold) or ctGBP (the pound), long or short.</li>
         <li><b>The coin rolls on the live price.</b> When the price goes your way it climbs a step, when it turns it steps down. Big moves, big jumps. Your leverage grows every 6 seconds, from 1x to 4x.</li>
         <li><b>The leverage is borrowed.</b> At 3x on a 50 cUSDC stake you borrow 100 cUSDC from the Sirocco Reserve, a lending pool, and pay interest on it for the seconds you hold it.</li>
         <li><b>Cash out whenever you want.</b> If the price runs too far against you, the stairs give way and the coin falls. You lose your stake, never more.</li>
