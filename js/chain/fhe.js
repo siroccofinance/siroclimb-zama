@@ -2,7 +2,7 @@
 //  - encryption of the player's inputs (side, stake) through the relayer, bound to the sender;
 //  - user decryption of the player's own handles (balance, run value) with an EIP-712 grant the
 //    wallet signs once a week (the keypair never leaves this browser);
-//  - public decryption (round standings, published runs) with the KMS proof the contract checks.
+//  - public decryption (published runs) with the KMS proof the contract checks.
 import { ADDR, RPC_URL } from './config.js';
 
 export const RELAYER_SDK_URL = 'https://cdn.zama.org/relayer-sdk-js/0.4.1/relayer-sdk-js.umd.cjs';
