@@ -205,7 +205,7 @@ export async function setup(step = () => {}) {
   const pending = [];
   if (needs.includes('operator')) {
     step('Approve the game for your cUSDC (wallet 1/2)');
-    pending.push([await walletSend(token, 'setOperator', [ADDR.Siroclimb, Math.floor(Date.now() / 1000) + 30 * 86400], 0n, 120_000n), 'operator approval']);
+    pending.push([await walletSend(token, 'setOperator', [ADDR.Siroclimb, Math.floor(Date.now() / 1000) + 30 * 86400]), 'operator approval']);
   }
   // gas for the session key: what the wallet can spare, at most SESSION_FUND_ETH (a wallet that cannot
   // pay gets a clear message instead of the node's "missing revert data")
@@ -218,8 +218,8 @@ export async function setup(step = () => {}) {
     const expiry = Math.floor(Date.now() / 1000) + 7 * 86400;
     const digest = await game.sessionDigest(player, expiry);
     const sig = await s.wallet.signMessage(getBytes(digest));
-    // fixed gas: the estimate would run against a state without the approval just signed
-    pending.push([await walletSend(game, 'authorizeSession', [s.address, expiry, sig], parseEther(fund.toFixed(6)), 200_000n), 'session grant']);
+    // the two transactions do not depend on each other, so each one's estimate stands on its own
+    pending.push([await walletSend(game, 'authorizeSession', [s.address, expiry, sig], parseEther(fund.toFixed(6))), 'session grant']);
   } else if (needs.includes('gas')) {
     step('Top up the session gas (wallet)');
     const tx = await wallet.signer.sendTransaction({ to: s.address, value: parseEther(fund.toFixed(6)) });
