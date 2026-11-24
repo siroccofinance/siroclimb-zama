@@ -64,3 +64,32 @@ browser does each one itself (autopilot):
 
 The practice bots are real players whose keys come from your session key. An optional ops keeper
 (`ops/keeper.mjs`) does the same duties.
+
+## Confidentiality design
+
+*Would the game break if this were public?* Yes, in four places, and each one is encrypted.
+
+| What | Why it must be private | How (FHEVM) |
+| --- | --- | --- |
+| **Side of a run** (long / short) | A visible side is copied or faded. In a round, a public crowd split ("80 % long") hands the late joiners a free hedge, and the leader's side tells everyone how to finish ahead. | `externalEbool` with an input proof (`FHE.fromExternal`), stored as `ebool`. ACL: the contract and the player only. Never decrypted for anyone else during the run. |
+| **Stake** | Bankrolls and position sizes are private information, and whales get front-run. | `externalEuint64`, clamped to 100 cUSDC **on ciphertexts** (`FHE.min`), pulled with ERC-7984 `confidentialTransferFrom`. The amount actually moved (`paid`) stays encrypted: an unfunded stake moves 0 and earns 0, without revealing any balance. |
+| **Value and payout** | The payout reveals the stake and the side. | The contract works out in clear, from the public oracle path, what a long and what a short would have made (`multLong`, `multShort`, see `ClimbLadder`). It then selects one with the encrypted side (`FHE.select`) and multiplies the encrypted stake by it (`FHE.mul`, `FHE.div`). The payout is an ERC-7984 transfer of that ciphertext **in the same transaction**. Money never waits for a decryption. |
+| **Round standings** | Live standings give away each player's side, so a laggard could fade the leader. | Each exit is scored on ciphertexts (`select(funded, select(side, multLong, multShort) + 1, 0)`). Scores stay sealed until the bell. Then `closeRound` makes them publicly decryptable, the KMS decrypts them, and `finalizeRound` checks the proof with `FHE.checkSignatures` before it ranks the players and records the 50 / 30 / 20 % prizes. Each prize is paid by `claim`, an encrypted transfer per winner. |
+| **Leverage packs** | A known cap would let rivals size you up. | The tier is drawn with the on-chain encrypted PRNG (`FHE.randEuint8`, then `FHE.lt` / `FHE.select` into 45 / 28 / 18 / 9 %), and only the player can decrypt it. A packed run picks among the capped paths on ciphertexts (`FHE.eq` on the encrypted cap). |
+| **Balances** | Private by nature. | Zama's cUSDC (ERC-7984): every balance and transfer is an `euint64`. The house bankroll is encrypted too, and even the deployer cannot read it. |
+
+What becomes public, and when:
+
+| Data | Visibility |
+| --- | --- |
+| Market, start time, exit time of a run | Public (transactions) |
+| Long and short multipliers of a finished run | Public: both are computed from public prices, and the encrypted side picks one |
+| Side, stake, value of a solo run | Player only, forever. If the player posts the run, the multiplier becomes public with a KMS proof, and the stake stays private |
+| Round entry | Public (10 cUSDC); the transfer itself is encrypted |
+| Round sides and scores | Sealed until the bell, then public with a KMS proof (needed to rank and pay) |
+| Prizes | Public at finalize (they follow from the public standings) |
+| Pack tier | Player only |
+| Balances | Owner only (ERC-7984) |
+
+Honest limit: once a solo run ends, an observer knows its value is one of two numbers (long or
+short). The side and the stake stay hidden, and so does the amount paid.
