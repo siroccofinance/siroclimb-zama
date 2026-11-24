@@ -60,6 +60,32 @@ function grainTexture(size = 1024) {
   return t;
 }
 
+// coin edge reeding: fine ridges on the lathe's outer wall only (UV v of that band), as a bump map.
+// The lathe's u runs around the coin, so the ridges roll with the body and show the coin turning.
+function reedingTexture() {
+  const w = 2048, h = 256, c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); g.fillStyle = '#808080'; g.fillRect(0, 0, w, h);
+  const v0 = Math.floor(h * 6 / 13) + 2, v1 = Math.ceil(h * 7 / 13) - 2, N = 180;   // the straight wall of the profile
+  for (let i = 0; i < N; i++) {
+    const x = (i / N) * w, gr = g.createLinearGradient(x, 0, x + w / N, 0);
+    gr.addColorStop(0, '#3a3a3a'); gr.addColorStop(0.5, '#e8e8e8'); gr.addColorStop(1, '#3a3a3a');
+    g.fillStyle = gr; g.fillRect(x, v0, w / N, v1 - v0);
+  }
+  const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; t.anisotropy = 8; return t;
+}
+// proof finish: a polished field with faint concentric hairlines, the mark frosted (satin) so it reads bright
+// against the mirror-like field from every angle
+function brushedTexture(size = 1024) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const g = c.getContext('2d'); g.fillStyle = '#808080'; g.fillRect(0, 0, size, size);
+  const m = size / 2;
+  for (let r = 1; r < m; r += 0.75) {
+    const v = 128 + (Math.random() - 0.5) * 40;
+    g.strokeStyle = `rgb(${v},${v},${v})`; g.lineWidth = 0.75; g.beginPath(); g.arc(m, m, r, 0, Math.PI * 2); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 8; return t;
+}
+
 const FLOOR_FRAG = /* glsl */`
 uniform vec3 uBase; uniform vec3 uLine; uniform vec3 uShade; varying vec2 vP;
 void main(){
@@ -133,10 +159,14 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
     scene.add(m); tiles.push(m);
   }
 
-  // coin
+  // coin: a lathed body (reeded edge, raised rim) that rolls, and a face that does not. The face is a
+  // polished field with the Sirocco mark struck on it in frosted relief, built from the vector logo
+  // (crisp at any size). It stays upright while the body rolls under it, on both sides.
   const coin = new THREE.Group();
-  const coinMat = new THREE.MeshPhysicalMaterial({ color: SIROCCO_COLORS.coin, metalness: 1, roughness: 0.3, clearcoat: 0.35, clearcoatRoughness: 0.15, envMapIntensity: G ? TH.coinEnv : 1.0 });
-  const logoMat = new THREE.MeshPhysicalMaterial({ color: SIROCCO_COLORS.coinLogo, metalness: 1, roughness: 0.12, clearcoat: 0.8, clearcoatRoughness: 0.1, envMapIntensity: G ? TH.coinEnv + 0.1 : 1.1 });
+  const coinMat = new THREE.MeshPhysicalMaterial({ color: SIROCCO_COLORS.coin, metalness: 1, roughness: 0.26, clearcoat: 0.35, clearcoatRoughness: 0.15, envMapIntensity: G ? TH.coinEnv : 1.0, bumpMap: reedingTexture(), bumpScale: 2.2 });
+  const fieldMat = new THREE.MeshPhysicalMaterial({ color: '#e2a650', metalness: 1, roughness: 0.17, clearcoat: 0.7, clearcoatRoughness: 0.08, envMapIntensity: G ? TH.coinEnv : 1.0, bumpMap: brushedTexture(), bumpScale: 0.35 });
+  const logoMat = new THREE.MeshPhysicalMaterial({ color: '#f7d06a', metalness: 1, roughness: 0.4, clearcoat: 0.35, clearcoatRoughness: 0.3, envMapIntensity: G ? TH.coinEnv + 0.35 : 1.3 });
+  const face = new THREE.Group();
   {
     const k = RC / 0.30, t = TC / 2, hf = t - 0.008, pts = [];
     const add = (r, h) => pts.push(new THREE.Vector2(r * k, h));
@@ -144,21 +174,30 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
     add(0.285, -t); add(0.296, -t + 0.004); add(0.30, -t + 0.012);
     add(0.30, t - 0.012); add(0.296, t - 0.004); add(0.285, t);
     add(0.252, t); add(0.246, t - 0.001); add(0.238, hf); add(0, hf);
-    const g = new THREE.LatheGeometry(pts, 160); g.rotateX(Math.PI / 2);
+    const g = new THREE.LatheGeometry(pts, 192); g.rotateX(Math.PI / 2);
     const body = new THREE.Mesh(g, coinMat); body.castShadow = true; body.receiveShadow = true; coin.add(body);
+    // polished field over the flat of each face (concentric hairlines, so it can sit on the face group)
+    const fg = new THREE.CircleGeometry(0.2385 * k, 160);
+    const f1 = new THREE.Mesh(fg, fieldMat); f1.position.z = hf + 0.0004; f1.receiveShadow = true;
+    const f2 = new THREE.Mesh(fg, fieldMat); f2.rotation.x = Math.PI; f2.position.z = -hf - 0.0004; f2.receiveShadow = true;
+    face.add(f1, f2);
+    // the mark: extruded from the brand path, a short crisp chamfer, centred on its own bounds and sized to the field
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="14 14 250 309"><path d="${SIROCCO_LOGO_PATH}"/></svg>`;
     const shapes = new SVGLoader().parse(svg).paths.flatMap(p => SVGLoader.createShapes(p));
-    const s = (0.33 * k) / 309, depth = 13, bt = 3;
-    const lg = new THREE.ExtrudeGeometry(shapes, { depth, bevelEnabled: true, bevelThickness: bt, bevelSize: 2.2, bevelSegments: 4, curveSegments: 48 });
-    lg.translate(-139, -168.5, 0); lg.scale(s, -s, -s); lg.translate(0, 0, (depth + bt) * s); lg.computeVertexNormals();
-    const faceZ = TC / 2 - 0.008;
+    const outline = shapes.flatMap(sh => sh.getPoints(64)), { x: cx, y: cy } = new THREE.Box2().setFromPoints(outline).getCenter(new THREE.Vector2());
+    const rmax = Math.max(...outline.map(p => Math.hypot(p.x - cx, p.y - cy)));
+    const depth = 7, bt = 2.4, bs = 1.6, s = (0.198 * k) / (rmax + bs);
+    const lg = new THREE.ExtrudeGeometry(shapes, { depth, bevelEnabled: true, bevelThickness: bt, bevelSize: bs, bevelOffset: -bs, bevelSegments: 5, curveSegments: 96 });
+    lg.translate(-cx, -cy, 0); lg.scale(s, -s, -s); lg.translate(0, 0, (depth + bt) * s);
+    const faceZ = hf;
     const front = new THREE.Mesh(lg, logoMat); front.position.z = faceZ; front.castShadow = true;
-    const back = new THREE.Mesh(lg, logoMat); back.rotation.y = Math.PI; back.position.z = -faceZ;
-    coin.add(front, back);
+    // the back mark is turned about the horizontal axis: after a flip (the coin tosses end over end) it reads upright too
+    const back = new THREE.Mesh(lg, logoMat); back.rotation.x = Math.PI; back.position.z = -faceZ; back.castShadow = true;
+    face.add(front, back);
   }
-  coinMat.fog = false; logoMat.fog = false; // the coin never dissolves into the terracotta
+  coinMat.fog = false; logoMat.fog = false; fieldMat.fog = false; // the coin never dissolves into the terracotta
   const coinPivot = new THREE.Group(); // stands on the belt, yaw wobble applied here
-  coinPivot.add(coin);
+  coinPivot.add(coin, face);
   scene.add(coinPivot);
 
   // lights: strong key from behind-left and above (bright treads, grey risers, black front sides)
@@ -233,7 +272,7 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
     }
     // coin rolls against the belt: relative travel = belt travel + its own drift along the belt
     const roll = -(o.dist + (o.cx - COIN_X)) / RC + (o.spin || 0);
-    coin.quaternion.setFromAxisAngle(AZ, roll);
+    coin.quaternion.setFromAxisAngle(AZ, roll);         // the body rolls; the face (mark) stays upright
     coinPivot.quaternion.setFromAxisAngle(AY, o.yaw).multiply(q1.setFromAxisAngle(AX, o.lean + (o.flip || 0)));
     coinPivot.scale.setScalar(cs);
     coinPivot.position.set(o.cx, RC * cs + (o.cy || 0), o.zig);
