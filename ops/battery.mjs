@@ -17,7 +17,7 @@
 // usage: node battery.mjs [players=16] [soloWaves=2] [rounds=2]
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { Contract } from 'ethers';
-import { ADDR, MARKETS, SCALE, Sender, USDC, balanceAt, provider, balanceOf, settledBlock, view, batteryWallet, encryptRun, errText, faucet, fallbackFor, game, handle, key, ladder, openMarkets, publicDecrypt, pushIfStale, pythFor, sleep, token, userDecrypt } from './lib.mjs';
+import { ADDR, MARKETS, SCALE, Sender, USDC, balanceAt, provider, withTimeout, balanceOf, settledBlock, view, batteryWallet, encryptRun, errText, faucet, fallbackFor, game, handle, key, ladder, openMarkets, publicDecrypt, pushIfStale, pythFor, sleep, token, userDecrypt } from './lib.mjs';
 
 const N = Number(process.argv[2] || 16), WAVES = Number(process.argv[3] || 2), ROUNDS = Number(process.argv[4] || 2);
 const OFFSET = Number(process.env.OFFSET || 1);         // index 0 is the browser e2e player
@@ -87,8 +87,10 @@ async function soloRun(p, wave, delay = 0) {
   const step = (what) => process.env.TRACE && log(`  ${p.name} ${what}`);
   const enc = await encryptRun(p.address, long, stake);
   step('encrypted');
-  const py = await pythFor(market);
-  const fb = py ? 0n : await fallbackFor(market);
+  const py = await withTimeout(pythFor(market), 30_000, 'pyth update').catch(() => null);
+  step(`pyth ${py ? 'rides along' : 'not covering'}`);
+  const fb = py ? 0n : await withTimeout(fallbackFor(market), 30_000, 'fallback price').catch(() => 0n);
+  step('prices ready');
   const rc = await p.send(game, 'startRun', [market, enc.handles[0], enc.handles[1], enc.proof, scenario === 'pack', py ? py.updateData : [], fb], py ? py.fee : 0n);
   const ev = rc.logs.map(l => { try { return game.interface.parseLog(l); } catch { return null; } }).find(e => e?.name === 'RunStarted');
   const id = ev.args.runId;
