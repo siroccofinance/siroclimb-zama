@@ -12,6 +12,9 @@ export const SEPOLIA_PYTH = "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21";
 export const MOVE_SCALE = Number(process.env.MOVE_SCALE ?? 25);
 const FAUCET_AMOUNT = 1_000_000_000; // 1000 cUSDC
 const FAUCET_COOLDOWN = 600;
+/** Sirocco Reserve: borrow APR in basis points, and the deployer's seed as first lender (cUSDC). */
+export const BORROW_APR_BPS = Number(process.env.BORROW_APR_BPS ?? 2000);
+const RESERVE_SEED = BigInt(process.env.RESERVE_SEED ?? 250_000) * 1_000_000n;
 
 const REGISTRY_ABI = [
   "function getConfidentialTokenAddress(address token) view returns (bool, address)",
@@ -47,11 +50,27 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const pyth = sepolia ? SEPOLIA_PYTH : (await deploy("MockPyth", { from: deployer, args: [120, 1], log: true })).address;
   const oracle = await deploy("ClimbPriceOracle", { from: deployer, args: [deployer, pyth, MARKETS.map((m) => m.pyth)], log: true });
   const ladder = await deploy("ClimbLadder", { from: deployer, args: [oracle.address, MOVE_SCALE], log: true });
+  const reserve = await deploy("SiroccoReserve", { from: deployer, args: [deployer, stake, BORROW_APR_BPS], log: true });
   const game = await deploy("Siroclimb", {
     from: deployer,
-    args: [deployer, stake, ladder.address],
+    args: [deployer, stake, ladder.address, reserve.address],
     log: true,
   });
+  if ((await read("SiroccoReserve", "game")) === hre.ethers.ZeroAddress) await execute("SiroccoReserve", { from: deployer, log: true }, "setGame", game.address);
+  // the deployer is the first lender: mints the public underlying, deposits it (public amount)
+  if ((await read("SiroccoReserve", "syncedShares")) == 0n) {
+    const wrapper = await hre.ethers.getContractAt(["function underlying() view returns (address)"], stake);
+    const underlying = await wrapper.underlying();
+    const usdc = await hre.ethers.getContractAt(
+      ["function mint(address,uint256)", "function approve(address,uint256) returns (bool)", "function allowance(address,address) view returns (uint256)"],
+      underlying,
+      await hre.ethers.getSigner(deployer),
+    );
+    await (await usdc.mint(deployer, RESERVE_SEED)).wait();
+    await (await usdc.approve(reserve.address, RESERVE_SEED)).wait();
+    for (let i = 0; i < 20 && (await usdc.allowance(deployer, reserve.address)) < RESERVE_SEED; i++) await new Promise((r) => setTimeout(r, 3000));
+    await execute("SiroccoReserve", { from: deployer, log: true }, "depositUnderlying", RESERVE_SEED);
+  }
 
   const updaters = [deployer, ...(process.env.KEEPER_ADDRESS ? [process.env.KEEPER_ADDRESS] : [])];
   for (const u of updaters) {
@@ -64,9 +83,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     log(`seed ${MARKETS.map((m, i) => `${m.id}=${Number(prices[i]) / 1e10}`).join(" ")}`);
     await execute("ClimbPriceOracle", { from: deployer, log: true }, "pushPrices", MARKETS.map((_, i) => i), prices);
   }
-  log(`stake ${stake}\nfaucet ${faucet.address}\noracle ${oracle.address}\nladder ${ladder.address}\ngame ${game.address}`);
+  log(`stake ${stake}\nfaucet ${faucet.address}\noracle ${oracle.address}\nladder ${ladder.address}\nreserve ${reserve.address}\ngame ${game.address}`);
 };
 
 export default func;
-func.id = "siroclimb_game_v7";
+func.id = "siroclimb_game_v8";
 func.tags = ["Siroclimb"];
