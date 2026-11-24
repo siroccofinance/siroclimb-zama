@@ -456,6 +456,17 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
         emit RunStarted(runId, player, rd.market, uint32(roundId), rd.startsAt, 0, false, FHE.toBytes32(s.long), FHE.toBytes32(s.paid));
     }
 
+    /// @notice Permissionless, after the round's end: one run still climbing exits at the bell.
+    ///         Each exit costs about 1M gas on Sepolia, so a full round is closed in chunks: exits
+    ///         first (any number of transactions), then `closeRound` (cheap once every run exited).
+    function exitAtBell(uint256 runId) external {
+        Run storage r = _runs[runId];
+        if (!r.inRound || r.status != RunStatus.Live) revert WrongRunStatus(runId);
+        Round storage rd = _rounds[r.roundId];
+        if (block.timestamp < rd.endsAt) revert RoundNotOver(r.roundId, rd.endsAt);
+        _endRun(runId, rd.endsAt);
+    }
+
     /// @notice Permissionless, after the round's end: every run still climbing exits at the bell,
     ///         and every encrypted score becomes publicly decryptable (the standings reveal).
     function closeRound(uint256 roundId) external {
