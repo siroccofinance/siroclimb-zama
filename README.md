@@ -184,7 +184,7 @@ key, every market uses the bounded fallback.
 
 ```bash
 cd contracts && npm i && npx hardhat test          # 39 tests on the FHEVM mock, HCU budget
-npm run deploy:sepolia && npm run verify:sourcify  # key: ~/.config/zama/siroclimb-deployer.key
+npm run deploy:sepolia && npm run verify:sourcify  # key: ~/.config/siroclimb/sepolia/deployer.key
 ```
 
 ### Hosting (Vercel-ready)
@@ -206,7 +206,8 @@ node sweep.mjs                          # finish anything left open (settle, exi
 ```
 
 The browser tests inject a test wallet (an EIP-1193 provider backed by a key in Node). The
-battery's players come from `~/.config/zama/siroclimb-battery.mnemonic`. No key is ever committed.
+battery's players come from `~/.config/siroclimb/sepolia/battery.mnemonic`, the browser tests use `player.key`
+in the same folder, and the ops keeper uses `keeper.key`. No key is ever committed.
 
 ## Limitations and next steps
 
