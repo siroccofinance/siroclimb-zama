@@ -21,12 +21,14 @@ export const game = new Contract(ADDR.Siroclimb, ABI.Siroclimb, rpc);
 export const oracle = new Contract(ADDR.ClimbPriceOracle, ABI.ClimbPriceOracle, rpc);
 export const token = new Contract(ADDR.StakeToken, ABI.ERC7984, rpc);
 export const faucet = new Contract(ADDR.ClimbFaucet, ABI.ClimbFaucet, rpc);
+export const reserve = new Contract(ADDR.SiroccoReserve, ABI.SiroccoReserve, rpc);
 export const pythContract = new Contract(ADDR.Pyth, ['function getUpdateFee(bytes[] updateData) view returns (uint256)'], rpc);
 
 // ───────────────────────────── senders (session key, keeper key)
 const TX_GAS_CAP = 16_000_000n;
 /** Gas limits of game calls, about 1.5x to 2x the peak measured on Sepolia (FINDINGS F35). */
-const FIXED_GAS = { startRun: 6_000_000n, cashOut: 4_500_000n, settleRun: 4_000_000n };
+// a run borrows from the Sirocco Reserve on start and repays it at the end (one encrypted transfer each)
+const FIXED_GAS = { startRun: 6_000_000n, cashOut: 6_000_000n, settleRun: 6_000_000n };
 // 'unknown custom error': right after the operator approval, a lagging node can still refuse the
 // token transfer (the error comes from the token contract); a few seconds later it goes through
 const RETRY = /nonce|underpriced|already known|replacement|timeout|failed to fetch|network|ECONNRESET|503|502|429|insufficient funds|unknown custom error|Panic\(50\)/i;
@@ -228,6 +230,17 @@ export async function setup(step = () => {}) {
   return s;
 }
 
+/** The game account lets `spender` (the game, or the reserve for deposits) pull its cUSDC (ERC-7984 operator), once. */
+const operatorFor = new Map();
+export function ensureOperatorFor(spender, s = currentSession()) {
+  if (!s) return Promise.resolve();
+  const k = `${s.address}:${spender}`;
+  if (!operatorFor.has(k)) operatorFor.set(k, (async () => {
+    if (await token.isOperator(s.address, spender)) return;
+    await s.send(token, 'setOperator', [spender, Math.floor(Date.now() / 1000) + 365 * 86400], 0n, 'setOperator');
+  })().catch(e => { operatorFor.delete(k); throw e; }));
+  return operatorFor.get(k);
+}
 /** The game account lets the game pull its stakes (ERC-7984 operator), once, in its own queue. */
 let operatorChecked = null;
 export function ensureOperator(s = currentSession()) {
@@ -262,7 +275,7 @@ export async function view(fn, tries = 10) {
 /** A readable message for contract errors (custom errors decoded with the game and oracle ABIs). */
 export function errText(e) {
   const data = e?.data || e?.info?.error?.data || e?.error?.data;
-  for (const c of [game, oracle, faucet, token]) {
+  for (const c of [game, oracle, faucet, token, reserve]) {
     try { const d = c.interface.parseError(typeof data === 'string' ? data : data?.data); if (d) return `${d.name}(${d.args.join(', ')})`; } catch {}
   }
   return e?.shortMessage || e?.reason || e?.message || String(e);
@@ -274,6 +287,7 @@ const FRIENDLY = [
   [/StaleEntry/, 'The price is being refreshed, try again in a few seconds'],
   [/FaucetCooldown/, 'Faucet already used, try again in a few minutes'],
   [/PackCooldown/, 'One pack every 10 minutes'],
+  [/ReserveFull/, 'The Sirocco Reserve has no free liquidity right now, try again in a minute'],
 ];
 export function friendly(e) {
   const t = errText(e);
