@@ -48,3 +48,18 @@ owner-only.
 | Tesla | `cTSLAx` [`0x6a9b0628378DcbE094164C29577D9e53D031d7E1`](https://sepolia.etherscan.io/address/0x6a9b0628378DcbE094164C29577D9e53D031d7E1) | Tesla xStock (TSLAx) [`0xd5Fd…373E`](https://sepolia.etherscan.io/address/0xd5Fde06DdbA04b289839fb0d362F15aa3E72373E) | `0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0` |
 | NVIDIA | `cNVDAx` [`0x2C4a032CD3A8f895B31dc32aB1f3a4CdF65e3E81`](https://sepolia.etherscan.io/address/0x2C4a032CD3A8f895B31dc32aB1f3a4CdF65e3E81) | NVIDIA xStock (NVDAx) [`0x738F…62A3`](https://sepolia.etherscan.io/address/0x738F3128b18A09e460Ef4bB16A473F76F51a62A3) | `0xc845b2894dBddd03858fd2D643B4eF725fE0849d` |
 | Apple | `cAAPLx` [`0x1881F38510f5B8040966312535C80Cb94c5e6433`](https://sepolia.etherscan.io/address/0x1881F38510f5B8040966312535C80Cb94c5e6433) | Apple xStock (AAPLx) [`0x2f12…92da`](https://sepolia.etherscan.io/address/0x2f12893FEcDA47b694EB56459a4039Ddb57792da) | `0x9d275685dC284C8eB1C79f6ABA7a63Dc75ec890a` |
+
+### Game parameters
+
+| Parameter | Value |
+| --- | --- |
+| Markets (oracle order) | 0 TSLAx, 1 NVDAx, 2 AAPLx, 3 XAUt, 4 tGBP |
+| Pyth feeds | Equity.US.TSLA/USD, Equity.US.NVDA/USD, Equity.US.AAPL/USD, Crypto.XAUT/USD, FX.GBP/USD |
+| Ladder | 1x, 1.5x, 2x, 2.5x, 3x, 3.5x, 4x, one step every 6 s, 60 s runs |
+| Game scale | 25x: a 0.1 % move counts 2.5 % at 1x, 10 % at 4x |
+| Stake | Encrypted, clamped to 100 cUSDC on ciphertexts |
+| Rounds | Entry 10 cUSDC, 60 s to join, 60 s live, at most 24 players, prizes 50 / 30 / 20 % |
+| Round rotation | Every market, skipping any without a checkpoint in the last 60 s |
+| Packs | One per 10 min, Bronze 45 % / Silver 28 % / Gold 18 % / Diamond 9 % (1.5x / 2x / 3x / 4x cap) |
+| Entry | At most 60 s old; a Pyth update or a bounded public price can ride along with `startRun` |
+| Oracle | Pyth max age 25 s; fallback at most every 10 s, +/-0.5 % per checkpoint, +/-3 % from the last Pyth price |
