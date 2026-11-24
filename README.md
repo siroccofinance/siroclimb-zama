@@ -204,3 +204,14 @@ cd ops && npm i && node battery.mjs 16 2 2    # many concurrent players, every p
 
 The browser tests inject a test wallet (an EIP-1193 provider backed by a key in Node). The
 battery's players come from `~/.config/zama/siroclimb-battery.mnemonic`. No key is ever committed.
+
+## Limitations and next steps
+
+- Fallback markets (NVDA, AAPL, XAUT, GBP with the current key) rely on semi-trusted, bounded
+  reporters. A wider Pyth entitlement makes them trustless with no code change.
+- Solo runs pay from a house bankroll that the testnet auto-mints (`_reserve`). A mainnet version
+  would need a real liquidity pool.
+- The session key lives in the browser's local storage. Its power is limited to playing with the
+  approved stake, and it expires after 7 days.
+- Market hours come from the reference route. The contract itself does not know the trading
+  calendar; a closed market simply has no fresh checkpoint, and `startRun` refuses stale entries.
