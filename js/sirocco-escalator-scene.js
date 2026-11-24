@@ -147,7 +147,8 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
   }
 
   // coin
-  const coin = new THREE.Group();
+  // the body rolls, the face (the mark) does not: it stays upright while the coin turns under it
+  const coin = new THREE.Group(), face = new THREE.Group();
   const coinMat = new THREE.MeshPhysicalMaterial({ color: SIROCCO_COLORS.coin, metalness: 1, roughness: 0.3, clearcoat: 0.35, clearcoatRoughness: 0.15, envMapIntensity: G ? TH.coinEnv : 1.0, bumpMap: reedingTexture(), bumpScale: 2.2 });
   const logoMat = new THREE.MeshPhysicalMaterial({ color: SIROCCO_COLORS.coinLogo, metalness: 1, roughness: 0.12, clearcoat: 0.8, clearcoatRoughness: 0.1, envMapIntensity: G ? TH.coinEnv + 0.1 : 1.1 });
   {
@@ -166,12 +167,13 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
     lg.translate(-139, -168.5, 0); lg.scale(s, -s, -s); lg.translate(0, 0, (depth + bt) * s); lg.computeVertexNormals();
     const faceZ = TC / 2 - 0.008;
     const front = new THREE.Mesh(lg, logoMat); front.position.z = faceZ; front.castShadow = true;
-    const back = new THREE.Mesh(lg, logoMat); back.rotation.y = Math.PI; back.position.z = -faceZ;
-    coin.add(front, back);
+    // the back mark is turned about the horizontal axis: after a flip (the coin tosses end over end) it reads upright too
+    const back = new THREE.Mesh(lg, logoMat); back.rotation.x = Math.PI; back.position.z = -faceZ;
+    face.add(front, back);
   }
   coinMat.fog = false; logoMat.fog = false; // the coin never dissolves into the terracotta
   const coinPivot = new THREE.Group(); // stands on the belt, yaw wobble applied here
-  coinPivot.add(coin);
+  coinPivot.add(coin, face);
   scene.add(coinPivot);
 
   // lights: strong key from behind-left and above (bright treads, grey risers, black front sides)
@@ -246,7 +248,7 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
     }
     // coin rolls against the belt: relative travel = belt travel + its own drift along the belt
     const roll = -(o.dist + (o.cx - COIN_X)) / RC + (o.spin || 0);
-    coin.quaternion.setFromAxisAngle(AZ, roll);
+    coin.quaternion.setFromAxisAngle(AZ, roll);         // the body rolls; the face (mark) stays upright
     coinPivot.quaternion.setFromAxisAngle(AY, o.yaw).multiply(q1.setFromAxisAngle(AX, o.lean + (o.flip || 0)));
     coinPivot.scale.setScalar(cs);
     coinPivot.position.set(o.cx, RC * cs + (o.cy || 0), o.zig);
