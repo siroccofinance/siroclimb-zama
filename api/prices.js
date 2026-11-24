@@ -1,5 +1,5 @@
 // Reference market data for the bounded fallback and the live chart, with market hours.
-//  - stocks (TSLA, NVDA, AAPL) and GBP/USD: Yahoo Finance chart API (server side: no CORS),
+//  - stocks (TSLA, NVDA, AAPL, AMZN) and GBP/USD: Yahoo Finance chart API (server side: no CORS),
 //    1-minute candles including pre and post market; a stock market is "open" while now is
 //    inside today's pre/regular/post session (4:00 to 20:00 New York time, trading days only)
 //    and the last candle is recent. Outside sessions the market is closed in the game.
