@@ -5,8 +5,8 @@ Your leverage climbs from 1x to 4x every 6 seconds over a 60-second run, and you
 you want. Play alone against the house, or in timed rounds where everyone rides the same market and
 the top 3 share the pot.
 
-Siroclimb is about real world assets. The markets are tokenized stocks (Tesla, NVIDIA and Apple
-xStocks), gold (XAUt) and the British pound. Stakes and payouts are in **Zama's confidential USDC**.
+Siroclimb is about real world assets. The markets are tokenized stocks (Tesla, NVIDIA, Apple and
+Amazon xStocks), gold (XAUt) and the British pound. Stakes and payouts are in **Zama's confidential USDC**.
 
 Built on the **Zama Protocol (FHEVM)** on Sepolia for the Zama Developer Program, Season 5:
 Confidential Gaming.
@@ -53,8 +53,9 @@ Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain 
 6. The trophy icon shows the leaderboards (last round, today, all time). They list public results
    only: round standings and the runs players chose to post.
 
-Stocks trade during US market hours (4:00 to 20:00 New York time, pre and post market included).
-Outside those hours their chips show *Closed*, while gold and the pound stay open. A round only
+Stocks trade during US market hours (4:00 to 20:00 New York time, pre and post market included,
+US trading days only: weekends and exchange holidays are closed). Outside those hours their chips
+show *Closed*, while gold and the pound stay open. A round only
 opens on a market with a live price.
 
 **Nothing has to run on our side.** Every keeper duty is a permissionless call, and the player's
@@ -153,14 +154,14 @@ screen animates smoothly on live prices and the chain settles on 3 to 6 checkpoi
    prices. Entry and exit rides along with `startRun` and `cashOut`, which makes them the freshest
    verified price (at most 25 s old).
 2. **Bounded public fallback**. Markets the Hermes plan does not cover take the reference price from
-   `/api/prices` (Yahoo Finance for stocks and GBP, Binance for XAUt, with market hours) through
+   `/api/prices` (Yahoo Finance for stocks and GBP, Kraken for XAUt, with market hours) through
    `pushPublic`. The oracle bounds it: at most every 10 s, +/-0.5 % per checkpoint, +/-3 % from the
    last Pyth price, and only while Pyth has nothing fresher than 2 minutes for that market.
    *Trade-off*: in this mode players are semi-trusted price reporters within those bounds. Each
    checkpoint's source is public.
 
-The current API key is entitled to Equity.US.TSLA/USD. NVDA, AAPL, XAUT and GBP answer 403 and go
-through the fallback. The route detects entitlements by itself, so adding grants to the key moves
+The current API key is entitled to Equity.US.TSLA/USD. NVDA, AAPL, AMZN, XAUT and GBP answer 403
+and go through the fallback. The route detects entitlements by itself, so adding grants to the key moves
 those markets to trustless Pyth with no code change.
 
 **Game scale**: real prices move little in a minute, so every move counts 25x, then the leverage
@@ -230,7 +231,7 @@ key, every market uses the bounded fallback.
 ### Contracts
 
 ```bash
-cd contracts && npm i && npx hardhat test          # 39 tests on the FHEVM mock, HCU budget
+cd contracts && npm i && npx hardhat test          # 41 tests on the FHEVM mock, HCU budget
 npm run deploy:sepolia && npm run verify:sourcify  # key: ~/.config/siroclimb/sepolia/deployer.key
 ```
 
@@ -258,7 +259,7 @@ in the same folder, and the ops keeper uses `keeper.key`. No key is ever committ
 
 ## Limitations and next steps
 
-- Fallback markets (NVDA, AAPL, XAUT, GBP with the current key) rely on semi-trusted, bounded
+- Fallback markets (NVDA, AAPL, AMZN, XAUT, GBP with the current key) rely on semi-trusted, bounded
   reporters. A wider Pyth entitlement makes them trustless with no code change.
 - Solo runs pay from a house bankroll that the testnet auto-mints (`_reserve`). A mainnet version
   would need a real liquidity pool.

@@ -70,5 +70,5 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 };
 
 export default func;
-func.id = "siroclimb_game_v5";
+func.id = "siroclimb_game_v6";
 func.tags = ["Siroclimb"];

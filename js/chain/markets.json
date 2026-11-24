@@ -62,6 +62,26 @@
       }
     },
     {
+      "id": "AMZNx",
+      "name": "Amazon",
+      "ticker": "AMZNx",
+      "kind": "stock",
+      "hours": "us-equity",
+      "pyth": "0xb5d0e0fa58a1f8b81498ae670ce93c872d14434b72c364885d4fa1b257cbb07a",
+      "pythSymbol": "Equity.US.AMZN/USD",
+      "yahoo": "AMZN",
+      "token": {
+        "symbol": "cAMZNx",
+        "origin": "mirror",
+        "underlying": {
+          "name": "Amazon.com xStock",
+          "symbol": "AMZNx",
+          "decimals": 18,
+          "mainnet": "0x3557Ba345B01EFa20A1bdDC61F573BFD87195081"
+        }
+      }
+    },
+    {
       "id": "XAUt",
       "name": "Gold",
       "ticker": "XAUt",
@@ -99,6 +119,7 @@
     "TSLAx",
     "NVDAx",
     "AAPLx",
+    "AMZNx",
     "XAUt",
     "tGBP"
   ]

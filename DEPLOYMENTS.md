@@ -12,13 +12,15 @@ from `js/chain/deployments.json` (written by `npm run export -- sepolia`).
 
 | Contract | Address | Role |
 | --- | --- | --- |
-| `Siroclimb` | [`0x92e5AB531046D67d17fE465587fd663323327649`](https://sepolia.etherscan.io/address/0x92e5AB531046D67d17fE465587fd663323327649) | Solo runs and rounds with an encrypted side and stake, encrypted payouts, sealed standings, packs, sessions |
-| `ClimbPriceOracle` | [`0xFB3Be33B9b1589df87FB4E132B334cEC67De19b1`](https://sepolia.etherscan.io/address/0xFB3Be33B9b1589df87FB4E132B334cEC67De19b1) | Per-market price checkpoints: Pyth (trustless) or the bounded public fallback |
-| `ClimbLadder` | [`0xd6E0181D196c95Ab8D652305fb73342A6bc9bc20`](https://sepolia.etherscan.io/address/0xd6E0181D196c95Ab8D652305fb73342A6bc9bc20) | Run rules in clear: long and short multipliers on the oracle path (game scale 25x) |
+| `Siroclimb` | [`0x854431367bDf375fE9bf495dAf9433838007f0a6`](https://sepolia.etherscan.io/address/0x854431367bDf375fE9bf495dAf9433838007f0a6) | Solo runs and rounds with an encrypted side and stake, encrypted payouts, sealed standings, packs, sessions |
+| `ClimbPriceOracle` | [`0x9eAf890d59Bf5F38DE42FE92901E0F8607eFab07`](https://sepolia.etherscan.io/address/0x9eAf890d59Bf5F38DE42FE92901E0F8607eFab07) | Per-market price checkpoints: Pyth (trustless) or the bounded public fallback |
+| `ClimbLadder` | [`0x66119f55A4f7baC3c697684c114280917Cf0E366`](https://sepolia.etherscan.io/address/0x66119f55A4f7baC3c697684c114280917Cf0E366) | Run rules in clear: long and short multipliers on the oracle path (game scale 25x) |
 | `ClimbFaucet` | [`0x9a61CF739874c52785f923488F37ceF9817A3C10`](https://sepolia.etherscan.io/address/0x9a61CF739874c52785f923488F37ceF9817A3C10) | Mints USDCMock and wraps it into cUSDC for any account: 1,000 per claim, every 10 min |
 
 Earlier test deployments (made while fixing F10, F15, F24 and F44, and with keys shared with another
-project) are retired with nothing left open; every contract above was deployed from Siroclimb's own keys.
+project) are retired with nothing left open, and so is the five-market game that ran before AMZNx was
+added (`Siroclimb` `0x92e5…7649`, oracle `0xFB3B…19b1`, ladder `0xd6E0…bc20`: 44 runs, 2 rounds, all
+settled and claimed). The faucet and the mirrors carried over; every contract above was deployed from Siroclimb's own keys.
 
 Deployed by `0x6d3376996531a23aBe413AA9D1aC5902644a2A5d` (Siroclimb's dedicated deployer, also the creator of the mirrors). It owns
 `Siroclimb` and `ClimbPriceOracle` and is the only trusted price updater, used once to seed the
@@ -48,13 +50,14 @@ owner-only.
 | Tesla | `cTSLAx` [`0xaDDb52A774647E8C28ce2CF7f86Ba48E9beFf96a`](https://sepolia.etherscan.io/address/0xaDDb52A774647E8C28ce2CF7f86Ba48E9beFf96a) | Tesla xStock (TSLAx) [`0x28F9…C23E`](https://sepolia.etherscan.io/address/0x28F90781Ce9Af15d070C81DC27C439c39f25C23E) | `0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0` |
 | NVIDIA | `cNVDAx` [`0x82Be7e7C57473867e80a32596911eF58fdceF1B4`](https://sepolia.etherscan.io/address/0x82Be7e7C57473867e80a32596911eF58fdceF1B4) | NVIDIA xStock (NVDAx) [`0xA31c…4c72`](https://sepolia.etherscan.io/address/0xA31c505C280793f0d32c15Ccbc54e5db7A2f4c72) | `0xc845b2894dBddd03858fd2D643B4eF725fE0849d` |
 | Apple | `cAAPLx` [`0x5bc5E456A4e3628Bf2da5FF088671E2BeAF164C9`](https://sepolia.etherscan.io/address/0x5bc5E456A4e3628Bf2da5FF088671E2BeAF164C9) | Apple xStock (AAPLx) [`0x4530…a1b4`](https://sepolia.etherscan.io/address/0x4530495F1dECc8f02C067460EBd6a758E3fBa1b4) | `0x9d275685dC284C8eB1C79f6ABA7a63Dc75ec890a` |
+| Amazon | `cAMZNx` [`0x581E8376F8fA97e75515C9FA94B5D98a19Ced2db`](https://sepolia.etherscan.io/address/0x581E8376F8fA97e75515C9FA94B5D98a19Ced2db) | Amazon.com xStock (AMZNx) [`0xD889…23cB`](https://sepolia.etherscan.io/address/0xD889F2087FA97673C22BB05404b5892A2D0D23cB) | `0x3557Ba345B01EFa20A1bdDC61F573BFD87195081` |
 
 ### Game parameters
 
 | Parameter | Value |
 | --- | --- |
-| Markets (oracle order) | 0 TSLAx, 1 NVDAx, 2 AAPLx, 3 XAUt, 4 tGBP |
-| Pyth feeds | Equity.US.TSLA/USD, Equity.US.NVDA/USD, Equity.US.AAPL/USD, Crypto.XAUT/USD, FX.GBP/USD |
+| Markets (oracle order) | 0 TSLAx, 1 NVDAx, 2 AAPLx, 3 AMZNx, 4 XAUt, 5 tGBP |
+| Pyth feeds | Equity.US.TSLA/USD, Equity.US.NVDA/USD, Equity.US.AAPL/USD, Equity.US.AMZN/USD, Crypto.XAUT/USD, FX.GBP/USD |
 | Ladder | 1x, 1.5x, 2x, 2.5x, 3x, 3.5x, 4x, one step every 6 s, 60 s runs |
 | Game scale | 25x: a 0.1 % move counts 2.5 % at 1x, 10 % at 4x |
 | Stake | Encrypted, clamped to 100 cUSDC on ciphertexts |

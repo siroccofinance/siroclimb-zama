@@ -13,18 +13,19 @@ import type {
 } from "../types";
 
 /** Market order on chain: stocks and real world assets. */
-export const MARKETS = ["TSLAx", "NVDAx", "AAPLx", "XAUt", "tGBP"] as const;
-export const [TSLA, NVDA, AAPL, XAUT, GBP] = [0, 1, 2, 3, 4];
-/** Pyth feeds (vs USD): Equity.US.TSLA / NVDA / AAPL, Crypto.XAUT, FX.GBP. */
+export const MARKETS = ["TSLAx", "NVDAx", "AAPLx", "AMZNx", "XAUt", "tGBP"] as const;
+export const [TSLA, NVDA, AAPL, AMZN, XAUT, GBP] = [0, 1, 2, 3, 4, 5];
+/** Pyth feeds (vs USD): Equity.US.TSLA / NVDA / AAPL / AMZN, Crypto.XAUT, FX.GBP. */
 export const PYTH_FEEDS = [
   "0x16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1",
   "0xb1073854ed24cbc755dc527418f52b7d271f6cc967bbf8d8129112b18860a593",
   "0x49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688",
+  "0xb5d0e0fa58a1f8b81498ae670ce93c872d14434b72c364885d4fa1b257cbb07a",
   "0x44465e17d2e9d390e70c999d5a11fda4f092847fcd2e3e5aa089d96c98a30e67",
   "0x84c2dde9633d93d1bcad84e7dc41c9d56578b7ec52fabedc1f335d673df0a7c1",
 ];
-/** 10-decimal prices: TSLA 386, NVDA 165, AAPL 350, XAUt 3626, GBP 1.30. */
-export const BASE = [3_860_000_000_000n, 1_650_000_000_000n, 3_500_000_000_000n, 36_260_000_000_000n, 13_000_000_000n];
+/** 10-decimal prices: TSLA 386, NVDA 165, AAPL 350, AMZN 252, XAUt 3626, GBP 1.30. */
+export const BASE = [3_860_000_000_000n, 1_650_000_000_000n, 3_500_000_000_000n, 2_520_000_000_000n, 36_260_000_000_000n, 13_000_000_000n];
 
 export const USDC = 1_000_000n;
 export const SCALE = 1_000_000n;
@@ -32,7 +33,7 @@ export const MOVE_SCALE = 25n;
 export const ENTRY = 10n * USDC;
 export const JOIN_SECONDS = 45;
 export const RUN_SECONDS = 60;
-export const ROUND_MARKETS = [TSLA, NVDA, AAPL, XAUT, GBP];
+export const ROUND_MARKETS = [TSLA, NVDA, AAPL, AMZN, XAUT, GBP];
 export const FAUCET_AMOUNT = 1000n * USDC;
 
 export interface Fixture {
@@ -75,7 +76,7 @@ export async function deployFixture(opts: { fund?: number } = {}): Promise<Fixtu
     ROUND_MARKETS,
   )) as Siroclimb;
   await oracle.setUpdater(deployer.address, true);
-  await oracle.pushPrices([0, 1, 2, 3, 4], BASE);
+  await oracle.pushPrices(MARKETS.map((_, i) => i), BASE);
 
   const gameAddress = await game.getAddress();
   const tokenAddress = await token.getAddress();

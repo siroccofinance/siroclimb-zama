@@ -15,6 +15,7 @@ const ASSETS = [
   { id: 'TSLAx', name: 'Tesla', ticker: 'TSLAx', kind: 'stock', token: 'cTSLAx', p0: 385.17, vol: 0.0011 },
   { id: 'NVDAx', name: 'NVIDIA', ticker: 'NVDAx', kind: 'stock', token: 'cNVDAx', p0: 165.01, vol: 0.0010 },
   { id: 'AAPLx', name: 'Apple', ticker: 'AAPLx', kind: 'stock', token: 'cAAPLx', p0: 349.03, vol: 0.0007 },
+  { id: 'AMZNx', name: 'Amazon', ticker: 'AMZNx', kind: 'stock', token: 'cAMZNx', p0: 252.56, vol: 0.0009 },
   { id: 'XAUt', name: 'Gold', ticker: 'XAUt', kind: 'gold', token: 'cXAUt', p0: 3625.1, vol: 0.0005 },
   { id: 'tGBP', name: 'British pound', ticker: 'GBP', kind: 'fx', token: 'ctGBP', p0: 1.3031, vol: 0.0003 },
 ];
