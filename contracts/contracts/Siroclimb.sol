@@ -155,6 +155,10 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
     mapping(address player => bool) public hasPack;
     mapping(address player => uint64) public lastPackAt;
 
+    /// @notice Prize owed to a round run (plaintext: standings are public at finalize), paid by `claim`.
+    mapping(uint256 runId => uint64) public prizeOf;
+    mapping(uint256 runId => bool) public claimed;
+
     /// @notice Lower bound of the house's cUSDC that is not yet promised to a live solo run.
     uint256 public reserveFloor;
 
@@ -456,6 +460,17 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
         emit RunStarted(runId, player, rd.market, uint32(roundId), rd.startsAt, 0, false, FHE.toBytes32(s.long), FHE.toBytes32(s.paid));
     }
 
+    /// @notice Permissionless, after the round's end: one run still climbing exits at the bell.
+    ///         Each exit costs about 1M gas on Sepolia, so a full round is closed in chunks: exits
+    ///         first (any number of transactions), then `closeRound` (cheap once every run exited).
+    function exitAtBell(uint256 runId) external {
+        Run storage r = _runs[runId];
+        if (!r.inRound || r.status != RunStatus.Live) revert WrongRunStatus(runId);
+        Round storage rd = _rounds[r.roundId];
+        if (block.timestamp < rd.endsAt) revert RoundNotOver(r.roundId, rd.endsAt);
+        _endRun(runId, rd.endsAt);
+    }
+
     /// @notice Permissionless, after the round's end: every run still climbing exits at the bell,
     ///         and every encrypted score becomes publicly decryptable (the standings reveal).
     function closeRound(uint256 roundId) external {
@@ -496,9 +511,24 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
         if (rd.status != RoundStatus.Closed) revert WrongRoundStatus(roundId);
         if (block.timestamp < rd.endsAt + ROUND_REFUND_AFTER) revert TooEarly(rd.endsAt + ROUND_REFUND_AFTER);
         rd.status = RoundStatus.Refunded;
-        uint256[] storage ids = _roundRuns[roundId];
-        for (uint256 i; i < ids.length; ++i) _pay(_runs[ids[i]].player, _sealed[ids[i]].paid);
         emit RoundRefunded(roundId);
+    }
+
+    /// @notice Permissionless: pays a round run what it is owed, its prize once the round is
+    ///         finalized, or its entry back (the encrypted amount it paid) if the round was refunded.
+    ///         One transfer per transaction keeps every payout under the per-transaction gas cap,
+    ///         even when many players tie for a prize.
+    function claim(uint256 runId) external {
+        Run storage r = _runs[runId];
+        if (!r.inRound || claimed[runId]) revert WrongRunStatus(runId);
+        RoundStatus st = _rounds[r.roundId].status;
+        claimed[runId] = true;
+        if (st == RoundStatus.Finalized) {
+            uint64 prize = prizeOf[runId];
+            if (prize == 0) revert WrongRunStatus(runId);
+            _pay(r.player, FHE.asEuint64(prize));
+        } else if (st == RoundStatus.Refunded) _pay(r.player, _sealed[runId].paid);
+        else revert WrongRoundStatus(r.roundId);
     }
 
     // ---------------------------------------------------------------- leverage packs
@@ -675,7 +705,7 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
                 uint256 i = order[k];
                 if (scores[i] == 0) continue; // unfunded entry: paid nothing, ranks last, wins nothing
                 address player = _runs[ids[i]].player;
-                if (prize != 0) _pay(player, FHE.asEuint64(prize));
+                prizeOf[ids[i]] = prize;          // paid by `claim`, one transfer per transaction
                 int32 pnl = int32(int256(uint256(scores[i])) - 1 - int256(uint256(SCALE)));
                 _record(player, pnl, true, uint8(pos + 1), uint32(roundId), prize);
             }

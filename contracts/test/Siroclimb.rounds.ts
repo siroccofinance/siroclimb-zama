@@ -13,6 +13,7 @@ import {
   at,
   balance,
   balances,
+  claimAll,
   closeAndFinalize,
   decrypt32,
   deployFixture,
@@ -123,6 +124,28 @@ describe("Siroclimb: rounds", function () {
     await expect(f.game.finalizeRound(0, scores, res.decryptionProof)).to.be.revertedWithCustomError(f.game, "WrongRoundStatus");
   });
 
+  it("exits at the bell one by one, then a cheap close; prizes are claimed once each, ties included", async function () {
+    const all = f.players.slice(0, 6);
+    const before = await balances(f, all);
+    for (let i = 0; i < all.length; i++) await joinRound(f, all[i], true, 0n); // same side, flat price: a 6-way tie
+    const [r, ids] = await f.game.getRound(0);
+    await expect(f.game.exitAtBell(ids[0])).to.be.revertedWithCustomError(f.game, "RoundNotOver");
+    await at(r.endsAt, 1);
+    for (const id of ids.slice(0, 4)) await f.game.exitAtBell(id);
+    await expect(f.game.exitAtBell(ids[0])).to.be.revertedWithCustomError(f.game, "WrongRunStatus");
+    await f.game.closeRound(0);                                   // the last 2 exit inside the close
+    await expect(f.game.claim(ids[0])).to.be.revertedWithCustomError(f.game, "WrongRoundStatus");
+    const hs = await f.game.roundScoreHandles(0);
+    const res = await fhevm.publicDecrypt([...hs]);
+    await f.game.finalizeRound(0, hs.map((h) => res.clearValues[h] as bigint), res.decryptionProof);
+    const share = (6n * ENTRY) / 6n;                              // everyone tied for 1st: the whole pot split 6 ways
+    for (const id of ids) expect(await f.game.prizeOf(id)).to.eq(share);
+    for (const id of ids) await f.game.connect(f.players[9]).claim(id); // anyone may claim for anyone
+    await expect(f.game.claim(ids[0])).to.be.revertedWithCustomError(f.game, "WrongRunStatus");
+    const after = await balances(f, all);
+    after.forEach((a, i) => expect(a - before[i]).to.eq(share - ENTRY));
+  });
+
   it("an unfunded entry ranks last, wins nothing and does not count in the pot", async function () {
     const poor = f.players[10];
     await f.token.connect(poor).setOperator(f.gameAddress, (await time.latest()) + 3600);
@@ -177,6 +200,7 @@ describe("Siroclimb: rounds", function () {
     await expect(f.game.refundRound(0)).to.be.revertedWithCustomError(f.game, "TooEarly");
     await time.increase(24 * 3600);
     await f.game.refundRound(0);
+    await claimAll(f, 0n);
     expect(await balance(f, f.alice)).to.eq(before);
     await expect(f.game.refundRound(0)).to.be.revertedWithCustomError(f.game, "WrongRoundStatus");
   });

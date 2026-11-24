@@ -40,10 +40,16 @@ for (;;) {
     const rc = Number(await game.roundCount());
     for (let id = Math.max(0, rc - 3); id < rc; id++) {
       const [r] = await game.getRound(id);
-      if (Number(r.status) === 1 && now > Number(r.endsAt) + 2) await k.send(game, 'closeRound', [id]).then(() => log('closed round', id)).catch(e => { if (!IGNORE.test(errText(e))) log('close', id, errText(e)); });
-      else if (Number(r.status) === 2) {
+      if (Number(r.status) === 1 && now > Number(r.endsAt) + 2) {
+        const [, ids] = await game.getRound(id);
+        for (const rid of ids) if (Number((await game.getRun(rid)).status) === 1) await k.send(game, 'exitAtBell', [rid]).catch(e => { if (!IGNORE.test(errText(e))) log('exit', rid, errText(e)); });
+        await k.send(game, 'closeRound', [id]).then(() => log('closed round', id)).catch(e => { if (!IGNORE.test(errText(e))) log('close', id, errText(e)); });
+      } else if (Number(r.status) === 2) {
         const { values, proof } = await publicDecrypt([...(await game.roundScoreHandles(id))]);
         await k.send(game, 'finalizeRound', [id, values, proof]).then(() => log('finalized round', id)).catch(e => { if (!IGNORE.test(errText(e))) log('finalize', id, errText(e)); });
+      } else if (Number(r.status) === 3) {
+        const [, ids] = await game.getRound(id);
+        for (const rid of ids) if ((await game.prizeOf(rid)) > 0n && !(await game.claimed(rid))) await k.send(game, 'claim', [rid]).then(() => log('claimed prize of run', rid)).catch(() => {});
       }
     }
   } catch (e) { log('tick', errText(e)); }
