@@ -230,7 +230,7 @@ async function sendCashOut(run) {
 /** Reads the settled run from the chain: the public long/short multipliers + the player's side. */
 export async function settleFromChain(run) {
   for (let i = 0; i < 40; i++) {
-    const r = await game.getRun(BigInt(run.id));
+    const r = await game.getRun(BigInt(run.cid));
     if (Number(r.status) === 2) {
       const mult = Number(run.side === 'long' ? r.multLong : r.multShort) / SCALE;
       const value = run.stake * mult;
@@ -238,7 +238,7 @@ export async function settleFromChain(run) {
       run.chain = { status: mult === 0 ? 'busted' : run.local?.status === 'busted' ? 'cashed' : run.local?.status || (Number(r.endAt) >= Number(r.startAt) + RUN_SECONDS ? 'expired' : 'cashed'),
         value, pnl: value - run.stake, pnlPct: (mult - 1) * 100, maxLeverage: LADDER[step], duration: Number(r.endAt - r.startAt),
         entryPrice: Number(r.entryPrice) / 10 ** PRICE_DECIMALS, exitPrice: Number(r.exitPrice) / 10 ** PRICE_DECIMALS,
-        multLong: Number(r.multLong) / SCALE, multShort: Number(r.multShort) / SCALE, chain: true, runId: run.id, tx: run.tx };
+        multLong: Number(r.multLong) / SCALE, multShort: Number(r.multShort) / SCALE, chain: true, runId: run.cid, tx: run.tx };
       if (!run.local) { run.status = run.chain.status; run.local = run.chain; run.waiters.splice(0).forEach(f => f(run.chain)); }
       run.unsub?.();
       run.settleWaiters.splice(0).forEach(f => f(run.chain));
@@ -249,7 +249,7 @@ export async function settleFromChain(run) {
   }
   throw new Error('run not settled yet');
 }
-export const liveRuns = () => [...runs.values()].filter(r => !r.chain);
+export const liveRuns = () => [...runs.values()].filter(r => !r.chain && !r.failed && r.cid);
 
 function record(run) {
   const h = store.get('history', []);
