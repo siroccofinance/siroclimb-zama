@@ -140,7 +140,7 @@ const walletBtn = $('#wallet'), walletMenu = $('#walletMenu');
 function renderWallet() {
   const a = api.account();
   walletBtn.classList.toggle('is-on', !!a);
-  walletBtn.textContent = a ? shortAddr(a) : mobile() ? 'Connect' : 'Connect wallet';
+  walletBtn.textContent = a ? (innerWidth <= 420 ? a.slice(0, 4) + '…' + a.slice(-2) : shortAddr(a)) : mobile() ? 'Connect' : 'Connect wallet';
 }
 async function connect(quiet) {
   if (api.account()) return true;

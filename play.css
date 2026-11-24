@@ -560,3 +560,11 @@ body[data-side="short"] .sideglow { --g: var(--short); }
 .share__copy { font: inherit; color: #9a4a26; font-weight: 600; background: none; border: 0; padding: 0; cursor: pointer; }
 .share__copy:hover { text-decoration: underline; }
 @media (max-width: 520px) { .share__go { flex-direction: column-reverse; } .share__go > * { flex: none; min-width: 0; width: 100%; } }
+
+/* small phones, wallet connected: the address and the balance fit beside the four icons */
+@media (max-width: 420px) {
+  .top__actions .icon { width: 28px; }
+  .top__actions .icon svg { width: 20px; height: 20px; }
+  .wallet__btn.is-on { padding: 0 8px; font-size: 12.5px; letter-spacing: -.01em; }
+  .balance { padding-left: 8px; }
+}
