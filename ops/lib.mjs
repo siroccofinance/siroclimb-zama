@@ -13,7 +13,7 @@ const json = p => JSON.parse(readFileSync(join(root, p), 'utf8'));
 export const ADDR = json('js/chain/deployments.json')['11155111'];
 export const ABI = json('js/chain/abi.json');
 export const MARKETS = json('js/chain/markets.json').markets;
-export const RPC_URL = process.env.RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
+export const RPC_URL = process.env.RPC_URL || 'https://sepolia.gateway.tenderly.co';
 export const provider = new JsonRpcProvider(RPC_URL, 11155111, { staticNetwork: true, batchMaxCount: 1, cacheTimeout: -1, pollingInterval: 2000 });
 export const game = new Contract(ADDR.Siroclimb, ABI.Siroclimb, provider);
 export const oracle = new Contract(ADDR.ClimbPriceOracle, ABI.ClimbPriceOracle, provider);
@@ -55,7 +55,7 @@ export async function fees() {
   const tip = (fd.maxPriorityFeePerGas ?? 0n) > MIN_TIP ? fd.maxPriorityFeePerGas : MIN_TIP;
   return { maxPriorityFeePerGas: tip, maxFeePerGas: (fd.maxFeePerGas ?? fd.gasPrice ?? 0n) + tip };
 }
-const RETRY = /nonce|underpriced|already known|replacement|timeout|ECONNRESET|socket|fetch failed|503|502|429|missing response|insufficient funds/i;
+const RETRY = /nonce|underpriced|already known|replacement|timeout|ECONNRESET|socket|fetch failed|503|502|429|missing response|insufficient funds|Panic\(50\)/i;
 /** One key, one queue: nonces tracked locally, resynced after any failure (public RPCs lag). */
 export class Sender {
   constructor(k, label = '') { this.wallet = new Wallet(k, provider); this.address = this.wallet.address; this.label = label; this.q = Promise.resolve(); this.nonce = null; this.gasSpent = 0n; }
@@ -102,6 +102,9 @@ export class Sender {
   async eth() { return Number(formatEther(await provider.getBalance(this.address))); }
 }
 
+/** A relayer request can hang without an answer: give up after `ms` so the caller retries. */
+export const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout: ${what}`)), ms))]);
+
 // ── FHE (Zama relayer SDK, Node build)
 let fheP = null;
 export function fhe() {
@@ -114,7 +117,7 @@ export async function encryptRun(sender, long, stakeUnits) {
     try {
       const input = (await fhe()).createEncryptedInput(ADDR.Siroclimb, sender);
       input.addBool(long); if (stakeUnits != null) input.add64(BigInt(stakeUnits));
-      const enc = await input.encrypt();
+      const enc = await withTimeout(input.encrypt(), 45_000, 'relayer encryption');
       return { handles: enc.handles.map(hex), proof: hex(enc.inputProof) };
     } catch (e) { if (attempt >= 4) throw e; await sleep(2000 + attempt * 2000); }   // relayer busy: retry
   }
@@ -136,10 +139,10 @@ export async function userDecrypt(wallet, items) {
   if (live.length) {
     for (let attempt = 0; ; attempt++) {
       try {
-        const res = await f.userDecrypt(live.map(i => ({ handle: i.handle, contractAddress: i.contract })), g.kp.privateKey, g.kp.publicKey, g.sig.replace('0x', ''), g.contracts, wallet.address, g.start, 1);
+        const res = await withTimeout(f.userDecrypt(live.map(i => ({ handle: i.handle, contractAddress: i.contract })), g.kp.privateKey, g.kp.publicKey, g.sig.replace('0x', ''), g.contracts, wallet.address, g.start, 1), 45_000, 'relayer user decryption');
         for (const i of live) out.set(i.handle, BigInt(res[i.handle]));
         break;
-      } catch (e) { if (attempt >= 5) throw e; await sleep(3000 + attempt * 2000); }
+      } catch (e) { if (process.env.TRACE) console.log('    user decryption retry', attempt, e.message?.slice(0, 80)); if (attempt >= 5) throw e; await sleep(3000 + attempt * 2000); }
     }
   }
   return items.map(i => out.get(i.handle) ?? 0n);
@@ -171,7 +174,7 @@ export async function view(fn, ok = () => true, tries = 15) {
 export async function publicDecrypt(handles) {
   for (let attempt = 0; ; attempt++) {
     try {
-      const res = await (await fhe()).publicDecrypt(handles);
+      const res = await withTimeout((await fhe()).publicDecrypt(handles), 60_000, 'relayer public decryption');
       return { values: handles.map(h => { const v = res.clearValues[h]; return typeof v === 'boolean' ? (v ? 1n : 0n) : BigInt(v); }), proof: res.decryptionProof };
     } catch (e) { if (attempt >= 8) throw e; await sleep(3000 + attempt * 1500); }   // the gateway may not have seen the ACL change yet
   }

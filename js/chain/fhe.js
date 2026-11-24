@@ -31,14 +31,25 @@ export function getFhe() {
 /** Starts loading the SDK and its WASM in the background (first encryption is then instant). */
 export const warmUp = () => getFhe().catch(() => {});
 
+/** A relayer request can hang without an answer: give up after `ms` and try again (3 attempts). */
+async function relayer(fn, ms, what) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await Promise.race([fn(), new Promise((_, rej) => setTimeout(() => rej(new Error(`The Zama relayer did not answer (${what})`)), ms))]); }
+    catch (e) { if (attempt >= 2) throw e; await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); }
+  }
+}
+
 const hex = b => '0x' + Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
 
 /** Encrypts a run's side (ebool) and optionally its stake (euint64, 6 decimals) for `sender`. */
 export async function encryptRun(sender, long, stakeUnits) {
-  const input = (await getFhe()).createEncryptedInput(ADDR.Siroclimb, sender);
-  input.addBool(long);
-  if (stakeUnits != null) input.add64(BigInt(stakeUnits));
-  const enc = await input.encrypt();
+  const fhe = await getFhe();
+  const enc = await relayer(() => {
+    const input = fhe.createEncryptedInput(ADDR.Siroclimb, sender);
+    input.addBool(long);
+    if (stakeUnits != null) input.add64(BigInt(stakeUnits));
+    return input.encrypt();
+  }, 40_000, 'encryption');
   return { handles: enc.handles.map(hex), proof: hex(enc.inputProof) };
 }
 
@@ -73,8 +84,9 @@ export async function userDecrypt(user, signTyped, items) {
   const out = new Map();
   if (live.length) {
     const g = await ensureGrant(user, signTyped);
-    const res = await (await getFhe()).userDecrypt(live.map(i => ({ handle: i.handle, contractAddress: i.contract })),
-      g.privateKey, g.publicKey, g.signature.replace('0x', ''), CONTRACTS(), user, g.start, g.days);
+    const fhe = await getFhe();
+    const res = await relayer(() => fhe.userDecrypt(live.map(i => ({ handle: i.handle, contractAddress: i.contract })),
+      g.privateKey, g.publicKey, g.signature.replace('0x', ''), CONTRACTS(), user, g.start, g.days), 40_000, 'decryption');
     for (const i of live) out.set(i.handle, toBig(res[i.handle]));
   }
   return items.map(i => out.get(i.handle) ?? 0n);
@@ -82,7 +94,8 @@ export async function userDecrypt(user, signTyped, items) {
 
 /** Public decryption with the KMS proof. */
 export async function publicDecrypt(handles) {
-  const res = await (await getFhe()).publicDecrypt(handles);
+  const fhe = await getFhe();
+  const res = await relayer(() => fhe.publicDecrypt(handles), 60_000, 'public decryption');
   return { values: handles.map(h => toBig(res.clearValues[h])), proof: res.decryptionProof };
 }
 
