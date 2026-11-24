@@ -242,6 +242,7 @@ function renderLobby() {
   const sel = C.mode === 'round' ? round.assetId : C.asset;
   for (const [id, c] of Object.entries(chip)) { c.b.setAttribute('aria-pressed', String(id === sel)); c.b.disabled = C.mode === 'round' && id !== sel; }
   api.focus(sel);
+  api.prepare({ mode: C.mode, side: C.side, stake: C.stake });     // encrypt the pick now, so the click only sends it
   $('#modeHint').textContent = C.mode === 'solo' ? (STAIRS ? 'The coin rolls on the live price. Leverage grows every 6 seconds. Your side and stake stay encrypted.' : 'Climb at your own pace. The coin steps up every 6 seconds.')
     : `60 seconds on ${byId[round.assetId].ticker} for everyone, sides sealed until the bell. The top 3 share the pot.`;
   $('#entryV').textContent = round.entry;
@@ -339,6 +340,8 @@ function enterGame(r) {
 }
 function onUpdate(u) {
   if (!run) return;
+  const info = api.runInfo(run.id);
+  if (info) run.startedAt = info.startedAt;              // optimistic start: the chain's start time snaps in when mined
   run.entryPrice = spark.entry = runEntry();             // a round fixes its entry on the bell
   if (TK) lvl.entry = run.entryPrice;
   upd = u;
@@ -415,16 +418,19 @@ function onEnd(res) {
   showResult(res);
   card = null; wantCard = true; hideTip();
   // stairs: the result waits for the scene (the box has pushed the coin, or the coin has fallen), wherever it ended
-  if (TK) setTimeout(() => { if (screen === 'ending') setScreen('result'); }, 4000);
+  // the result comes up fast; on chain it says "settling" until the payout is confirmed
+  if (TK) setTimeout(() => { if (screen === 'ending') setScreen('result'); }, api.mode === 'chain' ? 1500 : 4000);
   else setTimeout(() => setScreen('result'), bust ? 1250 : 1350);
   if (run.mode === 'round') {
     const id = run.id;
     api.whenRoundFinal(id).then(f => { if (run && run.id === id) fillRound(f); });
-  } else if (res.pending) {
+  } else if (res.pending && res.status !== 'failed') {
     const id = run.id;
     api.whenSettled(id).then(f => { if (run && run.id === id) settled(f); }).catch(() => {});
   }
 }
+// the value frozen at the cash out, re-checked against the exact path, before the chain answers
+api.onRefine((id, r) => { if (run && run.id === id && ended && !ended.chain) { ended = { ...ended, ...r }; showResult(ended); } });
 // the chain's verdict replaces the screen's estimate (same rules, oracle checkpoints)
 function settled(f) {
   ended = { ...ended, ...f };
@@ -441,7 +447,7 @@ function settled(f) {
 }
 function showResult(res) {
   const bust = res.status === 'busted', round = run.mode === 'round';
-  $('#rE').textContent = bust ? 'The coin fell' : res.status === 'expired' ? "Time's up, cashed out" : 'Cashed out';
+  $('#rE').textContent = res.status === 'failed' ? 'Start failed, nothing was staked' : bust ? 'The coin fell' : res.status === 'expired' ? "Time's up, cashed out" : 'Cashed out';
   $('#rV').textContent = round ? pct(res.pnlPct) : `${signed(res.pnl)} cUSDC`;
   $('.result').classList.toggle('is-win', res.pnl > 0.005);
   const a = byId[run.assetId];
@@ -451,10 +457,12 @@ function showResult(res) {
   $('#rS').innerHTML = stats.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
   const rr = $('#rR'); rr.hidden = !round && !res.pending;
   if (round) rr.innerHTML = res.chain ? 'Waiting for the bell and the standings reveal…' : 'Waiting for the round to end. Standings stay sealed until the bell…';
+  else if (res.status === 'failed') rr.innerHTML = 'The start transaction did not go through, so your stake never left your account.';
   else if (res.pending) rr.innerHTML = 'Settling on chain: encrypted payout…';
 }
 function fillRound(f) {
   const rr = $('#rR'); rr.hidden = false;
+  if (f.rank == null) { rr.innerHTML = `<b>Round settled, ${f.of} players.</b> See the standings in the leaderboard.`; return; }
   rr.innerHTML = f.prize ? `<b>${ord(f.rank)} of ${f.of}.</b> You win ${money(f.prize)} cUSDC from the pot.` : `<b>${ord(f.rank)} of ${f.of}.</b> The top 3 share the pot.`;
   if (f.prize) { sound.cash(); toast(`+${money(f.prize)} cUSDC prize`); }
 }

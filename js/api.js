@@ -77,6 +77,10 @@ export const openPack = () => impl.openPack();
 export const shareCard = (png, r) => impl.shareCard(png, r);
 export const onStatus = cb => (impl.onStatus ? impl.onStatus(cb) : noop());
 export const focus = id => impl.focus?.(id);
+/** Lets the back end prepare the next start (encrypt side and stake in the background). */
+export const prepare = o => impl.prepare?.(o);
+/** cb(runId, result) when the value shown at a cash out is re-checked before the chain answers. */
+export const onRefine = cb => (impl.onRefine ? impl.onRefine(cb) : noop());
 export const priceSource = id => impl.priceSource?.(id) ?? '';
 export const marketOpen = id => (impl.marketOpen ? impl.marketOpen(id) : true);
 export const onMarkets = cb => (impl.onMarkets ? impl.onMarkets(cb) : noop());

@@ -32,14 +32,22 @@ for (let k = 0; k < runs; k++) {
   const t0 = Date.now();
   await pg.click('#go');
   const tGame = await until(() => document.body.dataset.screen === 'game', 180_000);
+  console.log('  in game', (tGame - t0) / 1000);
   await wait(15000);
   const shown = await text('#cashV');
   const t1 = Date.now();
   await pg.click('#cash');
   const tResult = await until(() => document.body.dataset.screen === 'result', 180_000);
-  const tSettled = await until(() => /Settled on chain/.test(document.querySelector('#rR')?.textContent || ''), 180_000);
+  const shownOnResult = await text('#rV');                // the frozen value, before the chain answers
+  // the value on screen just before the chain answers (after the re-check against the exact path)
+  let shownBeforeSettle = shownOnResult, tSettled = null;
+  for (const tEnd = Date.now() + 180_000; Date.now() < tEnd;) {
+    if (/Settled on chain/.test(await text('#rR'))) { tSettled = Date.now(); break; }
+    shownBeforeSettle = await text('#rV'); await wait(100);
+  }
   const paid = (/Paid ([\d.,]+)/.exec(await text('#rR')) || [])[1];
-  const r = { run: k + 1, clickToCoin: (tGame - t0) / 1000, cashToResult: (tResult - t1) / 1000, cashToSettled: (tSettled - t1) / 1000, shownAtCashOut: shown, paid };
+  const settledOnResult = await text('#rV');
+  const r = { run: k + 1, clickToCoin: (tGame - t0) / 1000, cashToResult: (tResult - t1) / 1000, cashToSettled: (tSettled - t1) / 1000, shownAtCashOut: shown, shownOnResult, shownBeforeSettle, settledOnResult, paid };
   console.log(JSON.stringify(r)); out.push(r);
   await pg.click('#again'); await wait(1500);
 }
