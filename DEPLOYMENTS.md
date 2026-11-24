@@ -12,7 +12,7 @@ from `js/chain/deployments.json` (written by `npm run export -- sepolia`).
 
 | Contract | Address | Role |
 | --- | --- | --- |
-| `Siroclimb` | [`0x854431367bDf375fE9bf495dAf9433838007f0a6`](https://sepolia.etherscan.io/address/0x854431367bDf375fE9bf495dAf9433838007f0a6) | Solo runs and rounds with an encrypted side and stake, encrypted payouts, sealed standings, packs, sessions |
+| `Siroclimb` | [`0x422ff882a432f87bBeF48161eBC99f219BaD2B85`](https://sepolia.etherscan.io/address/0x422ff882a432f87bBeF48161eBC99f219BaD2B85) | Runs with an encrypted side and stake, encrypted payouts, KMS-verified posted results, packs, sessions (solo only) |
 | `ClimbPriceOracle` | [`0x9eAf890d59Bf5F38DE42FE92901E0F8607eFab07`](https://sepolia.etherscan.io/address/0x9eAf890d59Bf5F38DE42FE92901E0F8607eFab07) | Per-market price checkpoints: Pyth (trustless) or the bounded public fallback |
 | `ClimbLadder` | [`0x66119f55A4f7baC3c697684c114280917Cf0E366`](https://sepolia.etherscan.io/address/0x66119f55A4f7baC3c697684c114280917Cf0E366) | Run rules in clear: long and short multipliers on the oracle path (game scale 25x) |
 | `ClimbFaucet` | [`0x9a61CF739874c52785f923488F37ceF9817A3C10`](https://sepolia.etherscan.io/address/0x9a61CF739874c52785f923488F37ceF9817A3C10) | Mints USDCMock and wraps it into cUSDC for any account: 1,000 per claim, every 10 min |
@@ -20,7 +20,8 @@ from `js/chain/deployments.json` (written by `npm run export -- sepolia`).
 Earlier test deployments (made while fixing F10, F15, F24 and F44, and with keys shared with another
 project) are retired with nothing left open, and so is the five-market game that ran before AMZNx was
 added (`Siroclimb` `0x92e5…7649`, oracle `0xFB3B…19b1`, ladder `0xd6E0…bc20`: 44 runs, 2 rounds, all
-settled and claimed). The faucet and the mirrors carried over; every contract above was deployed from Siroclimb's own keys.
+settled and claimed), and the six-market game with rounds that followed it (`Siroclimb` `0x8544…f0a6`:
+3 runs, all settled, no round ever opened). The oracle, the ladder, the faucet and the mirrors carried over; every contract above was deployed from Siroclimb's own keys.
 
 Deployed by `0x6d3376996531a23aBe413AA9D1aC5902644a2A5d` (Siroclimb's dedicated deployer, also the creator of the mirrors). It owns
 `Siroclimb` and `ClimbPriceOracle` and is the only trusted price updater, used once to seed the
@@ -61,8 +62,6 @@ owner-only.
 | Ladder | 1x, 1.5x, 2x, 2.5x, 3x, 3.5x, 4x, one step every 6 s, 60 s runs |
 | Game scale | 25x: a 0.1 % move counts 2.5 % at 1x, 10 % at 4x |
 | Stake | Encrypted, clamped to 100 cUSDC on ciphertexts |
-| Rounds | Entry 10 cUSDC, 60 s to join, 60 s live, at most 24 players, prizes 50 / 30 / 20 % |
-| Round rotation | Every market, skipping any without a checkpoint in the last 60 s |
 | Packs | One per 10 min, Bronze 45 % / Silver 28 % / Gold 18 % / Diamond 9 % (1.5x / 2x / 3x / 4x cap) |
 | Entry | At most 60 s old; a Pyth update or a bounded public price can ride along with `startRun` |
 | Oracle | Pyth max age 25 s; fallback at most every 10 s, +/-0.5 % per checkpoint, +/-3 % from the last Pyth price |
