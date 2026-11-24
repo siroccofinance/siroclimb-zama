@@ -17,7 +17,7 @@
 // usage: node battery.mjs [players=16] [soloWaves=2] [rounds=2]
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { Contract } from 'ethers';
-import { ADDR, MARKETS, SCALE, Sender, USDC, balanceAt, balanceOf, settledBlock, view, batteryWallet, encryptRun, errText, faucet, fallbackFor, game, handle, key, ladder, openMarkets, publicDecrypt, pushIfStale, pythFor, sleep, token, userDecrypt } from './lib.mjs';
+import { ADDR, MARKETS, SCALE, Sender, USDC, balanceAt, provider, balanceOf, settledBlock, view, batteryWallet, encryptRun, errText, faucet, fallbackFor, game, handle, key, ladder, openMarkets, publicDecrypt, pushIfStale, pythFor, sleep, token, userDecrypt } from './lib.mjs';
 
 const N = Number(process.argv[2] || 16), WAVES = Number(process.argv[3] || 2), ROUNDS = Number(process.argv[4] || 2);
 const OFFSET = Number(process.env.OFFSET || 1);         // index 0 is the browser e2e player
@@ -169,6 +169,8 @@ async function roundGame(k) {
     await p.send(game, 'cashOut', [runOf.get(p.address.toLowerCase()), py ? py.updateData : []], py ? py.fee : 0n).catch(e => log('round cash out', p.name, errText(e)));
   }));
   await sleep(Math.max(0, endsAt * 1000 - Date.now()) + 4000);
+  // the chain's clock, not ours: wait for a block past the bell
+  await view(() => provider.getBlock('latest'), b => b && b.timestamp > endsAt + 1, 60);
   // exits at the bell one per transaction (F24: a 17-exit close needs ~18M gas, over Sepolia's per-transaction cap)
   for (const rid of ids) if (Number((await view(() => game.getRun(rid))).status) === 1) await keeper.send(game, 'exitAtBell', [rid]).catch(e => { if (!/WrongRunStatus/.test(errText(e))) throw e; });
   await keeper.send(game, 'closeRound', [id]).catch(e => { if (!/WrongRoundStatus/.test(errText(e))) throw e; });
