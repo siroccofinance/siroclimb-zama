@@ -2,7 +2,7 @@
 // faucet, balance decryption, an encrypted solo run, cash out, on-chain settlement.
 // usage: node tests/chain/solo.mjs [baseUrl] [market]
 import puppeteer from 'puppeteer-core';
-import { HDNodeWallet, Mnemonic } from 'ethers';
+import { HDNodeWallet, Mnemonic, Wallet } from 'ethers';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { injectWallet } from './wallet.mjs';
@@ -14,7 +14,7 @@ const key = process.env.PLAYER
   ? HDNodeWallet.fromMnemonic(Mnemonic.fromPhrase(readFileSync(`${dir}/battery.mnemonic`, 'utf8').trim()), `m/44'/60'/0'/0/${idx}`).privateKey
   : readFileSync(`${dir}/player.key`, 'utf8').trim();
 // a persistent profile per test wallet: the game session (and its gas) carries over between runs
-const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', userDataDir: `out/chrome-player-${idx}` });
+const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', userDataDir: `out/chrome-${new Wallet(key).address.slice(2, 10)}` });
 const pg = await b.newPage();
 const errors = [];
 pg.on('pageerror', e => { errors.push(e.message); console.log('PAGEERROR', e.message); });
@@ -29,7 +29,7 @@ await pg.goto(`${base}/#play`, { waitUntil: 'networkidle2', timeout: 60000 });
 await wait(3000);
 console.log(T(), 'player', w.address);
 await pg.click(`.market[data-v="${market}"]`);
-await pg.click('#wallet');
+if (/Connect/.test(await pg.$eval('#wallet', e => e.textContent))) await pg.click('#wallet');   // a returning wallet is already connected
 for (let i = 0; i < 120; i++) { const t = await pg.$eval('#wallet', e => e.textContent); const l = await line(); if (i % 5 === 0) console.log(T(), 'connect:', t, '|', l); if (!/Connecting/.test(t)) break; await wait(2000); }
 await shot('1connected');
 // decrypt the balance (wallet signs the daily grant)
