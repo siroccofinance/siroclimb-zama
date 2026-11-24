@@ -30,10 +30,7 @@ export const BASE = [3_860_000_000_000n, 1_650_000_000_000n, 3_500_000_000_000n,
 export const USDC = 1_000_000n;
 export const SCALE = 1_000_000n;
 export const MOVE_SCALE = 25n;
-export const ENTRY = 10n * USDC;
-export const JOIN_SECONDS = 45;
 export const RUN_SECONDS = 60;
-export const ROUND_MARKETS = [TSLA, NVDA, AAPL, AMZN, XAUT, GBP];
 export const FAUCET_AMOUNT = 1000n * USDC;
 
 export interface Fixture {
@@ -71,9 +68,6 @@ export async function deployFixture(opts: { fund?: number } = {}): Promise<Fixtu
     deployer.address,
     await token.getAddress(),
     await ladder.getAddress(),
-    ENTRY,
-    JOIN_SECONDS,
-    ROUND_MARKETS,
   )) as Siroclimb;
   await oracle.setUpdater(deployer.address, true);
   await oracle.pushPrices(MARKETS.map((_, i) => i), BASE);
@@ -111,21 +105,6 @@ export async function startRun(f: Fixture, signer: HardhatEthersSigner, market: 
   return (await f.game.runCount()) - 1n;
 }
 
-export async function joinRound(f: Fixture, signer: HardhatEthersSigner, long: boolean, roundId?: bigint) {
-  const { handles, proof } = await encrypt(f, signer, long);
-  const id = roundId ?? (await currentJoinable(f));
-  await f.game.connect(signer).joinRound(id, handles[0], proof);
-  return { roundId: id, runId: (await f.game.runCount()) - 1n };
-}
-
-/** The round id to join now: the open one, or the next one to open. */
-export async function currentJoinable(f: Fixture): Promise<bigint> {
-  const n = await f.game.roundCount();
-  if (n === 0n) return 0n;
-  const [r] = await f.game.getRound(n - 1n);
-  return BigInt(await time.latest()) + 1n < r.startsAt ? n - 1n : n;
-}
-
 export async function balance(f: Fixture, signer: HardhatEthersSigner): Promise<bigint> {
   const h = await f.token.confidentialBalanceOf(signer.address);
   if (h === ethers.ZeroHash) return 0n;
@@ -145,26 +124,6 @@ export async function decrypt64(f: Fixture, handle: string, signer: HardhatEther
 
 export async function decrypt32(f: Fixture, handle: string, signer: HardhatEthersSigner) {
   return fhevm.userDecryptEuint(FhevmType.euint32, handle, f.gameAddress, signer);
-}
-
-export async function closeAndFinalize(f: Fixture, roundId: bigint) {
-  await f.game.closeRound(roundId);
-  const handles = await f.game.roundScoreHandles(roundId);
-  const res = await fhevm.publicDecrypt([...handles]);
-  const scores = handles.map((h) => res.clearValues[h] as bigint);
-  await f.game.finalizeRound(roundId, scores, res.decryptionProof);
-  await claimAll(f, roundId);
-  return scores;
-}
-
-/** Pays every run of a round what it is owed (prize or refund), one claim per run. */
-export async function claimAll(f: Fixture, roundId: bigint) {
-  const [, ids] = await f.game.getRound(roundId);
-  const [r] = await f.game.getRound(roundId);
-  for (const id of ids) {
-    if (Number(r.status) === 3 && (await f.game.prizeOf(id)) === 0n) continue;
-    await f.game.claim(id);
-  }
 }
 
 /** TypeScript mirror of ClimbLadder.multipliers over [{t (s from start), price}]: 6-decimal multipliers. */

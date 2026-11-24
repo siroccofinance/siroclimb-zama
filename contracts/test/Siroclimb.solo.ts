@@ -273,7 +273,7 @@ describe("Siroclimb: solo runs", function () {
     const [r] = await f.game.results(0, 10);
     expect(r.player).to.eq(f.alice.address);
     expect(r.pnlPpm).to.eq(Number(expected.long - SCALE));
-    expect(r.inRound).to.eq(false);
+    expect(r.runId).to.eq(id);
     await expect(f.game.recordRun(id, mult, res.decryptionProof)).to.be.revertedWithCustomError(f.game, "WrongRunStatus");
     // the stake is still private
     const [, paidH] = await f.game.runHandles(id);
