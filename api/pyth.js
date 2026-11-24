@@ -25,7 +25,8 @@ export async function pythUpdate() {
   if (!key) return { ok: false, reason: 'no-key' };
   if (cache && Date.now() - cache.at < CACHE_MS) return cache.body;
   for (let attempt = 0; attempt <= MARKETS.length; attempt++) {
-    const feeds = MARKETS.map(m => m.pyth.toLowerCase()).filter(f => !notEntitled.has(f));
+    // pythLive false: the market's Pyth feed is not used (the stocks follow their 24/7 xStock, see prices.js)
+    const feeds = MARKETS.filter(m => m.pythLive !== false).map(m => m.pyth.toLowerCase()).filter(f => !notEntitled.has(f));
     if (!feeds.length) return { ok: false, reason: 'no-entitled-feed' };
     const url = `${HERMES}/v2/updates/price/latest?${feeds.map(f => `ids[]=${f}`).join('&')}&parsed=true&encoding=hex`;
     const r = await fetch(url, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(6000) });
