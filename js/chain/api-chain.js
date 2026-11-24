@@ -366,14 +366,14 @@ export async function publishRun(id) {
 export async function leaderboard(scope = 'today') {
   const n = Number(await game.resultCount());
   // plain objects: ethers' Result arrays are read-only, so sorting them throws
-  const list = (n ? [...(await game.results(Math.max(0, n - 400), 400))] : []).map(x => ({ player: x.player, timestamp: x.timestamp, pnlPpm: x.pnlPpm, inRound: x.inRound }));
+  const list = (n ? [...(await game.results(Math.max(0, n - 400), 400))] : []).map(x => ({ player: x.player, timestamp: x.timestamp, pnlPpm: x.pnlPpm }));
   await loadNames(list.map(x => x.player));
   const a = W.player()?.toLowerCase();
   const row = x => ({ name: x.player.toLowerCase() === a ? 'You' : nameOf(x.player), pnlPct: Number(x.pnlPpm) / 1e4, you: x.player.toLowerCase() === a });
   const since = scope === 'all' ? 0 : Date.now() / 1000 - 86400;
   const best = new Map();
   for (const x of list) {
-    if (x.inRound || Number(x.timestamp) < since) continue;
+    if (Number(x.timestamp) < since) continue;
     const k = x.player.toLowerCase(), b = best.get(k);
     if (!b || Number(x.pnlPpm) > Number(b.pnlPpm)) best.set(k, x);
   }
