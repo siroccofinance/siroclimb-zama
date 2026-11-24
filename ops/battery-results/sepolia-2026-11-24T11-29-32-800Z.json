@@ -1,0 +1,1435 @@
+{
+  "started": "2026-11-24T11:29:32.800Z",
+  "game": "0xf280D0B11E57BAe4Fd959E8E3b8b53FE33C8DE8c",
+  "players": 24,
+  "solo": [
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "cedarotter0",
+      "run": 0,
+      "market": "XAUt",
+      "side": "long",
+      "stake": 46,
+      "scenario": "pack",
+      "mult": 1.003,
+      "multLong": 1.003,
+      "multShort": 0.997,
+      "payout": 46.138,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "sterling.eth",
+      "run": 1,
+      "market": "XAUt",
+      "side": "long",
+      "stake": 60,
+      "scenario": "expire",
+      "mult": 1.003,
+      "multLong": 1.003,
+      "multShort": 0.997,
+      "payout": 60.18,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "oasissniper78",
+      "run": 3,
+      "market": "TSLAx",
+      "side": "long",
+      "stake": 34,
+      "scenario": "cash",
+      "mult": 1.0788,
+      "multLong": 1.0788,
+      "multShort": 0.9212,
+      "payout": 36.6792,
+      "seconds": 48,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "quiet.nomad",
+      "run": 4,
+      "market": "tGBP",
+      "side": "long",
+      "stake": 13,
+      "scenario": "unfunded",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 0,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "zephyrraven45",
+      "run": 2,
+      "market": "XAUt",
+      "side": "long",
+      "stake": 150,
+      "scenario": "clamp",
+      "mult": 1.003,
+      "multLong": 1.003,
+      "multShort": 0.997,
+      "payout": 100.3,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "nightfox33",
+      "run": 6,
+      "market": "AAPLx",
+      "side": "long",
+      "stake": 150,
+      "scenario": "clamp",
+      "mult": 1.0028,
+      "multLong": 1.0028,
+      "multShort": 0.9972,
+      "payout": 100.28,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "sterling_gecko",
+      "run": 5,
+      "market": "TSLAx",
+      "side": "long",
+      "stake": 150,
+      "scenario": "clamp",
+      "mult": 1.0788,
+      "multLong": 1.0788,
+      "multShort": 0.9212,
+      "payout": 107.88,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "night.eth",
+      "run": 18,
+      "market": "NVDAx",
+      "side": "long",
+      "stake": 63,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 63,
+      "seconds": 36,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "gecko25",
+      "run": 17,
+      "market": "XAUt",
+      "side": "short",
+      "stake": 150,
+      "scenario": "clamp",
+      "mult": 1.0207,
+      "multLong": 0.9793,
+      "multShort": 1.0207,
+      "payout": 102.07,
+      "seconds": 36,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "goldsniper89",
+      "run": 20,
+      "market": "XAUt",
+      "side": "short",
+      "stake": 44,
+      "scenario": "cash",
+      "mult": 1.0207,
+      "multLong": 0.9793,
+      "multShort": 1.0207,
+      "payout": 44.9108,
+      "seconds": 36,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "maxi0",
+      "run": 16,
+      "market": "NVDAx",
+      "side": "short",
+      "stake": 28,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 28,
+      "seconds": 48,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "trader53",
+      "run": 11,
+      "market": "XAUt",
+      "side": "short",
+      "stake": 8,
+      "scenario": "cash",
+      "mult": 1.0207,
+      "multLong": 0.9793,
+      "multShort": 1.0207,
+      "payout": 8.1656,
+      "seconds": 48,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "oasis.eth",
+      "run": 10,
+      "market": "XAUt",
+      "side": "long",
+      "stake": 63,
+      "scenario": "cash",
+      "mult": 0.9793,
+      "multLong": 0.9793,
+      "multShort": 1.0207,
+      "payout": 61.6959,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "zephyr.nomad",
+      "run": 12,
+      "market": "NVDAx",
+      "side": "short",
+      "stake": 38,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 38,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "goldape46",
+      "run": 14,
+      "market": "AAPLx",
+      "side": "long",
+      "stake": 49,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 49,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "maxi59",
+      "run": 8,
+      "market": "tGBP",
+      "side": "short",
+      "stake": 21,
+      "scenario": "expire",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 21,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "climber16",
+      "run": 15,
+      "market": "XAUt",
+      "side": "long",
+      "stake": 6,
+      "scenario": "expire",
+      "mult": 0.9578,
+      "multLong": 0.9578,
+      "multShort": 1.0422,
+      "payout": 5.7468,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "night.raven",
+      "run": 7,
+      "market": "TSLAx",
+      "side": "long",
+      "stake": 49,
+      "scenario": "expire",
+      "mult": 0.964,
+      "multLong": 0.964,
+      "multShort": 1.036,
+      "payout": 47.236,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "raven85",
+      "run": 19,
+      "market": "tGBP",
+      "side": "long",
+      "stake": 25,
+      "scenario": "expire",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 25,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "oasislynx86",
+      "run": 13,
+      "market": "NVDAx",
+      "side": "long",
+      "stake": 45,
+      "scenario": "expire",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 45,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "gold_nomad",
+      "run": 9,
+      "market": "TSLAx",
+      "side": "long",
+      "stake": 58,
+      "scenario": "expire",
+      "mult": 0.964,
+      "multLong": 0.964,
+      "multShort": 1.036,
+      "payout": 55.912,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": false,
+      "wave": 1,
+      "player": "zephyr.eth",
+      "error": "startRun reverted 0x171b3e054d118a6113957720293a3d0defd015de6e1cf7cec6d41b373e4ef672"
+    },
+    {
+      "ok": false,
+      "wave": 1,
+      "player": "gold.maxi",
+      "error": "startRun reverted 0x094c0e0bdcfde3dd6020db91c4c0008eaf7f80d53064eabc8bd123013767367b"
+    },
+    {
+      "ok": false,
+      "wave": 1,
+      "player": "sterling.ape",
+      "error": "watchdog: solo run took over 15 min"
+    },
+    {
+      "ok": false,
+      "wave": 1,
+      "player": "night_monk",
+      "error": "watchdog: solo run took over 15 min"
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "gold.maxi",
+      "run": 25,
+      "market": "AAPLx",
+      "side": "short",
+      "stake": 26,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 26,
+      "seconds": 36,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "maxi59",
+      "run": 23,
+      "market": "TSLAx",
+      "side": "long",
+      "stake": 7,
+      "scenario": "cash",
+      "mult": 1.1591,
+      "multLong": 1.1591,
+      "multShort": 0.8409,
+      "payout": 8.1137,
+      "seconds": 36,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "night.eth",
+      "run": 31,
+      "market": "NVDAx",
+      "side": "long",
+      "stake": 49,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 49,
+      "seconds": 24,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "night.raven",
+      "run": 28,
+      "market": "TSLAx",
+      "side": "long",
+      "stake": 150,
+      "scenario": "clamp",
+      "mult": 0.972575,
+      "multLong": 0.972575,
+      "multShort": 1.027425,
+      "payout": 97.2575,
+      "seconds": 36,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "zephyr.nomad",
+      "run": 39,
+      "market": "NVDAx",
+      "side": "short",
+      "stake": 61,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 61,
+      "seconds": 36,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "maxi0",
+      "run": 26,
+      "market": "tGBP",
+      "side": "short",
+      "stake": 8,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 8,
+      "seconds": 48,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "oasissniper78",
+      "run": 24,
+      "market": "XAUt",
+      "side": "short",
+      "stake": 10,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 10,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "nightfox33",
+      "run": 29,
+      "market": "XAUt",
+      "side": "long",
+      "stake": 29,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 29,
+      "seconds": 48,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "goldsniper89",
+      "run": 38,
+      "market": "XAUt",
+      "side": "short",
+      "stake": 41,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 41,
+      "seconds": 48,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "sterling.ape",
+      "run": 40,
+      "market": "TSLAx",
+      "side": "long",
+      "stake": 40,
+      "scenario": "cash",
+      "mult": 0.96545,
+      "multLong": 0.96545,
+      "multShort": 1.03455,
+      "payout": 38.618,
+      "seconds": 36,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "oasis.eth",
+      "run": 43,
+      "market": "AAPLx",
+      "side": "long",
+      "stake": 38,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 38,
+      "seconds": 24,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "zephyr.nomad",
+      "run": 39,
+      "scenario": "publish",
+      "mult": 1
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "night.raven",
+      "run": 28,
+      "scenario": "publish",
+      "mult": 0.972575
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "oasislynx86",
+      "run": 35,
+      "market": "AAPLx",
+      "side": "long",
+      "stake": 54,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 54,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "zephyr.eth",
+      "run": 32,
+      "market": "AAPLx",
+      "side": "short",
+      "stake": 55,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 55,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "goldape46",
+      "run": 27,
+      "market": "tGBP",
+      "side": "long",
+      "stake": 20,
+      "scenario": "expire",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 20,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "sterling_gecko",
+      "run": 34,
+      "market": "XAUt",
+      "side": "short",
+      "stake": 42,
+      "scenario": "expire",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 42,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "sterling.eth",
+      "run": 42,
+      "market": "XAUt",
+      "side": "short",
+      "stake": 150,
+      "scenario": "clamp",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 100,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "zephyrraven45",
+      "run": 33,
+      "market": "XAUt",
+      "side": "long",
+      "stake": 23,
+      "scenario": "expire",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 23,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "climber16",
+      "run": 36,
+      "market": "NVDAx",
+      "side": "long",
+      "stake": 33,
+      "scenario": "expire",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 33,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "sterling_gecko",
+      "run": 34,
+      "scenario": "publish",
+      "mult": 1
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "climber16",
+      "run": 36,
+      "scenario": "publish",
+      "mult": 1
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "cedarotter0",
+      "run": 37,
+      "market": "TSLAx",
+      "side": "short",
+      "stake": 40,
+      "scenario": "expire",
+      "mult": 1.043825,
+      "multLong": 0.956175,
+      "multShort": 1.043825,
+      "payout": 41.753,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "night_monk",
+      "run": 41,
+      "market": "TSLAx",
+      "side": "long",
+      "stake": 18,
+      "scenario": "expire",
+      "mult": 0.96545,
+      "multLong": 0.96545,
+      "multShort": 1.03455,
+      "payout": 17.3781,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "gecko25",
+      "run": 30,
+      "market": "AAPLx",
+      "side": "long",
+      "stake": 6,
+      "scenario": "expire",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 6,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "night_monk",
+      "run": 41,
+      "scenario": "publish",
+      "mult": 0.96545
+    },
+    {
+      "ok": true,
+      "wave": 2,
+      "player": "gecko25",
+      "run": 30,
+      "scenario": "publish",
+      "mult": 1
+    },
+    {
+      "ok": false,
+      "wave": 2,
+      "player": "raven85",
+      "error": "watchdog: solo run took over 15 min"
+    },
+    {
+      "ok": false,
+      "wave": 2,
+      "player": "trader53",
+      "error": "watchdog: solo run took over 15 min"
+    },
+    {
+      "ok": false,
+      "wave": 2,
+      "player": "gold_nomad",
+      "error": "watchdog: solo run took over 15 min"
+    }
+  ],
+  "rounds": [
+    {
+      "ok": true,
+      "round": 0,
+      "market": "TSLAx",
+      "players": 24,
+      "funded": 23,
+      "pot": 230,
+      "standings": [
+        {
+          "player": "sterling_gecko",
+          "side": "long",
+          "score": 1136526,
+          "pnlPct": 13.6525,
+          "prize": 115,
+          "ok": true
+        },
+        {
+          "player": "gold.maxi",
+          "side": "long",
+          "score": 1128826,
+          "pnlPct": 12.8825,
+          "prize": 10.454545,
+          "ok": true
+        },
+        {
+          "player": "goldape46",
+          "side": "long",
+          "score": 1128826,
+          "pnlPct": 12.8825,
+          "prize": 10.454545,
+          "ok": true
+        },
+        {
+          "player": "night_monk",
+          "side": "long",
+          "score": 1128826,
+          "pnlPct": 12.8825,
+          "prize": 10.454545,
+          "ok": true
+        },
+        {
+          "player": "night.raven",
+          "side": "long",
+          "score": 1128826,
+          "pnlPct": 12.8825,
+          "prize": 10.454545,
+          "ok": true
+        },
+        {
+          "player": "oasissniper78",
+          "side": "long",
+          "score": 1128826,
+          "pnlPct": 12.8825,
+          "prize": 10.454545,
+          "ok": true
+        },
+        {
+          "player": "gecko25",
+          "side": "long",
+          "score": 1128826,
+          "pnlPct": 12.8825,
+          "prize": 10.454545,
+          "ok": true
+        },
+        {
+          "player": "zephyr.nomad",
+          "side": "long",
+          "score": 1128826,
+          "pnlPct": 12.8825,
+          "prize": 10.454545,
+          "ok": true
+        },
+        {
+          "player": "nightfox33",
+          "side": "long",
+          "score": 1128826,
+          "pnlPct": 12.8825,
+          "prize": 10.454545,
+          "ok": true
+        },
+        {
+          "player": "trader53",
+          "side": "long",
+          "score": 1128826,
+          "pnlPct": 12.8825,
+          "prize": 10.454545,
+          "ok": true
+        },
+        {
+          "player": "maxi0",
+          "side": "long",
+          "score": 1128826,
+          "pnlPct": 12.8825,
+          "prize": 10.454545,
+          "ok": true
+        },
+        {
+          "player": "gold_nomad",
+          "side": "long",
+          "score": 1128826,
+          "pnlPct": 12.8825,
+          "prize": 10.454545,
+          "ok": true
+        },
+        {
+          "player": "zephyr.eth",
+          "side": "long",
+          "score": 1122326,
+          "pnlPct": 12.2325,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "raven85",
+          "side": "long",
+          "score": 1121951,
+          "pnlPct": 12.195,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "goldsniper89",
+          "side": "short",
+          "score": 878051,
+          "pnlPct": -12.195,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "cedarotter0",
+          "side": "short",
+          "score": 877676,
+          "pnlPct": -12.2325,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "sterling.ape",
+          "side": "short",
+          "score": 877676,
+          "pnlPct": -12.2325,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "oasislynx86",
+          "side": "short",
+          "score": 877676,
+          "pnlPct": -12.2325,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "sterling.eth",
+          "side": "short",
+          "score": 871176,
+          "pnlPct": -12.8825,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "zephyrraven45",
+          "side": "short",
+          "score": 871176,
+          "pnlPct": -12.8825,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "oasis.eth",
+          "side": "short",
+          "score": 871176,
+          "pnlPct": -12.8825,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "night.eth",
+          "side": "short",
+          "score": 871176,
+          "pnlPct": -12.8825,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "maxi59",
+          "side": "short",
+          "score": 863476,
+          "pnlPct": -13.6525,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "quiet.nomad",
+          "side": "short",
+          "score": 0,
+          "pnlPct": null,
+          "prize": 0,
+          "ok": true
+        }
+      ]
+    },
+    {
+      "ok": false,
+      "round": 1,
+      "market": "NVDAx",
+      "players": 24,
+      "funded": 24,
+      "pot": 240,
+      "standings": [
+        {
+          "player": "goldape46",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": false
+        },
+        {
+          "player": "maxi0",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "trader53",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "sterling.eth",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "zephyrraven45",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "night.eth",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "oasislynx86",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "night.raven",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "goldsniper89",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "sterling.ape",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "night_monk",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "zephyr.nomad",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "gold_nomad",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "gold.maxi",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "zephyr.eth",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "oasis.eth",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "climber16",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "oasissniper78",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "maxi59",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "raven85",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "gecko25",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "nightfox33",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "sterling_gecko",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        },
+        {
+          "player": "cedarotter0",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 10,
+          "ok": true
+        }
+      ]
+    }
+  ],
+  "findings": [],
+  "gas": {},
+  "finished": "2026-11-24T12:35:31.348Z",
+  "summary": {
+    "solo": "48 / 55",
+    "rounds": "1 / 2",
+    "deployerEthSpent": 0.8511
+  }
+}

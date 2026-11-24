@@ -45,3 +45,45 @@ was fixed. The on-chain battery reports are at the end.
 | F36 | One battery run reported multiplier 0 and payout 0 while the chain said 1. The check had re-read the run's handles from a lagging node instead of reusing the read that had shown them set. | Battery | The handles come from the read that passed the wait. |
 | F37 | Key hygiene: the first deployments and batteries used keys from another project's folder, and the mirrors' creator was the shared deployer. | Ops, contracts | Everything moved to Siroclimb's own keys (F4), with a full redeploy and a new battery. The repo has no path to the other project's keys; only the Pyth API key is shared. |
 | F38 | New deployment, wave 1: two starts on stock markets reverted with `StaleEntry`. Under load the reference price lookup timed out, so no fallback price rode along; separately, the browser re-decrypted the balance from a lagging node right after a payout and showed the pre-payout amount. | Battery, front | The battery retries the price lookup and resends a start that reverted for lack of a fresh entry. The front decrypts the balance as of the payout or claim block (`blockTag`), which is exact even on a lagging node. |
+| F39 | Battery, 24-player round on the new deployment: one winner's prize was not claimed by the battery, because a lagging node answered `prizeOf = 0`. Its balance check failed, and the sweep claimed the prize afterwards (the pot was fully paid). | Battery | Prizes are read as of the finalize block. |
+
+## Browser end to end (real front, Sepolia, injected test wallet)
+
+| Flow | Result |
+| --- | --- |
+| Solo (`tests/chain/solo.mjs`) | Connect: two wallet transactions (operator approval, session grant), then the first-visit faucet. Balance decrypted (one EIP-712 grant). The run starts in one transaction (side and stake encrypted, entry price riding along), the cash out is paid as an encrypted transfer, and the decrypted balance moves by exactly the payout. 0 console errors. |
+| Round (`tests/chain/round.mjs`) | Practice bots took 3 seats with their own encrypted sides, and every other player showed *Sealed* while live. The browser's autopilot exited the runs at the bell, closed the round, got the KMS reveal and finalized. The player came 2nd of 4, the prize was claimed, and the leaderboard showed the round. Nothing ran on our side. |
+
+## On-chain battery (Sepolia, current deployment)
+
+`ops/battery.mjs` on `Siroclimb` `0xf280…DE8c`: 24 players from Siroclimb's own mnemonic plus one
+unfunded wallet. Every settled solo run is checked end to end: the public multipliers match
+`ClimbLadder` recomputed between the recorded checkpoints, the decrypted multiplier is the one of the
+player's side, `paid` and the payout are exact, and the player's decrypted cUSDC balance at the exact
+blocks moved by `paid x mult - paid`. Every round checks each decrypted score against the player's
+side, ranks and prizes (ties share) against a local recomputation, and each balance against
+`prize - entry`.
+
+**Final runs after the fixes up to F41: 52 / 52 solo runs and 3 / 3 rounds of 24 players pass every
+check.**
+
+| Run | Result |
+| --- | --- |
+| `battery.mjs 24 2 2` (solo waves) | Wave 1: 27 / 27, wave 2: 25 / 25. Early cash outs, runs left to expire and settled by a third party, stakes above the cap (clamped on ciphertexts), the unfunded player (moves 0, paid 0), packed runs (capped path picked on ciphertexts), published runs (KMS proof). Real price moves included (multipliers from 0.755 to 1.339). |
+| Round 2 (AAPLx) | PASS: 24 players (23 funded plus the unfunded one), pot 230 cUSDC, a tie at the top shares 1st to 3rd, 24 / 24 checks |
+| Round 3 (XAUt) | Stopped by F41 (an exit at the bell racing a cash out), then finished by `sweep.mjs`: pot fully paid |
+| `battery.mjs 24 0 2` (rounds 4 and 5, tGBP) | PASS and PASS: pots 230 and 240 cUSDC, ties share their places, 48 / 48 checks |
+| After all runs | `audit.mjs`: 259 / 259 settled runs reproduced from public chain data, 6 / 6 rounds finalized with every pot paid. `sweep.mjs`: nothing left open |
+
+Earlier runs on this deployment, before F38 to F41, are in `ops/battery-results/` too (48 / 55 solo
+runs with no check failure among those that settled, round 0 PASS with 24 players, round 1 23 / 24 because of F39).
+
+Measured gas on Sepolia (F35): `startRun` up to 3.77M, `joinRound` 2.99M, `cashOut` 2.21M,
+`settleRun` 1.88M, `exitAtBell` 1.04M, `closeRound` 3.06M, `finalizeRound` 8.71M for 24 players.
+
+Previous deployment (retired, same contracts before the key move): 249 runs settled, every path
+reproduced, and 4 rounds, two of them with 24 players, finalized with every pot paid.
+
+Raw results: `ops/battery-results/`.
+| F40 | Last battery, wave 1: 4 players never got past encryption, the in-process relayer client wedging like F33, this time on `encrypt`. | Battery | Input encryptions also run in the worker processes (`decrypt-worker.mjs` handles both), queued with the decryptions. |
+| F41 | Battery round: an `exitAtBell` sent with a fixed gas limit (no estimate) reverted because the player's own cash out had landed just before it. | Battery | A reverted exit is fine when the run shows as ended. The sweep, keeper and autopilot already ignore it. |

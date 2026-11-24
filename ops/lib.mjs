@@ -133,13 +133,15 @@ export function fhe() {
 }
 const hex = b => '0x' + Buffer.from(b).toString('hex');
 export async function encryptRun(sender, long, stakeUnits) {
+  // in a worker process, like user decryptions (F40): an in-process client could wedge under load
   for (let attempt = 0; ; attempt++) {
     try {
-      const input = (await fhe()).createEncryptedInput(ADDR.Siroclimb, sender);
-      input.addBool(long); if (stakeUnits != null) input.add64(BigInt(stakeUnits));
-      const enc = await withTimeout(input.encrypt(), 45_000, 'relayer encryption');
-      return { handles: enc.handles.map(hex), proof: hex(enc.inputProof) };
-    } catch (e) { if (attempt >= 4) throw e; await sleep(2000 + attempt * 2000); }   // relayer busy: retry
+      return await slot(() => worker({ encrypt: { sender, long, stake: stakeUnits == null ? null : String(stakeUnits) } }, 60_000));
+    } catch (e) {
+      if (process.env.TRACE) console.log('    encryption retry', attempt, e.message?.slice(0, 80));
+      if (attempt >= 4) throw e;
+      await sleep(2000 + attempt * 2000);
+    }
   }
 }
 // The relayer's user decryption slows down sharply with many concurrent requests (F31): at most
@@ -160,7 +162,7 @@ export async function userDecrypt(wallet, items) {
   if (live.length) {
     for (let attempt = 0; ; attempt++) {
       try {
-        const values = await slot(() => worker(wallet.privateKey, live, 60_000));
+        const values = await slot(() => worker({ key: wallet.privateKey, items: live }, 60_000));
         live.forEach((i, k) => out.set(i.handle, BigInt(values[k])));
         break;
       } catch (e) {
@@ -172,7 +174,7 @@ export async function userDecrypt(wallet, items) {
   }
   return items.map(i => out.get(i.handle) ?? 0n);
 }
-function worker(key, items, ms) {
+function worker(job, ms) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'decrypt-worker.mjs')], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, TRACE: '' } });
     let out = '', err = '';
@@ -180,7 +182,7 @@ function worker(key, items, ms) {
     child.stdout.on('data', d => (out += d));
     child.stderr.on('data', d => (err += d));
     child.on('close', code => { clearTimeout(timer); if (code === 0) { try { resolve(JSON.parse(out)); } catch (e) { reject(e); } } else reject(new Error(err.trim().split('\n').pop() || `worker exit ${code}`)); });
-    child.stdin.end(JSON.stringify({ key, items }));
+    child.stdin.end(JSON.stringify(job));
   });
 }
 export async function balanceOf(wallet, notHandle = null) {
