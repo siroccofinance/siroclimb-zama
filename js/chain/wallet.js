@@ -13,6 +13,9 @@ import { ABI, ADDR, CHAIN_HEX, CHAIN_ID, RPC_URL, SESSION_FUND_ETH, SESSION_MIN_
 // a request the RPC never answers fails after 20 s (ethers waits 5 minutes by default), and is retried
 const rpcRequest = new FetchRequest(RPC_URL);
 rpcRequest.timeout = 20_000;
+// on HTTP 429 ethers retries up to 12 times with growing back-off (minutes of silence): keep it short,
+// our own senders retry rate limits anyway (F34)
+rpcRequest.setThrottleParams({ maxAttempts: 3, slotInterval: 500 });
 export const rpc = new JsonRpcProvider(rpcRequest, CHAIN_ID, { staticNetwork: true, batchMaxCount: 1, cacheTimeout: -1, pollingInterval: 1000 });
 export const game = new Contract(ADDR.Siroclimb, ABI.Siroclimb, rpc);
 export const oracle = new Contract(ADDR.ClimbPriceOracle, ABI.ClimbPriceOracle, rpc);
