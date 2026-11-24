@@ -5,6 +5,7 @@ import { ethers, fhevm } from "hardhat";
 import {
   BASE,
   AAPL,
+  AMZN,
   NVDA,
   type Fixture,
   FAUCET_AMOUNT,
@@ -221,6 +222,30 @@ describe("Siroclimb: solo runs", function () {
     const p1 = (BASE[XAUT] * 10_040n) / 10_000n;
     const { expected } = await runAndPath(true, 10n * USDC, [[11, p1]], 15, XAUT);
     expect(await balance(f, f.alice)).to.eq(before - 10n * USDC + (10n * USDC * expected.long) / SCALE);
+  });
+
+  it("Amazon (AMZNx) runs like the other stocks, short side, Pyth update on entry", async function () {
+    const feed = await f.oracle.feedIds();
+    expect(feed[AMZN]).to.eq("0xb5d0e0fa58a1f8b81498ae670ce93c872d14434b72c364885d4fa1b257cbb07a"); // Equity.US.AMZN/USD
+    const before = await balance(f, f.alice);
+    const now = await time.latest();
+    const upd = await f.pyth.createPriceFeedUpdateData(feed[AMZN], 25_200n * 10n ** 6n, 10n, -8, 25_200n * 10n ** 6n, 10n, now + 1, now);
+    const { handles, proof } = await encrypt(f, f.alice, false, 40n * USDC);
+    await time.setNextBlockTimestamp(now + 1);
+    await f.game.connect(f.alice).startRun(AMZN, handles[0], handles[1], proof, false, [upd], 0, { value: 1 });
+    const id = (await f.game.runCount()) - 1n;
+    const run = await f.game.getRun(id);
+    expect(run.market).to.eq(AMZN);
+    expect(run.entryPrice).to.eq(252n * 10n ** 10n);
+    const p1 = (run.entryPrice * 9_985n) / 10_000n; // -0.15 % at 20 s (2.5x): the short climbs
+    await at(run.startAt, 20);
+    await price(f, AMZN, p1);
+    await at(run.startAt, 26);
+    await f.game.connect(f.alice).cashOut(id, []);
+    const expected = model([{ t: 0, p: run.entryPrice }, { t: 20, p: p1 }]);
+    expect(expected.short).to.be.gt(SCALE);
+    expect((await f.game.getRun(id)).multShort).to.eq(expected.short);
+    expect(await balance(f, f.alice)).to.eq(before - 40n * USDC + (40n * USDC * expected.short) / SCALE);
   });
 
   it("keeps a reserve able to pay any live run at its maximum", async function () {

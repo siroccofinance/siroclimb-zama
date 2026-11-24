@@ -4,6 +4,7 @@ import { fhevm } from "hardhat";
 import {
   BASE,
   AAPL,
+  AMZN,
   ENTRY,
   NVDA,
   type Fixture,
@@ -180,11 +181,11 @@ describe("Siroclimb: rounds", function () {
   });
 
   it("rotates markets and caps players", async function () {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       const id = await f.game.roundCount();
       await joinRound(f, f.alice, true, id);
       const [r] = await f.game.getRound(id);
-      expect(r.market).to.eq([TSLA, NVDA, AAPL][i]);
+      expect(r.market).to.eq([TSLA, NVDA, AAPL, AMZN][i]);
       await time.setNextBlockTimestamp(Number(r.startsAt) + 1);
     }
     expect(await f.game.MAX_ROUND_PLAYERS()).to.eq(24n);
