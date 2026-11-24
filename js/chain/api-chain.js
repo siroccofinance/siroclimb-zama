@@ -96,10 +96,10 @@ export function disconnect() { W.disconnectWallet(); ready = false; setBal(null)
 let balHandle = null;
 export async function refreshBalance(expectChange = false) {
   const a = W.account(); if (!a) return null;
-  let h = await token.confidentialBalanceOf(a);
+  let h = await (typeof expectChange === 'number' ? W.view(() => token.confidentialBalanceOf(a, { blockTag: expectChange })) : token.confidentialBalanceOf(a));
   // after a transfer, a lagging RPC node can still serve the old balance handle: wait for the new one
-  for (let i = 0; expectChange && h === balHandle && i < 10; i++) { await sleep(2000); h = await token.confidentialBalanceOf(a); }
-  if (expectChange && h === balHandle) return bal;
+  for (let i = 0; expectChange === true && h === balHandle && i < 10; i++) { await sleep(2000); h = await token.confidentialBalanceOf(a); }
+  if (expectChange === true && h === balHandle) return bal;
   if (!hasGrant(a)) status({ kind: 'decrypt', text: 'Sign the decryption grant in your wallet (once a day)' });
   else status({ kind: 'decrypt', text: 'Decrypting your balance…' });
   try {
@@ -110,7 +110,8 @@ export async function refreshBalance(expectChange = false) {
   } finally { status(null); }
 }
 export const decryptBalance = refreshBalance;
-const refreshSoon = () => { if (W.account() && hasGrant(W.account())) setTimeout(() => refreshBalance(true).catch(() => {}), 1500); };
+/** Re-decrypts the balance; `atBlock`: as of the block of a known transfer (exact even on a lagging node). */
+const refreshSoon = (atBlock = true) => { if (W.account() && hasGrant(W.account())) setTimeout(() => refreshBalance(atBlock).catch(() => {}), 1500); };
 
 export async function faucet() {
   const s = await session();
@@ -218,6 +219,7 @@ async function sendCashOut(run) {
   try {
     const rc = await s.send(game, 'cashOut', [BigInt(run.id), pyth ? pyth.updateData : []], pyth ? pyth.fee : 0n, 'cashOut');
     run.tx = rc.hash;
+    run.txBlock = rc.blockNumber;
   } catch (e) {
     if (!/WrongRunStatus/.test(W.errText(e))) throw e;      // already settled (expiry, round close)
   } finally { status(null); }
@@ -239,7 +241,7 @@ export async function settleFromChain(run) {
       if (!run.local) { run.status = run.chain.status; run.local = run.chain; run.waiters.splice(0).forEach(f => f(run.chain)); }
       run.unsub?.();
       run.settleWaiters.splice(0).forEach(f => f(run.chain));
-      if (run.mode === 'solo') { if (bal != null) setBal(bal - 0 + value); refreshSoon(); record(run); }
+      if (run.mode === 'solo') { if (bal != null) setBal(bal - 0 + value); refreshSoon(run.txBlock ?? true); record(run); }
       return run.chain;
     }
     await sleep(3000);
