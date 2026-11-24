@@ -144,7 +144,10 @@ body[data-screen="intro"] .stage::before { opacity: 0; }
 .go__meta { margin: 0; color: var(--ink-soft); font-size: 15px; text-align: right; min-height: 1.45em; }
 
 /* ───────── lobby ───────── */
-.lobby__main { display: grid; gap: 22px; max-width: 900px; min-width: 0; }
+.lobby__main { display: grid; gap: 22px; max-width: 1080px; min-width: 0; }
+/* the summary line wraps instead of squeezing the market row */
+@media (min-width: 768px) { .lobby__main { flex: 1 1 auto; } .lobby .go { flex: 0 1 380px; min-width: 260px; } }
+.lobby .go__meta { text-wrap: balance; }
 .lobby .title { margin-bottom: 4px; }
 .field { display: grid; gap: 10px; min-width: 0; }
 .fields { display: flex; gap: 32px; flex-wrap: wrap; }
@@ -159,7 +162,9 @@ body[data-screen="intro"] .stage::before { opacity: 0; }
 .seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background: #fff; color: var(--ink-d); font-weight: 600; }
 .seg button:disabled { opacity: .45; }
 
-.markets { display: flex; gap: 8px; flex-wrap: wrap; }
+.markets { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.markets::-webkit-scrollbar { display: none; }
+.markets > * { flex: none; }
 .market {
   display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 8px; row-gap: 1px; text-align: left;
   min-width: 104px; padding: 9px 12px 10px; border-radius: 12px;
