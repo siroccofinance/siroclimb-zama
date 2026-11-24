@@ -10,7 +10,19 @@
 // harmlessly (WrongRoundStatus, WrongRunStatus, TooSoon) and are ignored.
 import { MARKETS, RUN_SECONDS, indexOf } from './config.js';
 import { publicDecrypt } from './fhe.js';
-import { pushIfStale } from './prices.js';
+import { pushIfStale as push } from './prices.js';
+
+// checkpoints this browser is writing, per market: a cash out waits for them so its frozen value
+// counts exactly the checkpoints the contract will count (F44)
+const writing = new Map();
+export const inflight = m => writing.get(m) || Promise.resolve();
+async function pushIfStale(s, m, maxAge) {
+  const p = push(s, m, maxAge);
+  writing.set(m, p.catch(() => null));
+  const src = await p.finally(() => { if (writing.get(m)) writing.delete(m); });
+  if (src) api?.checkpointed?.(m);
+  return src;
+}
 import * as W from './wallet.js';
 
 const TICK_MS = 3000;
@@ -43,7 +55,7 @@ async function tick() {
       if (run.mode === 'solo') {
         if (now >= run.startedAt + RUN_SECONDS * 1000 + 1500 && !run.settling) {
           run.settling = true;
-          await duty('Settling your run at the bell…', () => s.send(W.game, 'settleRun', [BigInt(run.id)], 0n, 'settleRun'));
+          await duty('Settling your run at the bell…', () => s.send(W.game, 'settleRun', [BigInt(run.cid)], 0n, 'settleRun'));
           api.settleFromChain(run).catch(() => { run.settling = false; });
         } else if (run.status === 'live') await duty(null, () => pushIfStale(s, m, 11));
       } else if (now > run.startedAt - 15000 && now < run.startedAt + RUN_SECONDS * 1000) {
