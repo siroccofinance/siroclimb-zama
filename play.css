@@ -146,7 +146,7 @@ body[data-screen="intro"] .stage::before { opacity: 0; }
 /* ───────── lobby ───────── */
 .lobby__main { display: grid; gap: 22px; max-width: 1080px; min-width: 0; }
 /* the summary line wraps instead of squeezing the market row */
-@media (min-width: 768px) { .lobby__main { flex: 1 1 auto; } .lobby .go { flex: 0 1 380px; min-width: 260px; } }
+@media (min-width: 768px) { .lobby__main { flex: 1 1 auto; } .lobby .go { flex: 0 1 320px; min-width: 240px; } }
 .lobby .go__meta { text-wrap: balance; }
 .lobby .title { margin-bottom: 4px; }
 .field { display: grid; gap: 10px; min-width: 0; }
@@ -165,6 +165,23 @@ body[data-screen="intro"] .stage::before { opacity: 0; }
 .markets { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 .markets::-webkit-scrollbar { display: none; }
 .markets > * { flex: none; }
+/* laptops and up: the six markets share one row, always whole. The cards shrink with the row
+   (container queries): first the kind label goes, then the plain name, then price and change stack. */
+@media (min-width: 768px) {
+  .markets { display: grid; grid-template-columns: repeat(var(--n, 6), minmax(0, 1fr)); overflow: visible; container-type: inline-size; padding: 2px 0 4px; }
+  .markets > .market { min-width: 0; }
+}
+.market b, .market .n, .market .p, .market .c { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container (max-width: 900px) {
+  .markets .market .k { display: none; }
+  .markets .market { grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; padding-left: 10px; padding-right: 10px; }
+  .markets .market b, .markets .market .n { grid-column: 1 / -1; width: 0; min-width: 100%; }   /* full row, no say in the column widths */
+}
+@container (max-width: 820px) {
+  .markets .market { padding: 8px 10px 9px; grid-template-columns: minmax(0, 1fr); row-gap: 2px; }
+  .markets .market .n { display: none; }
+  .markets .market .c { justify-self: start; }
+}
 .market {
   display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 8px; row-gap: 1px; text-align: left;
   min-width: 104px; padding: 9px 12px 10px; border-radius: 12px;
