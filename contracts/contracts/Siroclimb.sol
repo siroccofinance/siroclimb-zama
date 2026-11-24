@@ -155,6 +155,10 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
     mapping(address player => bool) public hasPack;
     mapping(address player => uint64) public lastPackAt;
 
+    /// @notice Prize owed to a round run (plaintext: standings are public at finalize), paid by `claim`.
+    mapping(uint256 runId => uint64) public prizeOf;
+    mapping(uint256 runId => bool) public claimed;
+
     /// @notice Lower bound of the house's cUSDC that is not yet promised to a live solo run.
     uint256 public reserveFloor;
 
