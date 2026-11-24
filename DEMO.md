@@ -8,8 +8,8 @@ open (or use gold and GBP), and a second tab on Sepolia Etherscan.
 
 *Screen: https://climb.sirocco.finance, the landing page, the coin rolling on the terracotta stairs. Click "Start playing".*
 
-> "This is Siroclimb by Sirocco. You pick a real world asset (Tesla, NVIDIA, Apple, gold or the
-> pound), go long or short, and the coin climbs the stairs with the price. Every 6 seconds your
+> "This is Siroclimb by Sirocco. You pick a real world asset (Tesla, NVIDIA, Apple, Amazon, gold
+> or the pound), go long or short, and the coin climbs the stairs with the price. Every 6 seconds your
 > leverage steps up, from 1x to 4x. Cash out whenever you want. And on Zama, nobody can see which
 > way you went or how much you put in."
 
@@ -29,7 +29,7 @@ open (or use gold and GBP), and a second tab on Sepolia Etherscan.
 
 ## 0:50 to 1:40 · A solo run
 
-*Pick a market (TSLAx if open, else XAUt), Short, 50 cUSDC, then Start climbing. Point at the
+*Pick a market (TSLAx or AMZNx if open, else XAUt), Short, 50 cUSDC, then Start climbing. Point at the
 status line: "Encrypting your side and stake…", then "Sealing your run on Sepolia…".*
 
 > "My side and my stake are encrypted right here with Zama's relayer SDK and sealed on chain. The
