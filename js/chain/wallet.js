@@ -7,10 +7,13 @@
 //    only play with what the player approved; it can never withdraw.
 // Every sender (session key, practice bots) has one queue: one transaction at a time with a
 // locally tracked nonce, so concurrent duties never race for a nonce.
-import { BrowserProvider, Contract, JsonRpcProvider, Wallet, getBytes, keccak256, parseEther, formatEther, toUtf8Bytes } from '../vendor/ethers-6.17.0.min.js';
+import { BrowserProvider, Contract, FetchRequest, JsonRpcProvider, Wallet, getBytes, keccak256, parseEther, formatEther, toUtf8Bytes } from '../vendor/ethers-6.17.0.min.js';
 import { ABI, ADDR, CHAIN_HEX, CHAIN_ID, RPC_URL, SESSION_FUND_ETH, SESSION_MIN_ETH } from './config.js';
 
-export const rpc = new JsonRpcProvider(RPC_URL, CHAIN_ID, { staticNetwork: true, batchMaxCount: 1, cacheTimeout: -1, pollingInterval: 1000 });
+// a request the RPC never answers fails after 20 s (ethers waits 5 minutes by default), and is retried
+const rpcRequest = new FetchRequest(RPC_URL);
+rpcRequest.timeout = 20_000;
+export const rpc = new JsonRpcProvider(rpcRequest, CHAIN_ID, { staticNetwork: true, batchMaxCount: 1, cacheTimeout: -1, pollingInterval: 1000 });
 export const game = new Contract(ADDR.Siroclimb, ABI.Siroclimb, rpc);
 export const oracle = new Contract(ADDR.ClimbPriceOracle, ABI.ClimbPriceOracle, rpc);
 export const token = new Contract(ADDR.StakeToken, ABI.ERC7984, rpc);
