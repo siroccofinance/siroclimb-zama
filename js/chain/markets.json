@@ -69,13 +69,14 @@
       "hours": "always",
       "pyth": "0x44465e17d2e9d390e70c999d5a11fda4f092847fcd2e3e5aa089d96c98a30e67",
       "pythSymbol": "Crypto.XAUT/USD",
-      "binance": "XAUTUSDT",
       "token": {
         "symbol": "cXAUt",
         "origin": "zama",
         "sepolia": "0xe4FcF848739845BC81Dee1d5352cf3844F0a60C7",
         "contract": "cXAUtMock"
-      }
+      },
+      "kraken": "XAUTUSD",
+      "yahooFallback": "XAUT-USD"
     },
     {
       "id": "tGBP",

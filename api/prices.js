@@ -3,7 +3,8 @@
 //    1-minute candles including pre and post market; a stock market is "open" while now is
 //    inside today's pre/regular/post session (4:00 to 20:00 New York time, trading days only)
 //    and the last candle is recent. Outside sessions the market is closed in the game.
-//  - gold (XAUt): Binance spot XAUTUSDT, always open (it trades around the clock).
+//  - gold (XAUt): Kraken spot XAUTUSD, always open (it trades around the clock), Yahoo XAUT-USD as
+//    a fallback. Binance answers 451 from US hosting regions (Vercel), so it is not used.
 // The browser posts these on chain with ClimbPriceOracle.pushPublic, which bounds every
 // checkpoint (+/-0.5 % per 10 s, +/-3 % from the last Pyth price) whenever Pyth has no fresh price.
 import { MARKETS, limited, send } from './_markets.js';
@@ -28,6 +29,15 @@ async function yahoo(symbol) {
   return { price: last >= 0 && ts[last] > (m.regularMarketTime || 0) ? close[last] : price, at, open: inSession && now - at < 15 * 60, session: { start, end } };
 }
 
+async function kraken(pair) {
+  const r = await fetch(`https://api.kraken.com/0/public/Ticker?pair=${pair}`, { signal: AbortSignal.timeout(6000) });
+  if (!r.ok) throw new Error(`kraken ${r.status}`);
+  const d = await r.json();
+  const t = d.result && Object.values(d.result)[0];
+  if (!t) throw new Error(`kraken ${d.error?.join(',') || 'no ticker'}`);
+  return { price: Number(t.c[0]), at: Date.now() / 1000, open: true };
+}
+
 async function binance(symbol) {
   const r = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`, { signal: AbortSignal.timeout(6000) });
   if (!r.ok) throw new Error(`binance ${r.status}`);
@@ -38,8 +48,12 @@ export async function prices() {
   if (cache && Date.now() - cache.at < CACHE_MS) return cache.body;
   const rows = await Promise.all(MARKETS.map(async (m, i) => {
     try {
-      const q = m.yahoo ? await yahoo(m.yahoo) : await binance(m.binance);
-      return { market: i, id: m.id, ...q, source: m.yahoo ? 'yahoo' : 'binance' };
+      if (m.yahoo) return { market: i, id: m.id, ...(await yahoo(m.yahoo)), source: 'yahoo' };
+      if (m.kraken) {
+        try { return { market: i, id: m.id, ...(await kraken(m.kraken)), source: 'kraken' }; }
+        catch (e) { if (!m.yahooFallback) throw e; const q = await yahoo(m.yahooFallback); return { market: i, id: m.id, ...q, open: true, source: 'yahoo' }; }
+      }
+      return { market: i, id: m.id, ...(await binance(m.binance)), source: 'binance' };
     } catch (e) {
       return { market: i, id: m.id, price: null, open: false, error: e.message };
     }
