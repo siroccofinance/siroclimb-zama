@@ -231,7 +231,7 @@ export async function startRun({ assetId, side = 'long', stake }) {
   if (bal != null && stake > bal) throw new Error('Not enough cUSDC: use the faucet');
   const s = await session();
   const units = Math.round(stake * USDC);
-  if (!preEnc.has(`${s.address}:${encKey('solo', side === 'long', units)}`)) status({ kind: 'fhe', text: 'Encrypting your side and stake…' });
+  if (!preEnc.has(`${s.address}:${encKey(side === 'long', units)}`)) status({ kind: 'fhe', text: 'Encrypting your side and stake…' });
   const enc = await takeEncryption(s, side === 'long', units);
   // entry price, in the same transaction: a fresh signed Pyth price, or a bounded public one
   const pyth = await pythFor(m);
