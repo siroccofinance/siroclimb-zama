@@ -93,3 +93,29 @@ What becomes public, and when:
 
 Honest limit: once a solo run ends, an observer knows its value is one of two numbers (long or
 short). The side and the stake stay hidden, and so does the amount paid.
+
+## Prices: Pyth, with a bounded fallback
+
+Every run is settled on `ClimbPriceOracle` checkpoints. Each checkpoint is tagged with its source,
+and the result never depends on when settlement is called. Sepolia blocks come every ~12 s, so the
+screen animates smoothly on live prices and the chain settles on 3 to 6 checkpoints per minute.
+
+1. **Pyth (trustless)**. The browser fetches a *signed* Hermes update from our server route
+   `/api/pyth`. The API key stays on the server (`PYTH_API_KEY`). The browser posts the update to
+   Pyth's Sepolia contract, which verifies the Wormhole signatures, so the route cannot forge
+   prices. Entry and exit rides along with `startRun` and `cashOut`, which makes them the freshest
+   verified price (at most 25 s old).
+2. **Bounded public fallback**. Markets the Hermes plan does not cover take the reference price from
+   `/api/prices` (Yahoo Finance for stocks and GBP, Binance for XAUt, with market hours) through
+   `pushPublic`. The oracle bounds it: at most every 10 s, +/-0.5 % per checkpoint, +/-3 % from the
+   last Pyth price, and only while Pyth has nothing fresher than 2 minutes for that market.
+   *Trade-off*: in this mode players are semi-trusted price reporters within those bounds. Each
+   checkpoint's source is public.
+
+The current API key is entitled to Equity.US.TSLA/USD. NVDA, AAPL, XAUT and GBP answer 403 and go
+through the fallback. The route detects entitlements by itself, so adding grants to the key moves
+those markets to trustless Pyth with no code change.
+
+**Game scale**: real prices move little in a minute, so every move counts 25x, then the leverage
+applies on top. A 0.1 % move pays 2.5 % at 1x and 10 % at 4x. PnL adds up on a constant notional,
+and at -100 % the coin falls and the run is worth 0 for good.
