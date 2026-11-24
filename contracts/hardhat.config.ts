@@ -11,10 +11,10 @@ import { join } from "path";
 
 const MNEMONIC = process.env.MNEMONIC ?? "test test test test test test test test test test test junk";
 
-/** Sepolia deployer key: env DEPLOYER_KEY, or ~/.config/zama/siroclimb-deployer.key (never committed). */
+/** Sepolia deployer key: env DEPLOYER_KEY, or ~/.config/siroclimb/sepolia/deployer.key (never committed). */
 function deployerKey(): string | undefined {
   if (process.env.DEPLOYER_KEY) return process.env.DEPLOYER_KEY;
-  const file = process.env.DEPLOYER_KEY_FILE ?? join(homedir(), ".config", "zama", "siroclimb-deployer.key");
+  const file = process.env.DEPLOYER_KEY_FILE ?? join(homedir(), ".config", "siroclimb", "sepolia", "deployer.key");
   if (!existsSync(file)) return undefined;
   const key = readFileSync(file, "utf8").trim();
   return key.startsWith("0x") ? key : `0x${key}`;

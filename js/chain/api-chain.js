@@ -93,19 +93,25 @@ function afterConnect() {
 export function disconnect() { W.disconnectWallet(); ready = false; setBal(null); autopilot.stop(); }
 
 /** Decrypts the player's encrypted cUSDC balance (asks the wallet for the daily grant once). */
-export async function refreshBalance() {
+let balHandle = null;
+export async function refreshBalance(expectChange = false) {
   const a = W.account(); if (!a) return null;
-  const h = await token.confidentialBalanceOf(a);
+  let h = await (typeof expectChange === 'number' ? W.view(() => token.confidentialBalanceOf(a, { blockTag: expectChange })) : token.confidentialBalanceOf(a));
+  // after a transfer, a lagging RPC node can still serve the old balance handle: wait for the new one
+  for (let i = 0; expectChange === true && h === balHandle && i < 10; i++) { await sleep(2000); h = await token.confidentialBalanceOf(a); }
+  if (expectChange === true && h === balHandle) return bal;
   if (!hasGrant(a)) status({ kind: 'decrypt', text: 'Sign the decryption grant in your wallet (once a day)' });
   else status({ kind: 'decrypt', text: 'Decrypting your balance…' });
   try {
     const [v] = await userDecrypt(a, W.signTyped, [{ handle: h, contract: ADDR.StakeToken }]);
+    balHandle = h;
     setBal(Number(v) / USDC);
     return bal;
   } finally { status(null); }
 }
 export const decryptBalance = refreshBalance;
-const refreshSoon = () => { if (W.account() && hasGrant(W.account())) setTimeout(() => refreshBalance().catch(() => {}), 1500); };
+/** Re-decrypts the balance; `atBlock`: as of the block of a known transfer (exact even on a lagging node). */
+const refreshSoon = (atBlock = true) => { if (W.account() && hasGrant(W.account())) setTimeout(() => refreshBalance(atBlock).catch(() => {}), 1500); };
 
 export async function faucet() {
   const s = await session();
@@ -213,6 +219,7 @@ async function sendCashOut(run) {
   try {
     const rc = await s.send(game, 'cashOut', [BigInt(run.id), pyth ? pyth.updateData : []], pyth ? pyth.fee : 0n, 'cashOut');
     run.tx = rc.hash;
+    run.txBlock = rc.blockNumber;
   } catch (e) {
     if (!/WrongRunStatus/.test(W.errText(e))) throw e;      // already settled (expiry, round close)
   } finally { status(null); }
@@ -234,7 +241,7 @@ export async function settleFromChain(run) {
       if (!run.local) { run.status = run.chain.status; run.local = run.chain; run.waiters.splice(0).forEach(f => f(run.chain)); }
       run.unsub?.();
       run.settleWaiters.splice(0).forEach(f => f(run.chain));
-      if (run.mode === 'solo') { if (bal != null) setBal(bal - 0 + value); refreshSoon(); record(run); }
+      if (run.mode === 'solo') { if (bal != null) setBal(bal - 0 + value); refreshSoon(run.txBlock ?? true); record(run); }
       return run.chain;
     }
     await sleep(3000);
@@ -353,17 +360,19 @@ export function whenRoundFinal(runId) {
           const list = await game.results(Math.max(0, n - 80), 80);
           const mine = list.find(x => x.inRound && Number(x.ref) === run.roundId && x.player.toLowerCase() === W.account().toLowerCase());
           if (!run.chain) await settleFromChain(run).catch(() => {});
+          let claimBlock = null;
           // the prize is a pull payment (one encrypted transfer per claim): the session claims it
           if (Number(await game.prizeOf(BigInt(run.id))) > 0 && !(await game.claimed(BigInt(run.id)))) {
             status({ kind: 'chain', text: 'Claiming your prize: encrypted transfer…' });
-            await W.currentSession().send(game, 'claim', [BigInt(run.id)], 0n, 'claim').catch(() => {});
+            const rc = await W.currentSession().send(game, 'claim', [BigInt(run.id)], 0n, 'claim').catch(() => null);
+            if (rc) claimBlock = rc.blockNumber;
             status(null);
           }
           const base = run.chain || run.local;
           const out = { ...base, rank: mine ? Number(mine.rank) : null, of: Number(r.fundedCount), prize: mine ? Number(mine.prize) / USDC : 0, pnlPct: mine ? Number(mine.pnlPpm) / 1e4 : base.pnlPct, final: true };
           lastRoundId = run.roundId;
           if (bal != null && out.prize) setBal(bal + out.prize);
-          refreshSoon();
+          refreshSoon(claimBlock ?? true);
           return res(out);
         }
       } catch {}

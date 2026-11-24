@@ -26,8 +26,8 @@ const log = (...a) => console.log(T(), ...a);
 const results = { started: new Date().toISOString(), game: ADDR.Siroclimb, players: N, solo: [], rounds: [], findings: [], gas: {} };
 const pass = (kind, ok, detail) => { (kind === 'round' ? results.rounds : results.solo).push({ ok, ...detail }); if (!ok) log('FAIL', kind, JSON.stringify(detail, (k, v) => (typeof v === 'bigint' ? v.toString() : v))); };
 
-const deployer = new Sender(key('siroclimb-deployer.key'), 'deployer');
-const keeper = new Sender(batteryWallet(900), 'keeper');
+const deployer = new Sender(key('deployer.key'), 'deployer');
+const keeper = new Sender(key('keeper.key'), 'keeper');
 const players = Array.from({ length: N }, (_, i) => Object.assign(new Sender(batteryWallet(OFFSET + i)), { i, name: handle(OFFSET + i + 7) }));
 const poor = Object.assign(new Sender(batteryWallet(800)), { i: 'poor', name: 'quiet.nomad' });
 
@@ -87,11 +87,17 @@ async function soloRun(p, wave, delay = 0) {
   const step = (what) => process.env.TRACE && log(`  ${p.name} ${what}`);
   const enc = await encryptRun(p.address, long, stake);
   step('encrypted');
-  const py = await withTimeout(pythFor(market), 30_000, 'pyth update').catch(() => null);
-  step(`pyth ${py ? 'rides along' : 'not covering'}`);
-  const fb = py ? 0n : await withTimeout(fallbackFor(market), 30_000, 'fallback price').catch(() => 0n);
-  step('prices ready');
-  const rc = await p.send(game, 'startRun', [market, enc.handles[0], enc.handles[1], enc.proof, scenario === 'pack', py ? py.updateData : [], fb], py ? py.fee : 0n);
+  // entry price riding along: a signed Pyth update, else a bounded public price. A start without either
+  // on a stale market would revert (StaleEntry), so the lookup is retried before sending (F38)
+  let rc;
+  for (let attempt = 0; ; attempt++) {
+    const py = await withTimeout(pythFor(market), 30_000, 'pyth update').catch(() => null);
+    const fb = py ? 0n : await withTimeout(fallbackFor(market), 30_000, 'fallback price').catch(() => 0n);
+    step(`prices ready (${py ? 'pyth' : fb ? 'fallback' : 'none'})`);
+    if (!py && !fb && attempt < 4) { await sleep(5000); continue; }
+    try { rc = await p.send(game, 'startRun', [market, enc.handles[0], enc.handles[1], enc.proof, scenario === 'pack', py ? py.updateData : [], fb], py ? py.fee : 0n); break; }
+    catch (e) { if (attempt >= 2 || !/reverted|StaleEntry/.test(errText(e))) throw e; step('start reverted, retrying with fresh prices'); }
+  }
   const ev = rc.logs.map(l => { try { return game.interface.parseLog(l); } catch { return null; } }).find(e => e?.name === 'RunStarted');
   const id = ev.args.runId;
   step(`started run ${id}`);

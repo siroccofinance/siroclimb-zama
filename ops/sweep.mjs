@@ -1,9 +1,9 @@
 // Finishes everything left open on the game (anyone may do it, every call is permissionless):
 // settles solo runs past their 60th second, closes rounds past their bell, finalizes closed rounds
-// with the KMS proof. Uses the battery keeper key. usage: node sweep.mjs
-import { Sender, batteryWallet, errText, game, publicDecrypt, view } from './lib.mjs';
+// with the KMS proof. Uses the Siroclimb keeper key. usage: node sweep.mjs
+import { Sender, errText, game, key, publicDecrypt, view } from './lib.mjs';
 
-const k = new Sender(batteryWallet(900), 'sweeper');
+const k = new Sender(key('keeper.key'), 'sweeper');
 const now = () => Date.now() / 1000;
 const n = Number(await game.runCount());
 let settled = 0, closed = 0, finalized = 0, live = 0;

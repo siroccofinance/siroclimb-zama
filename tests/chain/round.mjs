@@ -4,16 +4,19 @@
 // standings, the pot is paid. Nothing runs on our side.
 // usage: node tests/chain/round.mjs [baseUrl]   (PLAYER=<index> to pick the test wallet)
 import puppeteer from 'puppeteer-core';
-import { HDNodeWallet, Mnemonic } from 'ethers';
+import { HDNodeWallet, Mnemonic, Wallet } from 'ethers';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { injectWallet } from './wallet.mjs';
 
 const base = process.argv[2] || 'http://127.0.0.1:3043', idx = Number(process.env.PLAYER || 0);
-const m = Mnemonic.fromPhrase(readFileSync(`${homedir()}/.config/zama/siroclimb-battery.mnemonic`, 'utf8').trim());
-const key = HDNodeWallet.fromMnemonic(m, `m/44'/60'/0'/0/${idx}`).privateKey;
+// test wallet: Siroclimb's player key, or battery player PLAYER=<n> (~/.config/siroclimb/sepolia)
+const dir = `${homedir()}/.config/siroclimb/sepolia`;
+const key = process.env.PLAYER
+  ? HDNodeWallet.fromMnemonic(Mnemonic.fromPhrase(readFileSync(`${dir}/battery.mnemonic`, 'utf8').trim()), `m/44'/60'/0'/0/${idx}`).privateKey
+  : readFileSync(`${dir}/player.key`, 'utf8').trim();
 // a persistent profile per test wallet: the game session (and its gas) carries over between runs
-const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', userDataDir: `out/chrome-player-${idx}` });
+const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', userDataDir: `out/chrome-${new Wallet(key).address.slice(2, 10)}` });
 const pg = await b.newPage();
 const errors = [];
 pg.on('pageerror', e => { errors.push(e.message); console.log('PAGEERROR', e.message); });
@@ -28,7 +31,7 @@ const text = s => pg.$eval(s, e => e.textContent);
 await pg.goto(`${base}/#play`, { waitUntil: 'networkidle2', timeout: 60000 });
 await wait(3000);
 console.log(T(), 'player', w.address);
-await pg.click('#wallet');
+if (/Connect/.test(await pg.$eval('#wallet', e => e.textContent))) await pg.click('#wallet');   // a returning wallet is already connected
 for (let i = 0; i < 120; i++) { if (!/Connecting/.test(await text('#wallet'))) break; await wait(2000); }
 await pg.click('#bal');
 for (let i = 0; i < 60; i++) { const v = await text('#bal'); if (/\d/.test(v)) { console.log(T(), 'balance', v); break; } await wait(2000); }

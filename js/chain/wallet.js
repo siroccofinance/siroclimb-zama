@@ -226,6 +226,13 @@ export async function walletEth() { return wallet ? Number(formatEther(await rpc
 
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+/** Retries a read a lagging RPC node may not serve yet (a block it has not seen, a new array index). */
+export async function view(fn, tries = 10) {
+  for (let i = 0; ; i++) {
+    try { return await fn(); } catch (e) { if (i >= tries) throw e; await sleep(1500); }
+  }
+}
+
 /** A readable message for contract errors (custom errors decoded with the game and oracle ABIs). */
 export function errText(e) {
   const data = e?.data || e?.info?.error?.data || e?.error?.data;

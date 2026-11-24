@@ -32,11 +32,12 @@ export const pyth = new Contract(ADDR.Pyth, ['function getUpdateFee(bytes[]) vie
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 export const USDC = 1_000_000n, SCALE = 1_000_000n;
 
-const cfg = f => join(homedir(), '.config', 'zama', f);
+// Siroclimb's own Sepolia keys (deployer, keeper, bot, player, battery mnemonic), never committed
+const cfg = f => join(homedir(), '.config', 'siroclimb', 'sepolia', f);
 export function key(file) { const k = readFileSync(cfg(file), 'utf8').trim(); return k.startsWith('0x') ? k : '0x' + k; }
 /** Battery players: own mnemonic (never shared with another project), index i. */
 export function batteryWallet(i) {
-  const m = Mnemonic.fromPhrase(readFileSync(cfg('siroclimb-battery.mnemonic'), 'utf8').trim());
+  const m = Mnemonic.fromPhrase(readFileSync(cfg('battery.mnemonic'), 'utf8').trim());
   return HDNodeWallet.fromMnemonic(m, `m/44'/60'/0'/0/${i}`).privateKey;
 }
 export const hasFile = f => existsSync(cfg(f));
