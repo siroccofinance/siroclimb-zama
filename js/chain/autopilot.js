@@ -2,14 +2,10 @@
 // session key, without wallet pop-ups. Nothing has to run on our side:
 //  - price checkpoints for the market being played (Pyth when covered, bounded fallback else),
 //    and for the market the lobby shows, so a start finds a fresh entry price;
-//  - settles the player's solo runs at their 60th second;
-//  - closes rounds at the bell (standings made publicly decryptable), then decrypts them through
-//    the KMS and finalizes with the proof, which pays the pot. Any recent round left closed by
-//    someone else is finalized too.
+//  - settles the player's runs at their 60th second.
 // An optional ops keeper (ops/) does the same; whoever is first wins, the others' calls revert
-// harmlessly (WrongRoundStatus, WrongRunStatus, TooSoon) and are ignored.
+// harmlessly (WrongRunStatus, TooSoon) and are ignored.
 import { MARKETS, RUN_SECONDS, indexOf } from './config.js';
-import { publicDecrypt } from './fhe.js';
 import { pushIfStale as push } from './prices.js';
 
 // checkpoints this browser is writing, per market: a cash out waits for them so its frozen value
@@ -26,7 +22,7 @@ async function pushIfStale(s, m, maxAge) {
 import * as W from './wallet.js';
 
 const TICK_MS = 3000;
-const IGNORE = /WrongRoundStatus|WrongRunStatus|RoundNotOver|RunNotOver|TooSoon|PythIsFresh|not allowed|not ready|404|NoCheckpoint/i;
+const IGNORE = /WrongRunStatus|RunNotOver|TooSoon|PythIsFresh|not allowed|not ready|404|NoCheckpoint/i;
 let timer = null, api = null, busy = false, watched = new Set();
 let lastFocusPush = 0;
 
@@ -52,24 +48,13 @@ async function tick() {
     // 1. the player's own runs: checkpoints while live, settlement at the 60th second
     for (const run of api.liveRuns()) {
       const m = indexOf(run.assetId);
-      if (run.mode === 'solo') {
-        if (now >= run.startedAt + RUN_SECONDS * 1000 + 1500 && !run.settling) {
-          run.settling = true;
-          await duty('Settling your run at the bell…', () => s.send(W.game, 'settleRun', [BigInt(run.cid)], 0n, 'settleRun'));
-          api.settleFromChain(run).catch(() => { run.settling = false; });
-        } else if (run.status === 'live') await duty(null, () => pushIfStale(s, m, 11));
-      } else if (now > run.startedAt - 15000 && now < run.startedAt + RUN_SECONDS * 1000) {
-        await duty(null, () => pushIfStale(s, m, 11));
-      }
+      if (now >= run.startedAt + RUN_SECONDS * 1000 + 1500 && !run.settling) {
+        run.settling = true;
+        await duty('Settling your run at the 60th second…', () => s.send(W.game, 'settleRun', [BigInt(run.cid)], 0n, 'settleRun'));
+        api.settleFromChain(run).catch(() => { run.settling = false; });
+      } else if (run.status === 'live') await duty(null, () => pushIfStale(s, m, 11));
     }
-    // 2. rounds: checkpoints around the bell, close, KMS reveal and finalize
-    const rc = api.roundData();
-    if (rc.latest) {
-      const L = rc.latest;
-      if (L.ids.length && now > L.startsAt - 15000 && now < L.endsAt) await duty(null, () => pushIfStale(s, L.market, 11));
-      for (let id = Math.max(0, rc.count - 3); id < rc.count; id++) await settleRound(s, id);
-    }
-    // 3. the lobby's market: keep a fresh checkpoint so starting is a single transaction
+    // 2. the lobby's market: keep a fresh checkpoint so starting is a single transaction
     const f = api.focused();
     if (f && now - lastFocusPush > 15000 && !api.liveRuns().length) {
       lastFocusPush = now;
@@ -90,30 +75,6 @@ async function gasOk(k) {
   }
   gasCheck.ok = eth > 0.0005;
   return gasCheck.ok;
-}
-
-const finalizing = new Set();
-async function settleRound(s, id) {
-  const [r] = await W.game.getRound(id);
-  const st = Number(r.status), now = Date.now() / 1000;
-  if (st === 1 && now >= Number(r.endsAt) + 2) {
-    // runs still climbing exit at the bell one per transaction (about 1M gas each on Sepolia), so the
-    // close itself stays far below the per-transaction gas cap whatever the number of players
-    const [, ids] = await W.game.getRound(id);
-    for (const rid of ids) {
-      const run = await W.game.getRun(rid);
-      if (Number(run.status) === 1) await duty('Bell: locking the exits at the bell…', () => s.send(W.game, 'exitAtBell', [rid], 0n, 'exitAtBell'));
-    }
-    await duty('Bell: closing the round, scores sealed until the reveal…', () => s.send(W.game, 'closeRound', [id], 0n, 'closeRound'));
-  } else if (st === 2 && !finalizing.has(id)) {
-    finalizing.add(id);
-    await duty('KMS decrypting the standings…', async () => {
-      const handles = await W.game.roundScoreHandles(id);
-      const { values, proof } = await publicDecrypt([...handles]);
-      await s.send(W.game, 'finalizeRound', [id, values, proof], 0n, 'finalizeRound');
-    });
-    finalizing.delete(id);
-  }
 }
 
 export const marketName = i => MARKETS[i].name;

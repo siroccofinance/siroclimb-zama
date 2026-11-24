@@ -11,18 +11,13 @@
 //   listAssets()                             → Asset[]            { id, name, ticker, kind: 'stock' | 'gold' | 'fx', token, open }
 //   subscribePrice(assetId, cb)              → unsubscribe()      cb({ price, ts })
 //   history(assetId, seconds)                → [{ price, ts }]    recent ticks, oldest first
-//   rules                                    → { ladder: number[], stepEvery: s, duration: s, roundEntry, prizeSplit }
-//   startRun({ mode, assetId, side, stake }) → Promise<Run>       mode 'solo' | 'round', side 'long' | 'short'
+//   rules                                    → { ladder: number[], stepEvery: s, duration: s }
+//   startRun({ assetId, side, stake })       → Promise<Run>       side 'long' | 'short'
 //   onRun(runId, cb)                         → unsubscribe()      cb(RunUpdate) on every price tick
 //   cashOut(runId)                           → Promise<RunResult>
 //   whenEnded(runId)                         → Promise<RunResult> the run is over on screen (pending: true until the chain settles it)
 //   whenSettled(runId)                       → Promise<RunResult> chain-verified result (chain: true)
-//   currentRound()                           → Round              { id, assetId, opensAt, startsAt, endsAt, status: 'open' | 'live', players, pot, entry, joined, virtual }
-//   onRound(cb)                              → unsubscribe()      cb(Round) every second
-//   joinRound({ side })                      → Promise<Round>
-//   roundStandings(roundId)                  → Standing[]         { name, pnlPct (null while sealed), sealed, status, you }
-//   whenRoundFinal(runId)                    → Promise<RunResult & { rank, of, prize, final }>
-//   leaderboard(scope)                       → Promise<Standing[]> scope 'round' | 'today' | 'all'
+//   leaderboard(scope)                       → Promise<Standing[]> scope 'today' | 'all', { name, pnlPct, you }
 //   balance()                                → number | null      null while the encrypted balance is not decrypted
 //   onBalance(cb)                            → unsubscribe()
 //   decryptBalance()                         → Promise<number>    user decryption (one wallet signature per day)
@@ -31,9 +26,9 @@
 //   onStatus(cb)                             → unsubscribe()      cb({ kind: 'wallet' | 'fhe' | 'chain' | 'decrypt' | 'keeper' | 'error', text } | null)
 //   shareCard(png, result)                   → Promise<string|null> optional hosted share page (null: the front attaches the picture)
 //
-// Run        { id, mode, assetId, side, stake, entryPrice, startedAt, ladder, stepEvery, duration }
+// Run        { id, assetId, side, stake, entryPrice, startedAt, ladder, stepEvery, duration }
 // RunUpdate  { t (s since start), price, step, leverage, value, pnl, pnlPct, risk (0..1 of the stake lost), status }
-// RunResult  { status: 'cashed' | 'busted' | 'expired', value, pnl, pnlPct, maxLeverage, duration (s), entryPrice, exitPrice, rank?, prize?, pending?, chain? }
+// RunResult  { status: 'cashed' | 'busted' | 'expired', value, pnl, pnlPct, maxLeverage, duration (s), entryPrice, exitPrice, pending?, chain? }
 
 const MOCK = new URLSearchParams(location.search).has('mock');
 let impl, chainError = null;
@@ -63,11 +58,6 @@ export const runInfo = id => impl.runInfo(id);
 export const runResult = id => impl.runResult(id);
 export const whenEnded = id => impl.whenEnded(id);
 export const whenSettled = id => (impl.whenSettled ? impl.whenSettled(id) : impl.whenEnded(id));
-export const currentRound = () => impl.currentRound();
-export const onRound = cb => impl.onRound(cb);
-export const joinRound = o => impl.joinRound(o);
-export const roundStandings = id => impl.roundStandings(id);
-export const whenRoundFinal = id => impl.whenRoundFinal(id);
 export const leaderboard = s => impl.leaderboard(s);
 export const balance = () => impl.balance();
 export const onBalance = cb => impl.onBalance(cb);

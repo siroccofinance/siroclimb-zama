@@ -20,10 +20,8 @@ export interface Market {
 
 const file = JSON.parse(readFileSync(join(__dirname, "..", "..", "js", "chain", "markets.json"), "utf8")) as {
   markets: Market[];
-  roundMarkets: string[];
 };
 export const MARKETS = file.markets;
-export const ROUND_MARKETS = file.roundMarkets.map((id) => MARKETS.findIndex((m) => m.id === id));
 
 export function toFixed10(v: number | string): bigint {
   const s = typeof v === "number" ? v.toFixed(12) : v;

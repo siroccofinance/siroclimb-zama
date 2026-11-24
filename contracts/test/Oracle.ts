@@ -1,7 +1,7 @@
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { fhevm } from "hardhat";
-import { BASE, AAPL, NVDA, type Fixture, GBP, NVDA, TSLA, XAUT, deployFixture, joinRound, model } from "./helpers";
+import { BASE, AAPL, NVDA, type Fixture, GBP, TSLA, XAUT, deployFixture, model } from "./helpers";
 
 describe("ClimbPriceOracle and ClimbLadder", function () {
   let f: Fixture;
@@ -120,13 +120,5 @@ describe("ClimbPriceOracle and ClimbLadder", function () {
       expect([lc, sc]).to.deep.eq([capped.long, capped.short]);
     }
     expect(await f.ladder.ladder()).to.deep.eq([10n, 15n, 20n, 25n, 30n, 35n, 40n]);
-  });
-
-  it("a round only opens on a market with a live price (closed stock market skipped)", async function () {
-    await time.increase(120); // every seed is stale now
-    await f.oracle.pushPrices([NVDA], [BASE[NVDA]]); // only NVDA is live
-    expect(await f.game.nextRoundMarket()).to.eq(NVDA); // rotation starts at TSLA, which is closed
-    const { roundId } = await joinRound(f, f.alice, true, 0n);
-    expect((await f.game.getRound(roundId))[0].market).to.eq(NVDA);
   });
 });

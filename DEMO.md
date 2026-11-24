@@ -27,7 +27,7 @@ open (or use gold and GBP), and a second tab on Sepolia Etherscan.
 > "My balance is encrypted on chain. It is decrypted here, in my browser, with a grant my game
 > account signed locally. Nobody else can read it, not even the game's deployer."
 
-## 0:50 to 1:40 · A solo run
+## 0:50 to 1:40 · A run
 
 *Pick a market (TSLAx or AMZNx if open, else XAUt), Short, 50 cUSDC, then Start climbing. Point at the
 status line: "Encrypting your side and stake…", then "Sealing your run on Sepolia…".*
@@ -48,34 +48,26 @@ encrypted transfer." Click "View the transaction".*
 > out as an encrypted transfer in the same transaction. On Etherscan you see the call and two public
 > multipliers. My side, my stake and my payout stay ciphertexts."
 
-## 1:40 to 2:35 · A round: sealed standings
+## 1:40 to 2:35 · Post the run, privately
 
-*Play again, switch to Round, Long, "Open a round for 10 cUSDC".*
+*On the result screen, click "Post to the leaderboard". The button reads "Revealing your return
+through the KMS…", then "Posted: return public, stake still private".*
 
-> "Rounds: one market for everyone, 60 seconds, the top 3 share the pot. If sides were public, a
-> late joiner could read the crowd and fade it. Here every side is encrypted. My browser's practice
-> bots take the empty seats. They're real players with their own keys and their own encrypted sides."
+> "If I want the glory, I post the run. Only my return is made public: Zama's KMS decrypts that one
+> number and the contract checks the KMS proof on chain before it records it. My stake and my side
+> never leave the ciphertexts."
 
-*The round goes live. Point at the standings: every other player shows "Sealed", and they turn
-"Out" when they cash out.*
+*Open the leaderboard (trophy icon), Today tab: the run shows with its return.*
 
-> "Live, I only see who's still climbing. Nobody's direction, nobody's score."
-
-*Cash out. At the bell the status line shows "Bell: closing the round…" and then "KMS decrypting
-the standings…". The result shows the rank and the prize.*
-
-> "At the bell my own browser closes the round. Zama's KMS decrypts the standings, and the contract
-> checks the KMS proof on chain before it ranks us; then my game account claims my prize in the background. No server, no keeper. Every step
-> is permissionless."
-
-*Open the leaderboard: Last round.*
+> "The leaderboard only holds what players chose to reveal. Everything else, from the side to the
+> balance, stays encrypted, and every keeper step runs from my own browser. No server, no keeper."
 
 ## 2:35 to 3:00 · Wrap-up
 
-*Show the README's confidentiality table, then the repo's test output (39 tests, HCU table) and the
+*Show the README's confidentiality table, then the repo's test output (29 tests, HCU table) and the
 battery summary in FINDINGS.md.*
 
-> "Encrypted sides and stakes, payouts computed on ciphertexts, sealed standings revealed once with a
-> KMS proof, leverage packs from the encrypted PRNG. Stakes in Zama's confidential USDC, real world
+> "Encrypted sides and stakes, payouts computed on ciphertexts, results revealed only when the player
+> posts them, with a KMS proof, leverage packs from the encrypted PRNG. Stakes in Zama's confidential USDC, real world
 > assets as markets. All on Sepolia, verified on Sourcify, with a battery of concurrent players and
 > every payout checked. Siroclimb: climb higher, privately."

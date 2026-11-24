@@ -1,6 +1,6 @@
 import { DeployFunction } from "hardhat-deploy/types";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { MARKETS, ROUND_MARKETS, seedPrices } from "../scripts/markets";
+import { MARKETS, seedPrices } from "../scripts/markets";
 
 /** Zama Protocol confidential token registry ("Wrappers Registry") on Sepolia. */
 export const SEPOLIA_WRAPPERS_REGISTRY = "0x2f0750Bbb0A246059d80e94c454586a7F27a128e";
@@ -10,8 +10,6 @@ export const SEPOLIA_USDC_MOCK = "0x9b5Cd13b8eFbB58Dc25A05CF411D8056058aDFfF";
 export const SEPOLIA_PYTH = "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21";
 
 export const MOVE_SCALE = Number(process.env.MOVE_SCALE ?? 25);
-export const ROUND_ENTRY = 10_000_000; // 10 cUSDC
-export const JOIN_SECONDS = Number(process.env.JOIN_SECONDS ?? 60);
 const FAUCET_AMOUNT = 1_000_000_000; // 1000 cUSDC
 const FAUCET_COOLDOWN = 600;
 
@@ -51,7 +49,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const ladder = await deploy("ClimbLadder", { from: deployer, args: [oracle.address, MOVE_SCALE], log: true });
   const game = await deploy("Siroclimb", {
     from: deployer,
-    args: [deployer, stake, ladder.address, ROUND_ENTRY, JOIN_SECONDS, ROUND_MARKETS],
+    args: [deployer, stake, ladder.address],
     log: true,
   });
 
@@ -70,5 +68,5 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 };
 
 export default func;
-func.id = "siroclimb_game_v6";
+func.id = "siroclimb_game_v7";
 func.tags = ["Siroclimb"];

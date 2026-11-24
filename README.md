@@ -2,8 +2,7 @@
 
 Pick a market, go long or short, and the Sirocco coin climbs a staircase that follows the price.
 Your leverage climbs from 1x to 4x every 6 seconds over a 60-second run, and you cash out whenever
-you want. Play alone against the house, or in timed rounds where everyone rides the same market and
-the top 3 share the pot.
+you want. Every run is solo, against the house.
 
 Siroclimb is about real world assets. The markets are tokenized stocks (Tesla, NVIDIA, Apple and
 Amazon xStocks), gold (XAUt) and the British pound. Stakes and payouts are in **Zama's confidential USDC**.
@@ -37,7 +36,7 @@ Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain 
    background. Any browser where you connect the same wallet finds the same game account.
 3. Your balance is encrypted on chain. The game account signs a 7-day decryption grant locally, so
    the balance is decrypted in your browser automatically, and again after every payout.
-4. **Solo**: pick a market, long or short, and a stake (10 to 100), then **Start climbing**. Your
+4. **Play**: pick a market, long or short, and a stake (10 to 100), then **Start climbing**. Your
    side and stake were already encrypted in the background when you picked them, so the climb starts
    at the click while the entry locks on Sepolia. The coin follows the live price and the leverage
    climbs every 6 s. **Cash out** with the button or the space bar: the value is frozen with the
@@ -45,29 +44,20 @@ Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain 
    The contract computes your payout on ciphertexts and sends it as an encrypted transfer in the
    same transaction; the result screen then adds the transaction link. You can
    post your return to the leaderboard: the return becomes public, your stake stays private.
-5. **Round**: switch to Round, pick a side, then **Open a round** (or **Join**). Players have 60 s
-   to join. If few players are around, the **practice bots** in your browser take the empty seats with
-   their own encrypted sides. While the round is live, every other player shows as *Sealed*. At the
-   bell your browser closes the round, the KMS decrypts the standings, the contract checks the proof,
-   and your game account claims your prize as an encrypted transfer in the background.
-6. The trophy icon shows the leaderboards (last round, today, all time). They list public results
-   only: round standings and the runs players chose to post.
+5. The trophy icon shows the leaderboards (today, all time). They list public results only: the
+   runs players chose to post.
 
 Stocks trade during US market hours (4:00 to 20:00 New York time, pre and post market included,
 US trading days only: weekends and exchange holidays are closed). Outside those hours their chips
-show *Closed*, while gold and the pound stay open. A round only
-opens on a market with a live price.
+show *Closed*, while gold and the pound stay open.
 
 **Nothing has to run on our side.** Every keeper duty is a permissionless call, and the player's
 browser does each one itself (autopilot):
 
 - price checkpoints;
-- settling a run at its 60th second;
-- closing a round at the bell;
-- the KMS reveal and `finalizeRound` with the proof.
+- settling a run at its 60th second.
 
-The practice bots are real players whose keys come from your game account. An optional ops keeper
-(`ops/keeper.mjs`) does the same duties.
+An optional ops keeper (`ops/keeper.mjs`) does the same duties.
 
 ## Every transaction and signature
 
@@ -86,7 +76,7 @@ waits for it on screen.
 | `ClimbFaucet.claimFor`: mint and wrap 1,000 cUSDC | game account | transaction | no, background | 856k |
 | User-decryption grant (EIP-712, 7 days), then the balance is decrypted | game account | signature | no, automatic | none |
 
-**Solo run**
+**Run**
 
 | Step | Who signs | Kind | Waits | Gas |
 | --- | --- | --- | --- | --- |
@@ -98,31 +88,21 @@ waits for it on screen.
 | Balance decryption after the payout | game account | off chain | no, automatic | none |
 | `publishRun` then `recordRun` with the KMS proof | game account | 2 transactions | only when the player clicks **Post** | small |
 
-**Round**
+So a player waits for two things only: the first visit's gas transfer, and the start (`startRun`).
+A run costs two transactions (start and cash out); posting it adds two more, on demand.
 
-| Step | Who signs | Kind | Waits | Gas |
-| --- | --- | --- | --- | --- |
-| Encrypt the side | browser | off chain | no, done in the lobby | none |
-| `joinRound` (or open one) | game account | transaction | yes, one block | 2.99M |
-| Practice bots' `joinRound` | bot keys derived in the browser | transactions | no, background | 2.99M each |
-| `exitAtBell` for a live run, just before the bell | game account (autopilot) | transaction | no, background | 1.04M |
-| `closeRound`, then `finalizeRound` with the KMS proof | any browser (autopilot) | 2 transactions | no, background | 0.55M + 1.78M (4 players) to 8.71M (24) |
-| `claim` the prize | game account | transaction | no, background after the standings show | 1.06M |
-
-So a player waits for two things only: the first visit's gas transfer, and the start (`startRun` or
-`joinRound`). A solo run costs two transactions (start and cash out); posting it adds two more, on
-demand.
+There are no rounds: Siroclimb is solo only. Timed rounds with sealed standings were removed to
+keep the game, the contract and the play flow small (F49).
 
 ## Confidentiality design
 
-*Would the game break if this were public?* Yes, in four places, and each one is encrypted.
+*Would the game break if this were public?* Yes, in three places, and each one is encrypted.
 
 | What | Why it must be private | How (FHEVM) |
 | --- | --- | --- |
-| **Side of a run** (long / short) | A visible side is copied or faded. In a round, a public crowd split ("80 % long") hands the late joiners a free hedge, and the leader's side tells everyone how to finish ahead. | `externalEbool` with an input proof (`FHE.fromExternal`), stored as `ebool`. ACL: the contract and the player only. Never decrypted for anyone else during the run. |
+| **Side of a run** (long / short) | A visible side is copied or faded: a known whale going long is a free signal for everyone else. | `externalEbool` with an input proof (`FHE.fromExternal`), stored as `ebool`. ACL: the contract and the player only. Never decrypted for anyone else during the run. |
 | **Stake** | Bankrolls and position sizes are private information, and whales get front-run. | `externalEuint64`, clamped to 100 cUSDC **on ciphertexts** (`FHE.min`), pulled with ERC-7984 `confidentialTransferFrom`. The amount actually moved (`paid`) stays encrypted: an unfunded stake moves 0 and earns 0, without revealing any balance. |
 | **Value and payout** | The payout reveals the stake and the side. | The contract works out in clear, from the public oracle path, what a long and what a short would have made (`multLong`, `multShort`, see `ClimbLadder`). It then selects one with the encrypted side (`FHE.select`) and multiplies the encrypted stake by it (`FHE.mul`, `FHE.div`). The payout is an ERC-7984 transfer of that ciphertext **in the same transaction**. Money never waits for a decryption. |
-| **Round standings** | Live standings give away each player's side, so a laggard could fade the leader. | Each exit is scored on ciphertexts (`select(funded, select(side, multLong, multShort) + 1, 0)`). Scores stay sealed until the bell. Then `closeRound` makes them publicly decryptable, the KMS decrypts them, and `finalizeRound` checks the proof with `FHE.checkSignatures` before it ranks the players and records the 50 / 30 / 20 % prizes. Each prize is paid by `claim`, an encrypted transfer per winner. |
 | **Leverage packs** | A known cap would let rivals size you up. | The tier is drawn with the on-chain encrypted PRNG (`FHE.randEuint8`, then `FHE.lt` / `FHE.select` into 45 / 28 / 18 / 9 %), and only the player can decrypt it. A packed run picks among the capped paths on ciphertexts (`FHE.eq` on the encrypted cap). |
 | **Balances** | Private by nature. | Zama's cUSDC (ERC-7984): every balance and transfer is an `euint64`. The house bankroll is encrypted too, and even the deployer cannot read it. |
 
@@ -132,14 +112,11 @@ What becomes public, and when:
 | --- | --- |
 | Market, start time, exit time of a run | Public (transactions) |
 | Long and short multipliers of a finished run | Public: both are computed from public prices, and the encrypted side picks one |
-| Side, stake, value of a solo run | Player only, forever. If the player posts the run, the multiplier becomes public with a KMS proof, and the stake stays private |
-| Round entry | Public (10 cUSDC); the transfer itself is encrypted |
-| Round sides and scores | Sealed until the bell, then public with a KMS proof (needed to rank and pay) |
-| Prizes | Public at finalize (they follow from the public standings) |
+| Side, stake, value of a run | Player only, forever. If the player posts the run, the multiplier becomes public with a KMS proof, and the stake stays private |
 | Pack tier | Player only |
 | Balances | Owner only (ERC-7984) |
 
-Honest limit: once a solo run ends, an observer knows its value is one of two numbers (long or
+Honest limit: once a run ends, an observer knows its value is one of two numbers (long or
 short). The side and the stake stay hidden, and so does the amount paid.
 
 ## Prices: Pyth, with a bounded fallback
@@ -178,8 +155,7 @@ and at -100 % the coin falls and the run is worth 0 for good.
  │ relayer SDK: encrypt, user/public    │        │   ├─ ClimbLadder ── ClimbPriceOracle      │
  │   decrypt (KMS proofs)               │        │   │                    └─ Pyth (Wormhole) │
  │ autopilot: checkpoints, settle,      │        │ ClimbFaucet ─► USDCMock.mint + wrap      │
- │   close, reveal, finalize            │        └──────────────────────────────────────────┘
- │ practice bots (own keys)             │
+ │   (permissionless duties)            │        └──────────────────────────────────────────┘
  └───────────────┬─────────────────────┘
                  │ /api/pyth (signed Hermes update, key server-side)
                  │ /api/prices (reference prices, market hours)
@@ -188,34 +164,28 @@ and at -100 % the coin falls and the run is worth 0 for good.
 
 | Path | Content |
 | --- | --- |
-| `contracts/contracts/Siroclimb.sol` | Runs, rounds, packs, sessions, encrypted payouts, KMS-verified standings |
+| `contracts/contracts/Siroclimb.sol` | Runs, packs, sessions, encrypted payouts, KMS-verified posted results |
 | `contracts/contracts/ClimbLadder.sol` | Run rules: long and short multipliers on the oracle path |
 | `contracts/contracts/ClimbPriceOracle.sol` | Per-market checkpoints: Pyth, bounded fallback, seeding |
 | `contracts/contracts/ClimbFaucet.sol` | Mint + wrap test cUSDC for any account |
 | `contracts/contracts/tokens/` | `MirrorToken` (xStock underlyings) and the OpenZeppelin ERC-7984 wrapper |
 | `contracts/test/` | FHEVM mock tests, HCU budget |
 | `js/api.js` | The front/back contract; Sepolia by default, `?mock` for the simulation |
-| `js/chain/` | Sepolia implementation: config, FHE client, wallet and game account, feed, prices, autopilot, bots |
+| `js/chain/` | Sepolia implementation: config, FHE client, wallet and game account, feed, prices, autopilot |
 | `api/` | Server routes: `pyth.js` (Hermes proxy), `prices.js` (reference prices, market hours) |
 | `ops/` | On-chain battery, optional keeper |
 | `tests/chain/` | Puppeteer end to end tests of the real front on Sepolia (injected test wallet) |
 
 HCU budget per transaction (worst cases, limits 20M global / 5M depth). HCU is not the binding
 limit on Sepolia, gas is: each FHE operation and encrypted transfer costs about 1M gas on the real
-host, and Sepolia caps a transaction at 16.78M gas. Rounds therefore never loop over heavy work in
-one transaction (F24): runs exit at the bell one per transaction (`exitAtBell`), and prizes are
-claimed one per transaction (`claim`).
+host, and Sepolia caps a transaction at 16.78M gas. No transaction loops over heavy work: each one
+handles a single run.
 
 | Transaction | Global HCU | Depth |
 | --- | --- | --- |
 | `startRun` (encrypted side and stake, clamp, transfer) | 1.32M | 0.68M |
-| `cashOut` solo (select, mul, div, encrypted payout) | 1.95M | 1.74M |
+| `cashOut` (select, mul, div, encrypted payout) | 1.95M | 1.74M |
 | `cashOut` packed (4 capped paths selected on ciphertexts) | 2.45M | 1.90M |
-| `joinRound` | 0.67M | 0.37M |
-| `exitAtBell` (one exit, encrypted score) | 0.21M | 0.21M |
-| `closeRound` (worst case: 23 exits at the bell, 24 reveals; mock only) | 4.72M | 0.21M |
-| `finalizeRound` (KMS proof check, ranking, prizes recorded) | 0 | 0 |
-| `claim` (one encrypted prize or refund transfer) | ~0.2M | ~0.2M |
 | `openPack` (encrypted PRNG) | 0.34M | 0.24M |
 
 ## Running it
@@ -231,7 +201,7 @@ key, every market uses the bounded fallback.
 ### Contracts
 
 ```bash
-cd contracts && npm i && npx hardhat test          # 41 tests on the FHEVM mock, HCU budget
+cd contracts && npm i && npx hardhat test          # 29 tests on the FHEVM mock, HCU budget
 npm run deploy:sepolia && npm run verify:sourcify  # key: ~/.config/siroclimb/sepolia/deployer.key
 ```
 
@@ -245,12 +215,12 @@ variable. No secret ever reaches the bundle. Contract addresses come from
 ### Tests on Sepolia
 
 ```bash
-node tests/chain/solo.mjs     # connect, faucet, decrypt, encrypted solo run, cash out, settlement
-node tests/chain/round.mjs    # open a round, practice bots, sealed standings, KMS reveal, prize
+node tests/chain/solo.mjs     # connect, faucet, decrypt, encrypted run, cash out, settlement
+node tests/chain/timing.mjs   # click to coin, cash out to result, cash out to settled
 cd ops && npm i
-caffeinate -i node battery.mjs 24 2 2   # 24 concurrent players, every payout checked by decryption
+caffeinate -i node battery.mjs 24 2     # 24 concurrent players, every payout checked by decryption
 node audit.mjs                          # recompute every settled run from public chain data
-node sweep.mjs                          # finish anything left open (settle, exit, close, reveal, claim)
+node sweep.mjs                          # settle any run left open past its 60th second
 ```
 
 The browser tests inject a test wallet (an EIP-1193 provider backed by a key in Node). The
@@ -261,7 +231,7 @@ in the same folder, and the ops keeper uses `keeper.key`. No key is ever committ
 
 - Fallback markets (NVDA, AAPL, AMZN, XAUT, GBP with the current key) rely on semi-trusted, bounded
   reporters. A wider Pyth entitlement makes them trustless with no code change.
-- Solo runs pay from a house bankroll that the testnet auto-mints (`_reserve`). A mainnet version
+- Runs pay from a house bankroll that the testnet auto-mints (`_reserve`). A mainnet version
   would need a real liquidity pool.
 - The game account key lives in the browser's local storage and holds only test cUSDC and a little
   gas. It is derived from a wallet signature, so the same wallet recovers it in any browser. A

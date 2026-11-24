@@ -6,7 +6,7 @@ const [marketsFile, deployments, ABI] = await Promise.all([load('./markets.json'
 export const CHAIN_ID = 11155111;
 export const CHAIN_HEX = '0xaa36a7';
 const q = new URLSearchParams(location.search);
-// A busy page (feed, rounds, autopilot, three practice bots) hit 429s on Tenderly's gateway, so the
+// A busy page (live feed, autopilot) hit 429s on Tenderly's gateway, so the
 // browser reads from publicnode; every read after a write waits for it (F27, F29). ?rpc= overrides.
 export const RPC_URL = q.get('rpc') || window.SIROCLIMB_RPC || 'https://ethereum-sepolia-rpc.publicnode.com';
 export const EXPLORER = 'https://sepolia.etherscan.io';
@@ -27,9 +27,6 @@ export const STEP_SECONDS = 6;
 export const RUN_SECONDS = 60;
 export const MOVE_SCALE = 25;
 export const MAX_STAKE = 100;
-export const ROUND_ENTRY = 10;
-export const JOIN_SECONDS = 60;
-export const PRIZE_SPLIT = [0.5, 0.3, 0.2];
 /** Gas sent once from the wallet to the browser's session key (it pays every game transaction). */
 export const SESSION_FUND_ETH = '0.03';
 export const SESSION_MIN_ETH = 0.006;

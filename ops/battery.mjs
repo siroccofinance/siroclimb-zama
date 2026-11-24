@@ -10,21 +10,18 @@
 //          Checks: the public multipliers equal ClimbLadder's recomputation on the oracle path;
 //          the player's decrypted multiplier is the one of its side; the decrypted balance moved
 //          by exactly paid x mult - paid.
-//  rounds  rounds filled by up to 24 players, random sides and exits; close, KMS reveal,
-//          finalize. Checks: decrypted standings match each player's side, ranks and prizes
-//          (50/30/20, ties share) match a local recomputation, balances moved by prize - entry.
 //
-// usage: node battery.mjs [players=16] [soloWaves=2] [rounds=2]
+// usage: node battery.mjs [players=16] [soloWaves=2]
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { Contract } from 'ethers';
 import { ADDR, MARKETS, SCALE, Sender, USDC, balanceAt, provider, withTimeout, balanceOf, settledBlock, view, batteryWallet, encryptRun, errText, faucet, fallbackFor, game, handle, key, ladder, openMarkets, publicDecrypt, pushIfStale, pythFor, sleep, token, userDecrypt } from './lib.mjs';
 
-const N = Number(process.argv[2] || 16), WAVES = Number(process.argv[3] || 2), ROUNDS = Number(process.argv[4] || 2);
+const N = Number(process.argv[2] || 16), WAVES = Number(process.argv[3] || 2);
 const OFFSET = Number(process.env.OFFSET || 1);         // index 0 is the browser e2e player
 const t0 = Date.now(), T = () => `${((Date.now() - t0) / 1000).toFixed(0).padStart(4)}s`;
 const log = (...a) => console.log(T(), ...a);
-const results = { started: new Date().toISOString(), game: ADDR.Siroclimb, players: N, solo: [], rounds: [], findings: [], gas: {} };
-const pass = (kind, ok, detail) => { (kind === 'round' ? results.rounds : results.solo).push({ ok, ...detail }); if (!ok) log('FAIL', kind, JSON.stringify(detail, (k, v) => (typeof v === 'bigint' ? v.toString() : v))); };
+const results = { started: new Date().toISOString(), game: ADDR.Siroclimb, players: N, solo: [], findings: [], gas: {} };
+const pass = (kind, ok, detail) => { results.solo.push({ ok, ...detail }); if (!ok) log('FAIL', kind, JSON.stringify(detail, (k, v) => (typeof v === 'bigint' ? v.toString() : v))); };
 
 const deployer = new Sender(key('deployer.key'), 'deployer');
 const keeper = new Sender(key('keeper.key'), 'keeper');
@@ -43,7 +40,7 @@ async function topUp(p) {
   if (wait === 0) await p.send(faucet, 'claimFor', [p.address]);
 }
 
-// ── keeper loop: checkpoints for markets in use, settles expired runs, closes and finalizes rounds
+// ── keeper loop: checkpoints for markets in use; settlements run on their own key below
 const inUse = new Set(), expired = new Set();
 let keeping = true;
 async function keeperLoop() {
@@ -78,7 +75,7 @@ function expectedPaid(stake) { return stake > 100n * USDC ? 100n * USDC : stake;
 async function soloRun(p, wave, delay = 0) {
   await sleep(delay);                                    // staggered starts: the relayer is shared
   let open = await openMarkets();
-  if (!open.length) open = [3];                          // gold trades around the clock
+  if (!open.length) open = [MARKETS.findIndex(m => m.id === 'XAUt')];   // gold trades around the clock
   const market = open[Math.floor(Math.random() * open.length)];
   const long = Math.random() < 0.5;
   const scenario = p === poor ? 'unfunded' : Math.random() < 0.12 ? 'clamp' : Math.random() < 0.15 && p.hasPack ? 'pack' : Math.random() < 0.35 ? 'expire' : 'cash';
@@ -144,94 +141,8 @@ async function soloRun(p, wave, delay = 0) {
   }
 }
 
-// ── rounds
-async function roundGame(k) {
-  const live = await openMarkets();
-  const roster = players.slice(0, Math.min(players.length, 24));
-  const entrants = k === 1 ? [poor, ...roster.slice(0, 23)] : roster;
-  const sides = new Map(), joinBlock = new Map(), encs = new Map();
-  // every player encrypts its side first (at its own pace, like a player choosing before clicking),
-  // so 17 relayer encryptions at once do not eat the 60 s join window
-  for (const p of entrants) { const long = Math.random() < 0.5; sides.set(p, long); encs.set(p, await encryptRun(p.address, long)); }
-  // wait for a joinable state: nothing open, or an open round with time left
-  const n = Number(await game.roundCount());
-  let id = n;
-  if (n) { const [r] = await game.getRound(n - 1); if (Date.now() / 1000 < Number(r.startsAt) - 20) id = n - 1; else if (Date.now() / 1000 < Number(r.startsAt)) { await sleep((Number(r.startsAt) - Date.now() / 1000 + 1) * 1000); } }
-  const join = async p => { const enc = encs.get(p); const rc = await p.send(game, 'joinRound', [id, enc.handles[0], enc.proof]); joinBlock.set(p, rc.blockNumber); };
-  await join(entrants[0]);
-  const [r0] = await view(() => game.getRound(id));
-  inUse.add(Number(r0.market));
-  log(`round ${id} on ${MARKETS[Number(r0.market)].id} (${live.length} markets open), ${entrants.length} players`);
-  const joined = await Promise.allSettled(entrants.slice(1).map(join));
-  joined.forEach((j, i) => { if (j.status === 'rejected') log('join failed', entrants[i + 1].name, errText(j.reason)); });
-  const [r1, ids] = await view(() => game.getRound(id), ([, x]) => x.length >= entrants.length - joined.filter(j => j.status === 'rejected').length);
-  const startsAt = Number(r1.startsAt), endsAt = Number(r1.endsAt);
-  const runOf = new Map();
-  for (const rid of ids) { const x = await view(() => game.getRun(rid)); runOf.set(x.player.toLowerCase(), rid); }
-  // exits: 40 % cash out during the minute
-  await sleep(Math.max(0, startsAt * 1000 - Date.now()) + 2000);
-  await Promise.all(entrants.filter(p => runOf.has(p.address.toLowerCase())).map(async p => {
-    if (Math.random() > 0.4) return;
-    await sleep(Math.random() * 45_000);
-    const py = await pythFor(Number(r0.market));
-    await p.send(game, 'cashOut', [runOf.get(p.address.toLowerCase()), py ? py.updateData : []], py ? py.fee : 0n).catch(e => log('round cash out', p.name, errText(e)));
-  }));
-  await sleep(Math.max(0, endsAt * 1000 - Date.now()) + 4000);
-  // the chain's clock, not ours: wait for a block past the bell
-  await view(() => provider.getBlock('latest'), b => b && b.timestamp > endsAt + 1, 60);
-  // exits at the bell one per transaction (F24: a 17-exit close needs ~18M gas, over Sepolia's per-transaction cap)
-  for (const rid of ids) {
-    if (Number((await view(() => game.getRun(rid))).status) !== 1) continue;
-    // a player's cash out can land first (fixed gas, no estimate): a revert is fine if the run has ended
-    await keeper.send(game, 'exitAtBell', [rid]).catch(async e => {
-      if (Number((await view(() => game.getRun(rid), x => Number(x.status) === 2, 10)).status) !== 2) throw e;
-    });
-  }
-  await keeper.send(game, 'closeRound', [id]).catch(e => { if (!/WrongRoundStatus/.test(errText(e))) throw e; });
-  const handles = await view(() => game.roundScoreHandles(id), hs => hs.length && hs.every(h => !/^0x0+$/.test(h)), 30);
-  const { values: scores, proof } = await publicDecrypt([...handles]);
-  await keeper.send(game, 'finalizeRound', [id, scores, proof]).catch(e => { if (!/WrongRoundStatus/.test(errText(e))) throw e; });
-  // prizes are pull payments: every winner's prize is claimed (anyone may claim for anyone)
-  const claimBlock = new Map();
-  const finalizedAt = await view(async () => (await game.queryFilter(game.filters.RoundFinalized(id), Math.min(...joinBlock.values()))).at(-1)?.blockNumber, b => b != null, 30);
-  for (const rid of ids) {
-    // prizes as of the finalize block: a lagging node could still answer 0 (F39)
-    if ((await view(() => game.prizeOf(rid, { blockTag: finalizedAt }))) === 0n) continue;
-    const rc = await keeper.send(game, 'claim', [rid]);
-    claimBlock.set(rid, rc.blockNumber);
-  }
-  const finalBlock = await view(async () => (await game.queryFilter(game.filters.RoundFinalized(id), Math.min(...joinBlock.values()))).at(-1)?.blockNumber, b => b != null, 30);
-  // local recomputation of ranks and prizes
-  const [rf] = await view(() => game.getRound(id), ([x]) => Number(x.status) === 3, 30);
-  const order = scores.map((s, i) => i).sort((a, b) => (scores[b] > scores[a] ? 1 : scores[b] < scores[a] ? -1 : a - b));
-  const funded = scores.filter(s => s !== 0n).length, pot = BigInt(funded) * 10n * USDC, places = Math.min(3, funded);
-  const bps = [5000n, 3000n, 2000n], shareSum = bps.slice(0, places).reduce((a, b) => a + b, 0n);
-  const prize = new Map();
-  for (let pos = 0; pos < order.length;) {
-    let end = pos + 1; while (end < order.length && scores[order[end]] === scores[order[pos]]) end++;
-    let pz = 0n;
-    if (scores[order[pos]] !== 0n && pos < places) { let b = 0n; for (let k2 = pos; k2 < end && k2 < places; k2++) b += bps[k2]; pz = (pot * b) / shareSum / BigInt(end - pos); }
-    for (let k2 = pos; k2 < end; k2++) prize.set(order[k2], scores[order[k2]] === 0n ? 0n : pz);
-    pos = end;
-  }
-  const checks = [];
-  for (let i = 0; i < ids.length; i++) {
-    const run = await view(() => game.getRun(ids[i]), x => Number(x.status) === 2);
-    const p = entrants.find(x => x.address.toLowerCase() === run.player.toLowerCase());
-    const long = sides.get(p);
-    const expScore = p === poor ? 0n : (long ? run.multLong : run.multShort) + 1n;
-    // exact blocks: just before the join, and the finalize block (prize paid)
-    const delta = p === poor ? 0n : (await balanceAt(p.wallet, claimBlock.get(ids[i]) ?? finalBlock)) - (await balanceAt(p.wallet, joinBlock.get(p) - 1));
-    const ok = scores[i] === expScore && (p === poor || delta === prize.get(i) - 10n * USDC);
-    checks.push({ player: p.name, side: long ? 'long' : 'short', score: Number(scores[i]), pnlPct: scores[i] ? (Number(scores[i]) - 1 - 1e6) / 1e4 : null, prize: Number(prize.get(i)) / 1e6, ok });
-  }
-  const ok = checks.every(c => c.ok) && Number(rf.status) === 3 && rf.pot === pot;
-  pass('round', ok, { round: id, market: MARKETS[Number(r0.market)].id, players: ids.length, funded, pot: Number(pot) / 1e6, standings: checks.sort((a, b) => b.score - a.score) });
-  log(`round ${id} ${ok ? 'PASS' : 'FAIL'}: ${ids.length} players, pot ${Number(pot) / 1e6}, top ${checks.slice(0, 3).map(c => `${c.player} ${c.pnlPct}% +${c.prize}`).join(', ')}`);
-}
-
 // ── main
-log(`battery: ${N} players, ${WAVES} solo waves, ${ROUNDS} rounds, game ${ADDR.Siroclimb}`);
+log(`battery: ${N} players, ${WAVES} solo waves, game ${ADDR.Siroclimb}`);
 const eth0 = await deployer.eth();
 await Promise.all(players.map(p => setup(p).catch(e => log('setup', p.name, errText(e)))));
 await setup(poor, { fund: false }).catch(e => log('setup poor', errText(e)));
@@ -255,15 +166,10 @@ for (let w = 1; w <= WAVES; w++) {
   res.forEach((r, i) => { if (r.status === 'rejected') { log('solo error', runners[i].name, errText(r.reason)); pass('solo', false, { wave: w, player: runners[i].name, error: errText(r.reason) }); } });
   log(`wave ${w}: ${results.solo.filter(x => x.wave === w && x.ok).length} / ${results.solo.filter(x => x.wave === w).length} pass`);
 }
-for (let k = 1; k <= ROUNDS; k++) {
-  await Promise.all(players.map(p => topUp(p).catch(() => {})));
-  await roundGame(k).catch(e => { log('round error', errText(e)); pass('round', false, { error: errText(e) }); });
-}
 keeping = false;
 results.finished = new Date().toISOString();
 results.summary = {
   solo: `${results.solo.filter(x => x.ok).length} / ${results.solo.length}`,
-  rounds: `${results.rounds.filter(x => x.ok).length} / ${results.rounds.length}`,
   deployerEthSpent: +(eth0 - (await deployer.eth())).toFixed(4),
 };
 mkdirSync('battery-results', { recursive: true });

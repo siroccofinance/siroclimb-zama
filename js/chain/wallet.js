@@ -5,7 +5,7 @@
 //  - The game account holds the player's test cUSDC and sends every game transaction (start, cash
 //    out, join, faucet, operator approval) and signs the decryption grant locally: no pop-up during
 //    play. It plays with test tokens only.
-// Every sender (game account, keeper key, practice bots) has one queue: one transaction at a time
+// Every sender (game account, keeper key) has one queue: one transaction at a time
 // with a locally tracked nonce, so concurrent duties never race for a nonce.
 import { BrowserProvider, Contract, FetchRequest, JsonRpcProvider, Wallet, getBytes, keccak256, parseEther, formatEther, toUtf8Bytes } from '../vendor/ethers-6.17.0.min.js';
 import { ABI, ADDR, CHAIN_HEX, CHAIN_ID, RPC_URL, SESSION_FUND_ETH, SESSION_MIN_ETH } from './config.js';
@@ -23,10 +23,10 @@ export const token = new Contract(ADDR.StakeToken, ABI.ERC7984, rpc);
 export const faucet = new Contract(ADDR.ClimbFaucet, ABI.ClimbFaucet, rpc);
 export const pythContract = new Contract(ADDR.Pyth, ['function getUpdateFee(bytes[] updateData) view returns (uint256)'], rpc);
 
-// ───────────────────────────── senders (session key, bots)
+// ───────────────────────────── senders (session key, keeper key)
 const TX_GAS_CAP = 16_000_000n;
 /** Gas limits of game calls, about 1.5x to 2x the peak measured on Sepolia (FINDINGS F35). */
-const FIXED_GAS = { startRun: 6_000_000n, cashOut: 4_500_000n, settleRun: 4_000_000n, joinRound: 5_000_000n, exitAtBell: 2_500_000n, claim: 2_500_000n };
+const FIXED_GAS = { startRun: 6_000_000n, cashOut: 4_500_000n, settleRun: 4_000_000n };
 // 'unknown custom error': right after the operator approval, a lagging node can still refuse the
 // token transfer (the error comes from the token contract); a few seconds later it goes through
 const RETRY = /nonce|underpriced|already known|replacement|timeout|failed to fetch|network|ECONNRESET|503|502|429|insufficient funds|unknown custom error|Panic\(50\)/i;
@@ -76,7 +76,7 @@ export class Sender {
     return p;
   }
   async eth() { return Number(formatEther(await rpc.getBalance(this.address))); }
-  /** Plain ETH transfer (gas for the keeper key and the practice bots), through the same queue. */
+  /** Plain ETH transfer (gas for the keeper key), through the same queue. */
   sendEth(to, eth) {
     const run = async () => {
       const pending = await rpc.getTransactionCount(this.address, 'pending');
@@ -91,7 +91,7 @@ export class Sender {
   }
 }
 
-/** A key derived from the session key (keeper duties, practice bots): same browser, own nonce queue. */
+/** A key derived from the session key (keeper duties): same browser, own nonce queue. */
 export function derived(sender, tag) {
   const key = keccak256(toUtf8Bytes(`${sender.key}:${tag}`));
   return new Sender(key);
@@ -272,9 +272,6 @@ const FRIENDLY = [
   [/user rejected|denied|4001/i, 'Cancelled in the wallet'],
   [/insufficient funds/i, 'Not enough Sepolia ETH for gas'],
   [/StaleEntry/, 'The price is being refreshed, try again in a few seconds'],
-  [/RoundNotJoinable/, 'This round has started, join the next one'],
-  [/AlreadyJoined/, 'You are already in this round'],
-  [/RoundFull/, 'This round is full, join the next one'],
   [/FaucetCooldown/, 'Faucet already used, try again in a few minutes'],
   [/PackCooldown/, 'One pack every 10 minutes'],
 ];
