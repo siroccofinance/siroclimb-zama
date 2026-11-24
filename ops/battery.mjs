@@ -26,8 +26,8 @@ const log = (...a) => console.log(T(), ...a);
 const results = { started: new Date().toISOString(), game: ADDR.Siroclimb, players: N, solo: [], rounds: [], findings: [], gas: {} };
 const pass = (kind, ok, detail) => { (kind === 'round' ? results.rounds : results.solo).push({ ok, ...detail }); if (!ok) log('FAIL', kind, JSON.stringify(detail, (k, v) => (typeof v === 'bigint' ? v.toString() : v))); };
 
-const deployer = new Sender(key('siroclimb-deployer.key'), 'deployer');
-const keeper = new Sender(batteryWallet(900), 'keeper');
+const deployer = new Sender(key('deployer.key'), 'deployer');
+const keeper = new Sender(key('keeper.key'), 'keeper');
 const players = Array.from({ length: N }, (_, i) => Object.assign(new Sender(batteryWallet(OFFSET + i)), { i, name: handle(OFFSET + i + 7) }));
 const poor = Object.assign(new Sender(batteryWallet(800)), { i: 'poor', name: 'quiet.nomad' });
 
