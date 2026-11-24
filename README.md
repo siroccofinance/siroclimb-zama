@@ -1,41 +1,23 @@
-# Siroclimb
+# Siroclimb on Zama: a confidential climbing game
 
-Front of the Siroclimb game: pick a market, go long or short, the coin rolls up and down a staircase that follows the price, leverage climbs from 1x to 4x every 6 seconds, and you decide when to cash out.
+Pick a market, go long or short, and the Sirocco coin climbs a staircase that follows the price.
+Your leverage climbs from 1x to 4x every 6 seconds over a 60-second run, and you cash out whenever
+you want. Play alone against the house, or in timed rounds where everyone rides the same market and
+the top 3 share the pot.
 
-Front only. The back end (prices, runs, rounds, payouts) is owned by Eden and plugs in through `js/api.js`.
+Siroclimb is about real world assets. The markets are tokenized stocks (Tesla, NVIDIA and Apple
+xStocks), gold (XAUt) and the British pound. Stakes and payouts are in **Zama's confidential USDC**.
 
-## Run
+Built on the **Zama Protocol (FHEVM)** on Sepolia for the Zama Developer Program, Season 5:
+Confidential Gaming.
 
-```sh
-npm run dev          # http://127.0.0.1:8765  (ES modules need a server)
-```
+- **Network**: Ethereum Sepolia
+- **Stakes**: Zama's `cUSDCMock` (ERC-7984, shown as cUSDC), resolved and checked through Zama's
+  Wrappers Registry
+- **Contracts**: Solidity 0.8.27, `@fhevm/solidity` 0.11, OpenZeppelin confidential contracts 0.5,
+  Pyth
+- **Front**: static site (Three.js scene, ES modules), ethers 6, Zama relayer SDK 0.4.1 from Zama's
+  CDN, two small server routes (Pyth, reference prices)
 
-`#play` opens the lobby directly, `?classic` switches back to the first game version (auto climbing box and ladder), `?demo=wild` triples the demo volatility.
-
-## Layout
-
-| Path | What |
-| --- | --- |
-| `index.html` | Whole app on one page: intro, lobby, game HUD, result, sheets |
-| `play.css` | App styles (Sirocco terracotta art direction) |
-| `js/game.js` | Screens, HUD, leverage gauge, sound, scene driving |
-| `js/api.js` | Back end contract (documented at the top) and in browser mock |
-| `js/sirocco-escalator-scene.js` | Three.js scene: escalator hero, launch, stairs track physics |
-| `assets/` | Hero films (webm and mp4), poster, brand SVGs |
-| `3d/` | 3D sources: every scene version, render and capture scripts, encoded renders |
-| `tests/` | Puppeteer end to end flows (solo, rounds, intro, endings) |
-
-## Plugging the back end
-
-Replace the mock half of `js/api.js` while keeping the exported functions and event shapes: `init`, `connect`, `listAssets`, `subscribePrice`, `startRun`, `onRun`, `cashOut`, `currentRound`, `onRound`, `joinRound`, `roundStandings`, `leaderboard`, `balance`, `faucet`, `openPack`.
-
-## 3D
-
-`3d/sirocco-escalator-scene.js` is the source of truth for the scene and is copied to `js/` for the site. Render harnesses (`3d/_track.mjs`, `3d/_game.mjs`, `3d/render.mjs`) drive headless Chrome; PNG frame sequences are not versioned.
-
-## Tests
-
-```sh
-npm i
-npm run test:solo    # screenshots land in out/
-```
+Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain and their fixes in
+[FINDINGS.md](FINDINGS.md), and the 3-minute video script in [DEMO.md](DEMO.md).
