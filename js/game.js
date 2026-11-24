@@ -2,7 +2,7 @@
 // The 3D scene is the hero's: in the lobby the belt loops; on start it brakes, the coin's box climbs one level
 // per leverage step; cash out tosses the coin (camera follows), a bust drops it.
 import * as api from './api.js';
-import { createEscalatorScene } from './sirocco-escalator-scene.js?v=6';
+import { createEscalatorScene } from './sirocco-escalator-scene.js?v=7';
 import { CARD, drawCard, loadLogo, toBlob } from './share-card.js?v=1';
 
 const $ = s => document.querySelector(s);
@@ -23,7 +23,7 @@ const money = v => nf.format(v);
 const sgn = v => (v < -0.0049 ? MINUS : '+');
 const signed = v => sgn(v) + nf.format(Math.abs(v));
 /** Small amounts (interest on a minute of borrowing) keep their 6 decimals. */
-const tiny = v => (v > 0 && v < 0.01 ? v.toFixed(6) : money(v));
+const tiny = v => (v > 0 && v < 0.0000005 ? '<0.000001' : v > 0 && v < 0.01 ? v.toFixed(6) : money(v));
 const pct = v => sgn(v) + Math.abs(v).toFixed(2) + '%';
 const price = p => (p >= 1000 ? nf.format(p) : p >= 10 ? p.toFixed(2) : p.toFixed(4));
 const levTxt = x => (x % 1 ? x.toFixed(1) : String(x)) + 'x';
@@ -403,13 +403,14 @@ function settled(f) {
 function showResult(res) {
   const bust = res.status === 'busted';
   $('#rE').textContent = res.status === 'failed' ? 'Start failed, nothing was staked' : bust ? 'The coin fell' : res.status === 'expired' ? "Time's up, cashed out" : 'Cashed out';
-  $('#rV').textContent = `${signed(res.pnl)} cUSDC`;
+  $('#rV').innerHTML = `${signed(res.pnl)}<small> cUSDC</small>`;
+  const m = byId[run.assetId]; $('#rM').innerHTML = `<b>${label(m)}</b><span class="pill is-${run.side}">${run.side === 'short' ? 'Short' : 'Long'}</span>`;
   $('.result').classList.toggle('is-win', res.pnl > 0.005);
   const a = byId[run.assetId];
   const stats = [['Return', pct(res.pnlPct)], ['Top leverage', levTxt(res.maxLeverage)], ['Time', `${Math.max(1, Math.round(res.duration))}s`],
-    [`${label(a)} entry`, price(res.entryPrice)], ['Exit', price(res.exitPrice)]];
+    [`${label(a)} entry → exit`, `${price(res.entryPrice)} → ${price(res.exitPrice)}`]];
   if (res.interest != null) stats.push(['Borrowed', `${money(res.borrowed || 0)} cUSDC`], ['Interest paid', `${tiny(res.interest)} cUSDC`]);
-  $('#rS').innerHTML = stats.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  $('#rS').innerHTML = stats.map(([k, v], i) => `<div${i ? '' : ` class="is-key${res.pnlPct > 0.005 ? ' is-up' : ''}"`}><dt>${k}</dt><dd>${v}</dd></div>`).join('');
   const rr = $('#rR'); rr.hidden = !res.pending;
   if (res.status === 'failed') rr.innerHTML = 'The start transaction did not go through, so your stake never left your account.';
   else if (res.pending) rr.innerHTML = 'Settling on chain: encrypted payout…';
