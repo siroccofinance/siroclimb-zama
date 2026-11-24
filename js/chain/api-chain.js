@@ -28,7 +28,8 @@ export const subscribePrice = (id, cb) => feed.subscribe(indexOf(id), cb);
 export const history = (id, seconds = 60) => feed.history(indexOf(id), seconds);
 export const marketOpen = id => feed.isOpen(indexOf(id));
 /** Where the chain gets this market's checkpoints from now: 'Pyth' (verified) or 'bounded' (public fallback). */
-export const priceSource = id => (feed.isPyth(indexOf(id)) ? 'Pyth verified' : 'bounded fallback');
+const SOURCE = { pyth: 'Pyth verified', 'kraken-xstock': 'xStock 24/7, Kraken', kraken: 'Kraken', yahoo: 'Yahoo Finance', oracle: 'on-chain checkpoints' };
+export const priceSource = id => { const i = indexOf(id); return feed.isPyth(i) ? SOURCE.pyth : SOURCE[feed.sourceOf(i)] || 'bounded checkpoints'; };
 export const onMarkets = cb => feed.onMarkets(cb);
 let focusId = null;
 /** The market the lobby shows: its price checkpoint is kept fresh so a start is instant. */
@@ -261,7 +262,7 @@ function takeEncryption(s, long, units) {
 
 export async function startRun({ assetId, side = 'long', stake }) {
   const m = indexOf(assetId);
-  if (!feed.isOpen(m)) throw new Error(`${MARKETS[m].token.symbol} (${MARKETS[m].name}) is closed now (US market hours). Try cXAUt or ctGBP`);
+  if (!feed.isOpen(m)) throw new Error(`${MARKETS[m].token.symbol} (${MARKETS[m].name}) has no live price right now. Try another market`);
   if (!(stake > 0) || stake > MAX_STAKE) throw new Error(`Stake between 1 and ${MAX_STAKE} cUSDC`);
   if (bal != null && stake > bal) throw new Error('Not enough cUSDC: use the faucet');
   const s = await session();
