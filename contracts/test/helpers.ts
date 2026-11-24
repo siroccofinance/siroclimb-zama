@@ -177,7 +177,7 @@ export function model(points: { t: number; p: bigint }[], cap = 6, scale = MOVE_
     let mv = ((points[j].p - prev) * SCALE) / prev;
     if (mv > 200_000n) mv = 200_000n;
     if (mv < -200_000n) mv = -200_000n;
-    const step = BigInt(Math.min(cap, Math.floor(Math.max(0, points[j].t) / 6)));
+    const step = BigInt(Math.min(cap, Math.floor(Math.max(0, points[j - 1].t) / 6)));   // leverage when the move began
     const d = (mv * scale * (10n + 5n * step)) / 10n;
     if (!fellL) {
       accL += d;
