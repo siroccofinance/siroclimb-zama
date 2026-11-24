@@ -193,3 +193,14 @@ The site is static, and `api/pyth.js` and `api/prices.js` are Vercel Node functi
 (`vercel.json`). Deploy the repo root and set `PYTH_API_KEY` as a server-side environment
 variable. No secret ever reaches the bundle. Contract addresses come from
 `js/chain/deployments.json`, and the relayer SDK loads from Zama's CDN.
+
+### Tests on Sepolia
+
+```bash
+node tests/chain/solo.mjs     # connect, faucet, decrypt, encrypted solo run, cash out, settlement
+node tests/chain/round.mjs    # open a round, practice bots, sealed standings, KMS reveal, prize
+cd ops && npm i && node battery.mjs 16 2 2    # many concurrent players, every payout checked
+```
+
+The browser tests inject a test wallet (an EIP-1193 provider backed by a key in Node). The
+battery's players come from `~/.config/zama/siroclimb-battery.mnemonic`. No key is ever committed.
