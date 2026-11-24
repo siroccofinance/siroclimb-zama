@@ -186,3 +186,10 @@ key, every market uses the bounded fallback.
 cd contracts && npm i && npx hardhat test          # 39 tests on the FHEVM mock, HCU budget
 npm run deploy:sepolia && npm run verify:sourcify  # key: ~/.config/zama/siroclimb-deployer.key
 ```
+
+### Hosting (Vercel-ready)
+
+The site is static, and `api/pyth.js` and `api/prices.js` are Vercel Node functions
+(`vercel.json`). Deploy the repo root and set `PYTH_API_KEY` as a server-side environment
+variable. No secret ever reaches the bundle. Contract addresses come from
+`js/chain/deployments.json`, and the relayer SDK loads from Zama's CDN.
