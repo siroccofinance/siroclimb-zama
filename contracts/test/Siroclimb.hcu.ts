@@ -1,4 +1,5 @@
 import type { ContractTransactionResponse } from "ethers";
+import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { fhevm } from "hardhat";
 import { BASE, NVDA, type Fixture, USDC, at, deployFixture, encrypt, price } from "./helpers";
@@ -44,5 +45,18 @@ describe("Siroclimb: HCU budget (worst cases)", function () {
     await measure("cashOut (solo, encrypted payout)", f.game.connect(f.alice).cashOut(0, []));
     await measure("cashOut (packed: 4 capped paths)", f.game.connect(f.bob).cashOut(1, []));
     await measure("publishRun", f.game.connect(f.alice).publishRun(0));
+  });
+
+  it("reserve: encrypted deposit, encrypted withdrawal, sync request", async function () {
+    await f.token.connect(f.alice).setOperator(f.reserveAddress, (await time.latest()) + 3600);
+    const enc = async (v: bigint) => {
+      const input = fhevm.createEncryptedInput(f.reserveAddress, f.alice.address);
+      input.add64(v);
+      const e = await input.encrypt();
+      return [e.handles[0], e.inputProof] as const;
+    };
+    await measure("reserve deposit (encrypted, shares at the synced price)", f.reserve.connect(f.alice).deposit(...(await enc(100n * USDC))));
+    await measure("reserve withdraw (all or nothing on ciphertexts)", f.reserve.connect(f.alice).withdraw(...(await enc(40n * USDC))));
+    await measure("reserve requestSync (3 public decryptions)", f.reserve.requestSync());
   });
 });
