@@ -85,6 +85,13 @@ async function settleRound(s, id) {
   const [r] = await W.game.getRound(id);
   const st = Number(r.status), now = Date.now() / 1000;
   if (st === 1 && now >= Number(r.endsAt) + 2) {
+    // runs still climbing exit at the bell one per transaction (about 1M gas each on Sepolia), so the
+    // close itself stays far below the per-transaction gas cap whatever the number of players
+    const [, ids] = await W.game.getRound(id);
+    for (const rid of ids) {
+      const run = await W.game.getRun(rid);
+      if (Number(run.status) === 1) await duty('Bell: locking the exits at the bell…', () => s.send(W.game, 'exitAtBell', [rid], 0n, 'exitAtBell'));
+    }
     await duty('Bell: closing the round, scores sealed until the reveal…', () => s.send(W.game, 'closeRound', [id], 0n, 'closeRound'));
   } else if (st === 2 && !finalizing.has(id)) {
     finalizing.add(id);
