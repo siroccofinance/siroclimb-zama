@@ -59,6 +59,8 @@ export async function receipt(hash, ms = 240_000) {
   }
   return null;
 }
+/** Gas limits of game calls measured on Sepolia (about 2x the largest use seen). */
+const FIXED_GAS = { startRun: 6_000_000n, cashOut: 4_500_000n, settleRun: 4_000_000n, joinRound: 5_000_000n, exitAtBell: 2_500_000n, claim: 2_500_000n, publishRun: 400_000n, recordRun: 1_500_000n };
 const MIN_TIP = 200_000_000n;
 export async function fees() {
   const fd = await provider.getFeeData();
@@ -75,10 +77,15 @@ export class Sender {
         try {
           const c = contract.connect(this.wallet);
           const tr = (what) => process.env.TRACE && console.log(`    ${this.name || this.label || this.address.slice(0, 8)} ${method} ${what}`);
-          tr('estimating');
-          const est = await withTimeout(c[method].estimateGas(...args, { value }), 60_000, `estimate ${method}`);
-          tr('estimated');
-          const gasLimit = est * 2n > 16_000_000n ? 16_000_000n : est * 2n;
+          // game calls with a known cost skip eth_estimateGas, which the public RPC answers slowly under
+          // load (F35); a call that would revert is still caught by the receipt
+          let gasLimit = FIXED_GAS[method];
+          if (!gasLimit) {
+            tr('estimating');
+            const est = await withTimeout(c[method].estimateGas(...args, { value }), 60_000, `estimate ${method}`);
+            tr('estimated');
+            gasLimit = est * 2n > 16_000_000n ? 16_000_000n : est * 2n;
+          }
           const pending = await provider.getTransactionCount(this.address, 'pending');
           const nonce = this.nonce == null ? pending : Math.max(this.nonce, pending);
           const tx = await withTimeout(c[method](...args, { value, gasLimit, nonce, ...(await fees()) }), 60_000, `send ${method}`);
