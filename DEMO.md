@@ -46,3 +46,25 @@ encrypted transfer." Click "View the transaction".*
 > prices. My encrypted side picked one, it was multiplied by my encrypted stake, and the payout went
 > out as an encrypted transfer in the same transaction. On Etherscan you see the call and two public
 > multipliers. My side, my stake and my payout stay ciphertexts."
+
+## 1:40 to 2:35 · A round: sealed standings
+
+*Play again, switch to Round, Long, "Open a round for 10 cUSDC".*
+
+> "Rounds: one market for everyone, 60 seconds, the top 3 share the pot. If sides were public, a
+> late joiner could read the crowd and fade it. Here every side is encrypted. My browser's practice
+> bots take the empty seats. They're real players with their own keys and their own encrypted sides."
+
+*The round goes live. Point at the standings: every other player shows "Sealed", and they turn
+"Out" when they cash out.*
+
+> "Live, I only see who's still climbing. Nobody's direction, nobody's score."
+
+*Cash out. At the bell the status line shows "Bell: closing the round…" and then "KMS decrypting
+the standings…". The result shows the rank and the prize.*
+
+> "At the bell my own browser closes the round. Zama's KMS decrypts the standings, and the contract
+> checks the KMS proof on chain before it ranks us and pays the pot. No server, no keeper. Every step
+> is permissionless."
+
+*Open the leaderboard: Last round.*
