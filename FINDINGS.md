@@ -56,20 +56,27 @@ was fixed. The on-chain battery reports are at the end.
 
 ## On-chain battery (Sepolia, current deployment)
 
-`ops/battery.mjs 24 2 2` on `Siroclimb` `0xf280…DE8c`: 24 players from Siroclimb's own mnemonic
-plus one unfunded wallet, two solo waves, two full rounds. Every settled solo run is checked end to
-end: the public multipliers match `ClimbLadder` recomputed between the recorded checkpoints, the
-decrypted multiplier is the one of the player's side, `paid` and the payout are exact, and the
-player's decrypted cUSDC balance at the exact blocks moved by `paid x mult - paid`.
+`ops/battery.mjs` on `Siroclimb` `0xf280…DE8c`: 24 players from Siroclimb's own mnemonic plus one
+unfunded wallet. Every settled solo run is checked end to end: the public multipliers match
+`ClimbLadder` recomputed between the recorded checkpoints, the decrypted multiplier is the one of the
+player's side, `paid` and the payout are exact, and the player's decrypted cUSDC balance at the exact
+blocks moved by `paid x mult - paid`. Every round checks each decrypted score against the player's
+side, ranks and prizes (ties share) against a local recomputation, and each balance against
+`prize - entry`.
 
-| Metric | Result |
+**Final runs after the fixes up to F41: 52 / 52 solo runs and 3 / 3 rounds of 24 players pass every
+check.**
+
+| Run | Result |
 | --- | --- |
-| Solo runs | 48 / 55 passed every check. No run that settled failed a check. Of the 7 others, 2 starts reverted with `StaleEntry` (fixed in F38) and 5 ran past the watchdog under RPC and relayer load. |
-| Scenarios | Early cash outs, runs left to expire and settled by a third party, stakes above the 100 cap (clamped on ciphertexts), an unfunded player (moves 0, paid 0), packed runs (capped path picked on ciphertexts), published runs (multiplier revealed with a KMS proof) |
-| Round 0 (TSLAx) | 24 players (23 funded plus 1 unfunded), pot 230 cUSDC, an 11-way tie for 2nd shares its places. All 24 checks pass: decrypted score equals the side's multiplier, rank and prize match a local recomputation, and the balance moved by `prize - entry` |
-| Round 1 (NVDAx) | 24 players, a flat price so everyone tied (pot split 24 ways, paid by 24 claims). 23 / 24 checks; the last prize was left unclaimed by the battery (F39) and claimed by the sweep |
-| After the run | `audit.mjs`: 92 / 92 settled runs reproduced from public chain data, 2 / 2 pots fully paid. `sweep.mjs`: nothing left open |
-| Sepolia ETH | 0.85 ETH from the Siroclimb deployer (0.02 per player plus gas) |
+| `battery.mjs 24 2 2` (solo waves) | Wave 1: 27 / 27, wave 2: 25 / 25. Early cash outs, runs left to expire and settled by a third party, stakes above the cap (clamped on ciphertexts), the unfunded player (moves 0, paid 0), packed runs (capped path picked on ciphertexts), published runs (KMS proof). Real price moves included (multipliers from 0.755 to 1.339). |
+| Round 2 (AAPLx) | PASS: 24 players (23 funded plus the unfunded one), pot 230 cUSDC, a tie at the top shares 1st to 3rd, 24 / 24 checks |
+| Round 3 (XAUt) | Stopped by F41 (an exit at the bell racing a cash out), then finished by `sweep.mjs`: pot fully paid |
+| `battery.mjs 24 0 2` (rounds 4 and 5, tGBP) | PASS and PASS: pots 230 and 240 cUSDC, ties share their places, 48 / 48 checks |
+| After all runs | `audit.mjs`: 259 / 259 settled runs reproduced from public chain data, 6 / 6 rounds finalized with every pot paid. `sweep.mjs`: nothing left open |
+
+Earlier runs on this deployment, before F38 to F41, are in `ops/battery-results/` too (48 / 55 solo
+runs with no check failure among those that settled, round 0 PASS with 24 players, round 1 23 / 24 because of F39).
 
 Measured gas on Sepolia (F35): `startRun` up to 3.77M, `joinRound` 2.99M, `cashOut` 2.21M,
 `settleRun` 1.88M, `exitAtBell` 1.04M, `closeRound` 3.06M, `finalizeRound` 8.71M for 24 players.
