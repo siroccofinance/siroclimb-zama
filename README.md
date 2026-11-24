@@ -236,6 +236,7 @@ and at -100 % the coin falls and the run is worth 0 for good.
  └───────────────┬─────────────────────┘
                  │ /api/pyth (signed Hermes update, key server-side)
                  │ /api/prices (reference prices, market hours)
+                 │ /api/share, /api/og, /s/<id> (signed share links, result card PNG)
            server routes (Vercel functions, or dev.mjs locally)
 ```
 
@@ -250,7 +251,7 @@ and at -100 % the coin falls and the run is worth 0 for good.
 | `contracts/test/` | FHEVM mock tests, HCU budget |
 | `js/api.js` | The front/back contract; Sepolia by default, `?mock` for the simulation |
 | `js/chain/` | Sepolia implementation: config, FHE client, wallet and game account, feed, prices, autopilot |
-| `api/` | Server routes: `pyth.js` (Hermes proxy), `prices.js` (reference prices, market hours) |
+| `api/` | Server routes: `pyth.js` (Hermes proxy), `prices.js` (reference prices, market hours), `share.js` + `og.js` + `s.js` (share links and the result card) |
 | `ops/` | On-chain battery, optional keeper |
 | `tests/chain/` | Puppeteer end to end tests of the real front on Sepolia (injected test wallet) |
 
@@ -289,8 +290,12 @@ npm run deploy:sepolia && npm run verify:sourcify  # key: ~/.config/siroclimb/se
 ### Hosting
 
 Live at https://climb.sirocco.finance (Vercel). The site is static, and `api/pyth.js` and `api/prices.js` are Vercel Node functions
-(`vercel.json`). Deploy the repo root and set `PYTH_API_KEY` as a server-side environment
-variable. No secret ever reaches the bundle. Contract addresses come from
+(`vercel.json`), as are the share routes: `POST /api/share` signs the result the player chose to reveal
+(HMAC-SHA256 with `SHARE_SECRET`), `/s/<id>` serves the `summary_large_image` page X unfolds, and
+`/api/og?id=` renders the 1200×630 card (satori + resvg, the 3D coin still from `3d/coin-still.mjs`).
+Side and stake are encrypted on chain, so a card is self-reported: the player decrypts their own result
+and picks whether the side and the cUSDC amount show. Deploy the repo root and set `PYTH_API_KEY` and
+`SHARE_SECRET` as server-side environment variables. No secret ever reaches the bundle. Contract addresses come from
 `js/chain/deployments.json`, and the relayer SDK loads from Zama's CDN.
 
 ### Tests on Sepolia

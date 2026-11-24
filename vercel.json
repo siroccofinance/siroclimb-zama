@@ -1,5 +1,18 @@
 {
   "functions": {
-    "api/*.js": { "includeFiles": "js/chain/markets.json", "maxDuration": 10 }
-  }
+    "api/{prices,pyth,share,s}.js": {
+      "includeFiles": "js/chain/markets.json",
+      "maxDuration": 10
+    },
+    "api/og.js": {
+      "includeFiles": "{js/chain/markets.json,assets/share/**,assets/brand/sirocco-mark-safran.svg}",
+      "maxDuration": 10
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/s/:id",
+      "destination": "/api/s?id=:id"
+    }
+  ]
 }

@@ -398,6 +398,7 @@ function settled(f) {
     try { await api.publishRun(f.runId); pb.textContent = 'Posted: return public, stake still private'; } catch (e) { pb.disabled = false; pb.textContent = 'Post to the leaderboard'; toast(e.message); }
   };
   card = null; wantCard = false; if (sc && screen === 'result') makeCard(grabScene());
+  if (openSheetEl && openSheetEl.id === 'shareSheet') refreshShare();
 }
 function showResult(res) {
   const bust = res.status === 'busted';
@@ -451,15 +452,53 @@ async function makeCard(scene) {
   card = { blob, src: URL.createObjectURL(blob), page: null };
   api.shareCard(blob, r).then(u => { if (card && card.blob === blob) card.page = u; }).catch(() => {});
 }
-function shareText() {
-  const a = byId[run.assetId], r = ended, side = run.side === 'short' ? 'short' : 'long';
+// the post: the result, a punchy line, then what made it private (Zama's handle is @zama, from zama.org)
+function shareText(o = {}) {
+  const a = byId[run.assetId], r = ended, on = `${o.side === false ? '' : ` going ${run.side === 'short' ? 'short' : 'long'}`} on ${label(a)}`;
+  const zama = "My side and stake stayed encrypted on-chain with @zama's FHE, confidential tokens (ERC-7984).";
   const text = r.status === 'busted'
-    ? `My coin fell off the stairs at ${levTxt(r.maxLeverage)} going ${side} on ${label(a)}. Rematch incoming 🪙`
-    : r.pnl > 0.005 ? `Climbed to ${levTxt(r.maxLeverage)} going ${side} on ${label(a)} and cashed out ${pct(r.pnlPct)} 🪙📈\n\nCan you climb higher on Siroclimb?`
-    : `Cashed out at ${levTxt(r.maxLeverage)} going ${side} on ${label(a)} before the stairs gave way 🪙\n\nYour turn on Siroclimb`;
-  const url = (card && card.page) || location.origin + location.pathname.replace(/(play|index)\.html$/, '');
+    ? `My coin fell off the stairs at ${levTxt(r.maxLeverage)}${on} 🪙 Rematch incoming.\n\n${zama}\n\nCan you climb higher?`
+    : r.pnl > 0.005 ? `Climbed to ${levTxt(r.maxLeverage)}${on} and cashed out ${pct(r.pnlPct)} 🪙📈\n\n${zama}\n\nYour turn on Siroclimb:`
+    : `Cashed out at ${levTxt(r.maxLeverage)}${on} (${pct(r.pnlPct)}) before the stairs gave way 🪙\n\n${zama}\n\nYour turn on Siroclimb:`;
+  const url = o.url || (card && card.page) || location.origin + location.pathname.replace(/(play|index)\.html$/, '');
   return { text, url };
 }
+const intent = ({ text, url }) => 'https://x.com/intent/post?' + new URLSearchParams({ text, url }).toString();
+
+// ── share sheet: the player picks what to reveal, the server signs it and renders the card (api/share, api/og)
+const sh = { seq: 0, link: null };
+const shEl = { card: $('#shCard'), img: $('#shImg'), side: $('#shSide'), amt: $('#shAmt'), dl: $('#shDl'), x: $('#shX'), copy: $('#shCopy') };
+shEl.side.checked = store.get('shareSide', true); shEl.amt.checked = store.get('shareAmt', true);
+const shareable = () => ended && run && ended.status !== 'failed';
+async function signShare() {
+  const r = ended, reveal = { side: shEl.side.checked, amt: shEl.amt.checked };
+  const body = { market: run.assetId, status: r.status, pnlPct: r.pnlPct, maxLeverage: r.maxLeverage, duration: Math.max(1, Math.round(r.duration)),
+    ...(reveal.amt ? { pnl: r.pnl } : {}), ...(reveal.side ? { side: run.side } : {}) };
+  const res = await fetch('/api/share', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Share links unavailable');
+  return { ...(await res.json()), reveal };
+}
+async function refreshShare() {
+  if (!shareable()) return;
+  const n = ++sh.seq;
+  shEl.card.classList.add('is-loading'); [shEl.dl, shEl.x].forEach(a => a.setAttribute('aria-disabled', 'true'));
+  try {
+    const l = await signShare(); if (n !== sh.seq) return;
+    sh.link = l;
+    await new Promise(res => { shEl.img.onload = shEl.img.onerror = res; shEl.img.src = l.image; });
+    if (n !== sh.seq) return;
+    shEl.dl.href = l.image; shEl.dl.download = `siroclimb-${label(byId[run.assetId])}.png`;
+    shEl.x.href = intent(shareText({ url: l.url, side: l.reveal.side }));
+    [shEl.dl, shEl.x].forEach(a => a.removeAttribute('aria-disabled'));
+    shEl.card.classList.remove('is-loading');
+  } catch (e) {
+    if (n !== sh.seq) return;
+    closeSheet(true); legacyShare();                   // no server (static hosting, offline): the picture drawn in the browser
+  }
+}
+[shEl.side, shEl.amt].forEach(i => i.addEventListener('change', () => { store.set('shareSide', shEl.side.checked); store.set('shareAmt', shEl.amt.checked); sound.tick(); refreshShare(); }));
+shEl.x.addEventListener('click', () => { sound.tick(); setTimeout(closeSheet, 300); });
+shEl.copy.onclick = async () => { if (!sh.link) return; try { await navigator.clipboard.writeText(sh.link.url); toast('Link copied'); } catch { toast(sh.link.url); } };
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 let tipT = 0;
 function showTip(copied, href) {
@@ -473,25 +512,27 @@ function showTip(copied, href) {
 }
 function hideTip() { const t = $('#sharetip'); t.classList.remove('is-on'); clearTimeout(tipT); tipT = setTimeout(() => { t.hidden = true; }, 300); }
 $('#tipClose').onclick = hideTip;
-$('#share').onclick = async () => {
-  if (!ended) return;
+$('#share').onclick = () => {
+  if (!shareable()) return;
   sound.tick();
-  const { text, url } = shareText();
-  const href = 'https://x.com/intent/post?' + new URLSearchParams({ text, url }).toString();
-  // hosted card: the link itself carries the picture
+  sh.link = null; shEl.img.removeAttribute('src');
+  openSheet('shareSheet'); refreshShare();
+};
+// fallback: the post is written, the picture drawn in the browser goes to the clipboard (desktop) or the share sheet (phones)
+async function legacyShare() {
+  if (!ended) return;
+  const { text, url } = shareText(), href = intent({ text, url });
   if (card && card.page) { if (!window.open(href, '_blank', 'noopener')) location.href = href; return; }
-  // phones: the system share sheet takes the picture and the text straight into the X app
   const file = card && new File([card.blob], 'siroclimb.png', { type: 'image/png' });
   if (file && matchMedia('(pointer: coarse)').matches && navigator.canShare && navigator.canShare({ files: [file] })) {
     try { await navigator.share({ files: [file], text: `${text}\n${url}` }); return; }
     catch (e) { if (e.name === 'AbortError') return; }
   }
-  // desktop: the picture goes to the clipboard, X opens with the post written, one paste adds the picture
   let copied = false;
   if (card && navigator.clipboard && window.ClipboardItem) { try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': card.blob })]); copied = true; } catch {} }
   window.open(href, '_blank', 'noopener');
   if (card) showTip(copied, href);
-};
+}
 
 // ── price chart: the last minute, scrolling smoothly. Smoothed line over a soft fill, dashed entry line with
 //    its price, the live price as a glowing dot; the line turns gold while the run is in the money.
