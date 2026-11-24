@@ -29,10 +29,10 @@ describe("Siroclimb: HCU budget (worst cases)", function () {
     f = await deployFixture();
   });
 
-  it("solo: start (with reserve refill), packed start, cash out, packed cash out", async function () {
+  it("start (borrows from the reserve), packed start, cash out (interest, repays the reserve), packed cash out", async function () {
     await price(f, NVDA, BASE[NVDA]);
     let e = await encrypt(f, f.alice, true, 10n * USDC);
-    await measure("startRun (first: reserve refill)", f.game.connect(f.alice).startRun(NVDA, e.handles[0], e.handles[1], e.proof, false, [], 0));
+    await measure("startRun (borrows from the reserve)", f.game.connect(f.alice).startRun(NVDA, e.handles[0], e.handles[1], e.proof, false, [], 0));
     await measure("openPack", f.game.connect(f.bob).openPack());
     e = await encrypt(f, f.bob, false, 10n * USDC);
     await measure("startRun (packed)", f.game.connect(f.bob).startRun(NVDA, e.handles[0], e.handles[1], e.proof, true, [], 0));

@@ -2,7 +2,7 @@ import { FhevmType } from "@fhevm/hardhat-plugin";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers, fhevm } from "hardhat";
-import { BASE, NVDA, type Fixture, SCALE, USDC, at, balance, decrypt32, deployFixture, encrypt, model, price } from "./helpers";
+import { BASE, NVDA, type Fixture, USDC, at, balance, decrypt32, deployFixture, encrypt, model, payout, price } from "./helpers";
 
 describe("Siroclimb: sessions and packs", function () {
   let f: Fixture;
@@ -40,7 +40,7 @@ describe("Siroclimb: sessions and packs", function () {
     await at(run.startAt, 15);
     await f.game.connect(session).cashOut(id, []);
     const m = model([{ t: 0, p: BASE[NVDA] }, { t: 14, p: p1 }]).long;
-    expect(await balance(f, f.alice)).to.eq(before - 50n * USDC + (50n * USDC * m) / SCALE);
+    expect(await balance(f, f.alice)).to.eq(before - 50n * USDC + payout(50n * USDC, m, 15));
     // the player (not the session) owns the run's ciphertexts
     const [, , , multH] = await f.game.runHandles(id);
     expect(await decrypt32(f, multH, f.alice)).to.eq(m);

@@ -18,7 +18,9 @@ import {
   decrypt64,
   deployFixture,
   encrypt,
+  interest,
   model,
+  payout,
   price,
   startRun,
 } from "./helpers";
@@ -70,10 +72,12 @@ describe("Siroclimb: solo runs", function () {
     expect(run.multLong).to.eq(expected.long);
     expect(run.multShort).to.eq(expected.short);
     expect(expected.long).to.be.gt(SCALE);
-    const paid = (stake * expected.long) / SCALE;
+    const paid = payout(stake, expected.long, 31);
+    expect(interest(stake, 31)).to.be.gt(0n);
     expect(await balance(f, f.alice)).to.eq(before - stake + paid);
-    const [, , valueH, multH] = await f.game.runHandles(id);
+    const [, , valueH, multH, , , interestH] = await f.game.runHandles(id);
     expect(await decrypt64(f, valueH, f.alice)).to.eq(paid);
+    expect(await decrypt64(f, interestH, f.alice)).to.eq(interest(stake, 31));
     expect(await decrypt32(f, multH, f.alice)).to.eq(expected.long);
     expect(run.topStep).to.eq(5);
   });
@@ -85,7 +89,7 @@ describe("Siroclimb: solo runs", function () {
     const { expected, run } = await runAndPath(false, stake, [[20, p1]], 22);
     expect(run.multShort).to.eq(expected.short);
     expect(expected.short).to.be.gt(SCALE);
-    expect(await balance(f, f.alice)).to.eq(before - stake + (stake * expected.short) / SCALE);
+    expect(await balance(f, f.alice)).to.eq(before - stake + payout(stake, expected.short, 22));
   });
 
   it("the coin falls at -100 % and stays down even if the price comes back", async function () {
@@ -119,7 +123,7 @@ describe("Siroclimb: solo runs", function () {
       { t: 30, p: (BASE[NVDA] * 10_010n) / 10_000n },
     ]);
     expect(end.multLong).to.eq(expected.long);
-    expect(await balance(f, f.alice)).to.eq(before - stake + (stake * expected.long) / SCALE);
+    expect(await balance(f, f.alice)).to.eq(before - stake + payout(stake, expected.long, 60));
     await expect(f.game.settleRun(id)).to.be.revertedWithCustomError(f.game, "WrongRunStatus");
   });
 
@@ -221,7 +225,7 @@ describe("Siroclimb: solo runs", function () {
     const before = await balance(f, f.alice);
     const p1 = (BASE[XAUT] * 10_040n) / 10_000n;
     const { expected } = await runAndPath(true, 10n * USDC, [[11, p1]], 15, XAUT);
-    expect(await balance(f, f.alice)).to.eq(before - 10n * USDC + (10n * USDC * expected.long) / SCALE);
+    expect(await balance(f, f.alice)).to.eq(before - 10n * USDC + payout(10n * USDC, expected.long, 15));
   });
 
   it("Amazon (AMZNx) runs like the other stocks, short side, Pyth update on entry", async function () {
@@ -245,17 +249,7 @@ describe("Siroclimb: solo runs", function () {
     const expected = model([{ t: 0, p: run.entryPrice }, { t: 20, p: p1 }]);
     expect(expected.short).to.be.gt(SCALE);
     expect((await f.game.getRun(id)).multShort).to.eq(expected.short);
-    expect(await balance(f, f.alice)).to.eq(before - 40n * USDC + (40n * USDC * expected.short) / SCALE);
-  });
-
-  it("keeps a reserve able to pay any live run at its maximum", async function () {
-    expect(await f.game.reserveFloor()).to.eq(0n);
-    await startRun(f, f.alice, AAPL, true, 10n * USDC);
-    const max = await f.game.MAX_PAYOUT();
-    expect(await f.game.reserveFloor()).to.eq(1_000_000n * USDC - max);
-    // the house balance is encrypted: the owner of the contract cannot read it either
-    const h = await f.token.confidentialBalanceOf(f.gameAddress);
-    await expect(fhevm.userDecryptEuint(FhevmType.euint64, h, f.tokenAddress, f.deployer)).to.be.rejected;
+    expect(await balance(f, f.alice)).to.eq(before - 40n * USDC + payout(40n * USDC, expected.short, 26));
   });
 
   it("publishes a finished run on the leaderboard with the KMS proof, forged values rejected", async function () {
