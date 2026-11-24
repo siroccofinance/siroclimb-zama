@@ -1,0 +1,198 @@
+{
+  "started": "2026-11-24T18:55:11.890Z",
+  "game": "0x890b2bAb3f2EC280FcD4761cC0C655eaE13f03a0",
+  "players": 6,
+  "solo": [
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "goldape46",
+      "run": 8,
+      "market": "XAUt",
+      "side": "long",
+      "stake": 16,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 15.999996,
+      "interest": 0.000004,
+      "seconds": 36,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "interest": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "zephyr.eth",
+      "run": 10,
+      "market": "AAPLx",
+      "side": "long",
+      "stake": 39,
+      "scenario": "cash",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 38.999989,
+      "interest": 0.000011,
+      "seconds": 36,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "interest": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "maxi0",
+      "run": 9,
+      "market": "tGBP",
+      "side": "long",
+      "stake": 64,
+      "scenario": "pack",
+      "mult": 0.9981,
+      "multLong": 0.9981,
+      "multShort": 1.0019,
+      "payout": 63.878392,
+      "interest": 0.000008,
+      "seconds": 48,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "interest": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "quiet.nomad",
+      "run": 14,
+      "market": "AMZNx",
+      "side": "long",
+      "stake": 37,
+      "scenario": "unfunded",
+      "mult": 1,
+      "multLong": 1,
+      "multShort": 1,
+      "payout": 0,
+      "interest": 0,
+      "seconds": 36,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "interest": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "maxi0",
+      "run": 9,
+      "scenario": "publish",
+      "mult": 0.9981
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "gold.maxi",
+      "run": 11,
+      "market": "tGBP",
+      "side": "long",
+      "stake": 59,
+      "scenario": "expire",
+      "mult": 0.9981,
+      "multLong": 0.9981,
+      "multShort": 1.0019,
+      "payout": 58.887857,
+      "interest": 0.000043,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "interest": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "zephyrraven45",
+      "run": 13,
+      "market": "NVDAx",
+      "side": "long",
+      "stake": 9,
+      "scenario": "expire",
+      "mult": 1.016275,
+      "multLong": 1.016275,
+      "multShort": 0.983725,
+      "payout": 9.146469,
+      "interest": 0.000006,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "interest": true,
+        "payout": true,
+        "balance": true
+      }
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "gold.maxi",
+      "run": 11,
+      "scenario": "publish",
+      "mult": 0.9981
+    },
+    {
+      "ok": true,
+      "wave": 1,
+      "player": "cedarotter0",
+      "run": 12,
+      "market": "AAPLx",
+      "side": "short",
+      "stake": 8,
+      "scenario": "expire",
+      "mult": 0.997175,
+      "multLong": 1.002825,
+      "multShort": 0.997175,
+      "payout": 7.977395,
+      "interest": 0.000005,
+      "seconds": 60,
+      "checks": {
+        "pathMatchesLadder": true,
+        "sideMultiplier": true,
+        "paid": true,
+        "interest": true,
+        "payout": true,
+        "balance": true
+      }
+    }
+  ],
+  "findings": [],
+  "gas": {},
+  "finished": "2026-11-24T18:59:06.466Z",
+  "summary": {
+    "solo": "9 / 9",
+    "deployerEthSpent": 0.1
+  }
+}
