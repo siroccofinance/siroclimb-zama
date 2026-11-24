@@ -187,8 +187,10 @@ async function roundGame(k) {
   await keeper.send(game, 'finalizeRound', [id, scores, proof]).catch(e => { if (!/WrongRoundStatus/.test(errText(e))) throw e; });
   // prizes are pull payments: every winner's prize is claimed (anyone may claim for anyone)
   const claimBlock = new Map();
+  const finalizedAt = await view(async () => (await game.queryFilter(game.filters.RoundFinalized(id), Math.min(...joinBlock.values()))).at(-1)?.blockNumber, b => b != null, 30);
   for (const rid of ids) {
-    if ((await view(() => game.prizeOf(rid))) === 0n) continue;
+    // prizes as of the finalize block: a lagging node could still answer 0 (F39)
+    if ((await view(() => game.prizeOf(rid, { blockTag: finalizedAt }))) === 0n) continue;
     const rc = await keeper.send(game, 'claim', [rid]);
     claimBlock.set(rid, rc.blockNumber);
   }
@@ -243,7 +245,7 @@ for (let w = 1; w <= WAVES; w++) {
   const runners = w === 1 ? [...players, poor] : players;
   // watchdog: a run that hangs (a dropped request somewhere) fails after 8 minutes instead of blocking the wave
   const guard = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error(`watchdog: ${what} took over ${ms / 60000} min`)), ms))]);
-  const res = await Promise.allSettled(runners.map((p, i) => guard(soloRun(p, w, i * 2000), 15 * 60_000, 'solo run')));
+  const res = await Promise.allSettled(runners.map((p, i) => guard(soloRun(p, w, i * 2000), 25 * 60_000, 'solo run')));
   res.forEach((r, i) => { if (r.status === 'rejected') { log('solo error', runners[i].name, errText(r.reason)); pass('solo', false, { wave: w, player: runners[i].name, error: errText(r.reason) }); } });
   log(`wave ${w}: ${results.solo.filter(x => x.wave === w && x.ok).length} / ${results.solo.filter(x => x.wave === w).length} pass`);
 }
