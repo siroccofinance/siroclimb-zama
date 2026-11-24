@@ -16,7 +16,7 @@ const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.
 const pg = await b.newPage();
 pg.on('pageerror', e => console.log('PAGEERROR', e.message));
 await injectWallet(pg, key);
-await pg.evaluateOnNewDocument((m) => { localStorage.setItem('siroclimb:ui:seenRules', 'true'); localStorage.setItem('siroclimb:ui:asset', JSON.stringify(m)); localStorage.setItem('siroclimb:ui:mode', JSON.stringify('solo')); }, market);
+await pg.evaluateOnNewDocument((m) => { localStorage.setItem('siroclimb:ui:seenRules', 'true'); localStorage.setItem('siroclimb:ui:asset', JSON.stringify(m)); }, market);
 await pg.setViewport({ width: 1440, height: 900 });
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const until = async (fn, ms = 300_000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await pg.evaluate(fn)) return Date.now(); await wait(100); } return null; };
