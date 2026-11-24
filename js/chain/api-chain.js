@@ -93,19 +93,24 @@ function afterConnect() {
 export function disconnect() { W.disconnectWallet(); ready = false; setBal(null); autopilot.stop(); }
 
 /** Decrypts the player's encrypted cUSDC balance (asks the wallet for the daily grant once). */
-export async function refreshBalance() {
+let balHandle = null;
+export async function refreshBalance(expectChange = false) {
   const a = W.account(); if (!a) return null;
-  const h = await token.confidentialBalanceOf(a);
+  let h = await token.confidentialBalanceOf(a);
+  // after a transfer, a lagging RPC node can still serve the old balance handle: wait for the new one
+  for (let i = 0; expectChange && h === balHandle && i < 10; i++) { await sleep(2000); h = await token.confidentialBalanceOf(a); }
+  if (expectChange && h === balHandle) return bal;
   if (!hasGrant(a)) status({ kind: 'decrypt', text: 'Sign the decryption grant in your wallet (once a day)' });
   else status({ kind: 'decrypt', text: 'Decrypting your balance…' });
   try {
     const [v] = await userDecrypt(a, W.signTyped, [{ handle: h, contract: ADDR.StakeToken }]);
+    balHandle = h;
     setBal(Number(v) / USDC);
     return bal;
   } finally { status(null); }
 }
 export const decryptBalance = refreshBalance;
-const refreshSoon = () => { if (W.account() && hasGrant(W.account())) setTimeout(() => refreshBalance().catch(() => {}), 1500); };
+const refreshSoon = () => { if (W.account() && hasGrant(W.account())) setTimeout(() => refreshBalance(true).catch(() => {}), 1500); };
 
 export async function faucet() {
   const s = await session();
