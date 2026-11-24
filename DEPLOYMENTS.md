@@ -1,5 +1,7 @@
 # Deployments
 
+**Play it:** https://climb.sirocco.finance
+
 ## Sepolia (chain id 11155111)
 
 Sources are verified on [Sourcify](https://sourcify.dev) (`cd contracts && npm run verify:sourcify`).
