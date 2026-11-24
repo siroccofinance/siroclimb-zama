@@ -261,7 +261,7 @@ function takeEncryption(s, long, units) {
 
 export async function startRun({ assetId, side = 'long', stake }) {
   const m = indexOf(assetId);
-  if (!feed.isOpen(m)) throw new Error(`${MARKETS[m].name} is closed now (US market hours). Try gold or GBP`);
+  if (!feed.isOpen(m)) throw new Error(`${MARKETS[m].token.symbol} (${MARKETS[m].name}) is closed now (US market hours). Try cXAUt or ctGBP`);
   if (!(stake > 0) || stake > MAX_STAKE) throw new Error(`Stake between 1 and ${MAX_STAKE} cUSDC`);
   if (bal != null && stake > bal) throw new Error('Not enough cUSDC: use the faucet');
   const s = await session();

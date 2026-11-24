@@ -25,15 +25,22 @@ function sourceOf(contractName: string) {
   throw new Error(`no build info for ${contractName}`);
 }
 
-/** hardhat-deploy names: mirrors are aliases of the two token contracts. */
-const artifactOf = (name: string) => (name.endsWith("Mirror") ? "MirrorToken" : name.startsWith("c") && name !== "cUSDC" ? "ConfidentialTokenWrapper" : name);
+/** hardhat-deploy names: mirrors are aliases of the token contracts; on Sepolia a mirror is a proxy (no `wrap` in its own ABI). */
+const artifactOf = (name: string, dep: { abi?: { type: string; name?: string }[] }) =>
+  name.endsWith("Mirror")
+    ? "MirrorToken"
+    : name.startsWith("c") && name !== "cUSDC"
+      ? dep.abi?.some((x) => x.type === "function" && x.name === "wrap")
+        ? "ConfidentialTokenWrapper"
+        : "ConfidentialTokenProxy"
+      : name;
 
 async function main() {
   const only = process.argv.slice(2);
   for (const f of readdirSync(depDir).filter((x) => x.endsWith(".json") && (!only.length || only.includes(x.replace(".json", ""))))) {
     const dep = JSON.parse(readFileSync(join(depDir, f), "utf8"));
     const name = f.replace(".json", "");
-    const contractName = artifactOf(name);
+    const contractName = artifactOf(name, dep);
     const { file, info } = sourceOf(contractName);
     // the exact compiler input of this deployment (hardhat-deploy keeps it), not the latest build
     const inputFile = join(depDir, "solcInputs", `${dep.solcInputHash}.json`);

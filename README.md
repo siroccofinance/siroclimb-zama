@@ -6,8 +6,10 @@ you want. Every run is solo, and its leverage is real: it is borrowed from the *
 a confidential cUSDC lending pool. Lenders earn the borrow interest and carry the players' gains and
 losses.
 
-Siroclimb is about real world assets. The markets are tokenized stocks (Tesla, NVIDIA, Apple and
-Amazon xStocks), gold (XAUt) and the British pound. Stakes and payouts are in **Zama's confidential USDC**.
+Siroclimb is about real world assets, and you trade them as **confidential tokens** (ERC-7984):
+`cTSLAx`, `cNVDAx`, `cAAPLx` and `cAMZNx` (the Tesla, NVIDIA, Apple and Amazon xStocks), `cXAUt`
+(gold) and `ctGBP` (the British pound). Our four stock tokens run on the same contract as Zama's
+`ctGBPMock` and `cXAUtMock` (see DEPLOYMENTS.md). Stakes and payouts are in **Zama's confidential USDC**.
 
 Built on the **Zama Protocol (FHEVM)** on Sepolia for the Zama Developer Program, Season 5:
 Confidential Gaming.
@@ -38,7 +40,8 @@ Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain 
    background. Any browser where you connect the same wallet finds the same game account.
 3. Your balance is encrypted on chain. The game account signs a 7-day decryption grant locally, so
    the balance is decrypted in your browser automatically, and again after every payout.
-4. **Play**: pick a market, long or short, and a stake (10 to 100), then **Start climbing**. Your
+4. **Play**: pick a confidential token (cTSLAx, cNVDAx, cAAPLx, cAMZNx, cXAUt or ctGBP), long or
+   short, and a stake (10 to 100), then **Start climbing**. Your
    side and stake were already encrypted in the background when you picked them, so the climb starts
    at the click while the entry locks on Sepolia. The coin follows the live price and the leverage
    climbs every 6 s. **Cash out** with the button or the space bar: the value is frozen with the
@@ -57,7 +60,7 @@ Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain 
 
 Stocks trade during US market hours (4:00 to 20:00 New York time, pre and post market included,
 US trading days only: weekends and exchange holidays are closed). Outside those hours their chips
-show *Closed*, while gold and the pound stay open.
+show *Closed*, while cXAUt and ctGBP stay open.
 
 **Nothing has to run on our side.** Every keeper duty is a permissionless call, and the player's
 browser does each one itself (autopilot):
