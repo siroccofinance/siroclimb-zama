@@ -53,12 +53,22 @@ async function keeperLoop() {
   }
 }
 async function keeperTick() {
+  for (const m of inUse) await pushIfStale(keeper, m, 11).catch(e => log('keeper price', MARKETS[m].id, errText(e)));
+}
+// settlements on their own key: a price checkpoint waiting for its block never delays a settlement
+const settler = new Sender(batteryWallet(901), 'settler');
+async function settlerLoop() {
+  while (keeping) {
+    try { await settlerTick(); } catch (e) { log('settler tick', errText(e)); }
+    await sleep(2500);
+  }
+}
+async function settlerTick() {
   {
-    for (const m of inUse) await pushIfStale(keeper, m, 11).catch(e => log('keeper price', MARKETS[m].id, errText(e)));
     for (const id of [...expired]) {
       const r = await game.getRun(id);
       if (Number(r.status) === 2) { expired.delete(id); continue; }
-      if (Date.now() / 1000 > Number(r.startAt) + 62) await keeper.send(game, 'settleRun', [id]).then(() => expired.delete(id)).catch(e => { if (!/WrongRunStatus/.test(errText(e))) log('keeper settle', id, errText(e)); });
+      if (Date.now() / 1000 > Number(r.startAt) + 62) await settler.send(game, 'settleRun', [id]).then(() => expired.delete(id)).catch(e => { if (!/WrongRunStatus/.test(errText(e))) log('keeper settle', id, errText(e)); });
     }
   }
 }
@@ -74,12 +84,15 @@ async function soloRun(p, wave, delay = 0) {
   const scenario = p === poor ? 'unfunded' : Math.random() < 0.12 ? 'clamp' : Math.random() < 0.15 && p.hasPack ? 'pack' : Math.random() < 0.35 ? 'expire' : 'cash';
   const stake = scenario === 'clamp' ? 150n * USDC : BigInt(5 + Math.floor(Math.random() * 60)) * USDC;
   inUse.add(market);
+  const step = (what) => process.env.TRACE && log(`  ${p.name} ${what}`);
   const enc = await encryptRun(p.address, long, stake);
+  step('encrypted');
   const py = await pythFor(market);
   const fb = py ? 0n : await fallbackFor(market);
   const rc = await p.send(game, 'startRun', [market, enc.handles[0], enc.handles[1], enc.proof, scenario === 'pack', py ? py.updateData : [], fb], py ? py.fee : 0n);
   const ev = rc.logs.map(l => { try { return game.interface.parseLog(l); } catch { return null; } }).find(e => e?.name === 'RunStarted');
   const id = ev.args.runId;
+  step(`started run ${id}`);
   // balances are read at exact blocks: just before the start, and at the settlement
   const before = p === poor ? 0n : await balanceAt(p.wallet, rc.blockNumber - 1);
   if (scenario === 'pack') p.hasPack = false;
@@ -91,11 +104,14 @@ async function soloRun(p, wave, delay = 0) {
     await p.send(game, 'cashOut', [id, py2 ? py2.updateData : []], py2 ? py2.fee : 0n).catch(e => { if (!/WrongRunStatus/.test(errText(e))) throw e; });
   }
   // public RPC nodes lag: read the run until it shows as settled with its handles
+  step('exit sent');
   const r = await view(() => game.getRun(id), x => Number(x.status) === 2, 30);
+  step('settled seen');
   await view(() => game.runHandles(id), h => !/^0x0+$/.test(h[3]), 30);
   const sb = await settledBlock(id, rc.blockNumber);       // recompute at the settlement block (lagging nodes)
   const [mL, mS] = await view(() => ladder.multipliers(market, r.entryIndex, r.exitIndex, r.startAt, 6, { blockTag: sb }));
   const [, paidH, valueH, multH, , capH] = await game.runHandles(id);
+  step('decrypting');
   const [paid, value, mult, cap] = await userDecrypt(p.wallet, [{ handle: paidH, contract: ADDR.Siroclimb }, { handle: valueH, contract: ADDR.Siroclimb }, { handle: multH, contract: ADDR.Siroclimb }, { handle: capH, contract: ADDR.Siroclimb }]);
   let expMult = long ? r.multLong : r.multShort;
   if (scenario === 'pack') { const [cl, cs] = await ladder.multipliers(market, r.entryIndex, r.exitIndex, r.startAt, Number(cap)); expMult = long ? cl : cs; }
@@ -201,9 +217,10 @@ log(`battery: ${N} players, ${WAVES} solo waves, ${ROUNDS} rounds, game ${ADDR.S
 const eth0 = await deployer.eth();
 await Promise.all(players.map(p => setup(p).catch(e => log('setup', p.name, errText(e)))));
 await setup(poor, { fund: false }).catch(e => log('setup poor', errText(e)));
-await deployer.sendEth(keeper.address, 0.05).catch(() => {});
+for (const k of [keeper, settler]) if ((await k.eth()) < 0.05) await deployer.sendEth(k.address, 0.1).catch(() => {});
 log('setup done');
 keeperLoop();
+settlerLoop();
 // a few players draw an encrypted leverage pack first
 const guard0 = (pr, ms) => Promise.race([pr, sleep(ms)]);
 await guard0(Promise.all(players.slice(0, Math.ceil(N / 3)).map(async p => {
