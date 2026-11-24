@@ -169,3 +169,13 @@ claimed one per transaction (`claim`).
 | `finalizeRound` (KMS proof check, ranking, prizes recorded) | 0 | 0 |
 | `claim` (one encrypted prize or refund transfer) | ~0.2M | ~0.2M |
 | `openPack` (encrypted PRNG) | 0.34M | 0.24M |
+
+## Running it
+
+```bash
+npm i && npm run dev                      # http://127.0.0.1:3043 (site + /api routes), Sepolia
+open "http://127.0.0.1:3043/?mock#play"   # the in-browser simulation, no wallet
+```
+
+Locally, the Pyth route reads the key from `PYTH_API_KEY` or `~/.config/zama/pyth.key`. Without a
+key, every market uses the bounded fallback.
