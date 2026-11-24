@@ -2,7 +2,7 @@
 // The 3D scene is the hero's: in the lobby the belt loops; on start it brakes, the coin's box climbs one level
 // per leverage step; cash out tosses the coin (camera follows), a bust drops it.
 import * as api from './api.js';
-import { createEscalatorScene } from './sirocco-escalator-scene.js?v=7';
+import { createEscalatorScene } from './sirocco-escalator-scene.js?v=8';
 import { CARD, drawCard, loadLogo, toBlob } from './share-card.js?v=1';
 
 const $ = s => document.querySelector(s);
