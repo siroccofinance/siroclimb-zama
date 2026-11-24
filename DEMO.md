@@ -15,16 +15,17 @@ open (or use gold and GBP), and a second tab on Sepolia Etherscan.
 
 ## 0:20 to 0:50 · Connect once, play without pop-ups
 
-*Click Connect wallet. Approve the two wallet transactions. The status line shows each step.*
+*Click Connect wallet. Sign one message, then approve one gas transfer. The status line shows each step.*
 
-> "Two wallet transactions, once. The first approves the game as operator of my confidential USDC,
-> Zama's ERC-7984 token. The second starts a game session: a key in my browser that plays for me,
-> so a run never waits on a pop-up. It can play with what I approved, nothing else."
+> "One signature and one transaction, once. The signature creates my game account, a key in my
+> browser that plays for me, so a run never waits on a pop-up. The transaction gives it a little
+> gas. It approves the game as operator of its confidential USDC, Zama's ERC-7984 token, and
+> claims test cUSDC from the faucet by itself."
 
-*The faucet runs by itself. Click the balance, which shows "Decrypt", and sign the decryption grant.*
+*The balance decrypts by itself a moment later.*
 
-> "My balance is encrypted on chain. I decrypt it here, in my browser, with a signature that's
-> valid for the day. Nobody else can read it, not even the game's deployer."
+> "My balance is encrypted on chain. It is decrypted here, in my browser, with a grant my game
+> account signed locally. Nobody else can read it, not even the game's deployer."
 
 ## 0:50 to 1:40 · A solo run
 
@@ -64,7 +65,7 @@ encrypted transfer." Click "View the transaction".*
 the standings…". The result shows the rank and the prize.*
 
 > "At the bell my own browser closes the round. Zama's KMS decrypts the standings, and the contract
-> checks the KMS proof on chain before it ranks us; then my session claims my prize. No server, no keeper. Every step
+> checks the KMS proof on chain before it ranks us; then my game account claims my prize in the background. No server, no keeper. Every step
 > is permissionless."
 
 *Open the leaderboard: Last round.*

@@ -28,27 +28,28 @@ Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain 
 
 1. Open https://climb.sirocco.finance, click **Start playing**, then **Connect wallet**. Use MetaMask or Rabby on
    Sepolia with about 0.05 Sepolia ETH.
-2. Your wallet signs two transactions, once:
-   - it approves the game as ERC-7984 operator of your cUSDC (30 days);
-   - it starts a 7-day game session, which sends 0.03 Sepolia ETH to a session key kept in your
-     browser.
+2. On the first visit your wallet signs one message and sends one transaction:
+   - the signature creates your **game account**, a key derived from it and kept in your browser;
+   - the transaction sends 0.03 Sepolia ETH of gas to that game account.
 
-   From then on the session key sends every game transaction for you, with no pop-ups. It can only
-   play with the stake you approved and can never withdraw. On your first visit the faucet mints and
-   wraps 1,000 test cUSDC for you.
-3. Your balance is encrypted, so it shows **Decrypt**. Click it to decrypt it in your browser. Your
-   wallet signs a decryption grant once a day.
+   From then on the game account sends every game transaction, with no pop-ups. It approves the
+   game as ERC-7984 operator of its cUSDC and claims 1,000 test cUSDC from the faucet in the
+   background. Any browser where you connect the same wallet finds the same game account.
+3. Your balance is encrypted on chain. The game account signs a 7-day decryption grant locally, so
+   the balance is decrypted in your browser automatically, and again after every payout.
 4. **Solo**: pick a market, long or short, and a stake (10 to 100), then **Start climbing**. Your
-   side and stake are encrypted in the browser and sealed on chain. The coin follows the live price
-   and the leverage climbs every 6 s. **Cash out** with the button or the space bar. The contract
-   computes your payout on ciphertexts and sends it as an encrypted transfer in the same
-   transaction. The result screen then shows the settled values and the transaction link. You can
+   side and stake were already encrypted in the background when you picked them, so the climb starts
+   at the click while the entry locks on Sepolia. The coin follows the live price and the leverage
+   climbs every 6 s. **Cash out** with the button or the space bar: the value is frozen with the
+   signed price the transaction carries and shown at once, and it is the value the contract pays.
+   The contract computes your payout on ciphertexts and sends it as an encrypted transfer in the
+   same transaction; the result screen then adds the transaction link. You can
    post your return to the leaderboard: the return becomes public, your stake stays private.
 5. **Round**: switch to Round, pick a side, then **Open a round** (or **Join**). Players have 60 s
    to join. If few players are around, the **practice bots** in your browser take the empty seats with
    their own encrypted sides. While the round is live, every other player shows as *Sealed*. At the
    bell your browser closes the round, the KMS decrypts the standings, the contract checks the proof,
-   and your session claims your prize as an encrypted transfer.
+   and your game account claims your prize as an encrypted transfer in the background.
 6. The trophy icon shows the leaderboards (last round, today, all time). They list public results
    only: round standings and the runs players chose to post.
 
@@ -64,8 +65,52 @@ browser does each one itself (autopilot):
 - closing a round at the bell;
 - the KMS reveal and `finalizeRound` with the proof.
 
-The practice bots are real players whose keys come from your session key. An optional ops keeper
+The practice bots are real players whose keys come from your game account. An optional ops keeper
 (`ops/keeper.mjs`) does the same duties.
+
+## Every transaction and signature
+
+The wallet signs once and sends one transaction, on the first visit only. Everything after that is
+sent by the **game account**: a key derived from that one signature, kept in the browser, holding
+the test cUSDC and a little gas. It signs locally, so there are no pop-ups. "Waits" means the player
+waits for it on screen.
+
+**First visit**
+
+| Step | Who signs | Kind | Waits | Gas |
+| --- | --- | --- | --- | --- |
+| Create the game account (`personal_sign` of a fixed message) | wallet | signature | yes | none |
+| Send 0.03 Sepolia ETH to the game account | wallet | transaction | yes (one block) | 21k |
+| `setOperator(Siroclimb)` on cUSDC, 365 days | game account | transaction | no, background | 136k |
+| `ClimbFaucet.claimFor`: mint and wrap 1,000 cUSDC | game account | transaction | no, background | 856k |
+| User-decryption grant (EIP-712, 7 days), then the balance is decrypted | game account | signature | no, automatic | none |
+
+**Solo run**
+
+| Step | Who signs | Kind | Waits | Gas |
+| --- | --- | --- | --- | --- |
+| Encrypt side and stake (relayer proof) | browser | off chain | no, done in the lobby when picked | none |
+| `startRun` with the signed Pyth price (or a bounded public price) | game account | transaction | the coin moves at the click; the entry snaps in when mined | up to 3.77M |
+| Price checkpoints (`pushPyth` / `pushPublic`) | game account (autopilot) | transaction | no, background | 340k (Pyth) |
+| `cashOut` with the signed Pyth price frozen at the click | game account | transaction | no: the result shows in 1.5 s, marked "Settling on chain" | 2.21M |
+| `settleRun` at the 60th second, if not cashed out | game account (autopilot, anyone) | transaction | no, background | 1.88M |
+| Balance decryption after the payout | game account | off chain | no, automatic | none |
+| `publishRun` then `recordRun` with the KMS proof | game account | 2 transactions | only when the player clicks **Post** | small |
+
+**Round**
+
+| Step | Who signs | Kind | Waits | Gas |
+| --- | --- | --- | --- | --- |
+| Encrypt the side | browser | off chain | no, done in the lobby | none |
+| `joinRound` (or open one) | game account | transaction | yes, one block | 2.99M |
+| Practice bots' `joinRound` | bot keys derived in the browser | transactions | no, background | 2.99M each |
+| `exitAtBell` for a live run, just before the bell | game account (autopilot) | transaction | no, background | 1.04M |
+| `closeRound`, then `finalizeRound` with the KMS proof | any browser (autopilot) | 2 transactions | no, background | 0.55M + 1.78M (4 players) to 8.71M (24) |
+| `claim` the prize | game account | transaction | no, background after the standings show | 1.06M |
+
+So a player waits for two things only: the first visit's gas transfer, and the start (`startRun` or
+`joinRound`). A solo run costs two transactions (start and cash out); posting it adds two more, on
+demand.
 
 ## Confidentiality design
 
@@ -127,8 +172,8 @@ and at -100 % the coin falls and the run is worth 0 for good.
 ```
  browser (static site)                                    Sepolia
  ┌─────────────────────────────────────┐   tx   ┌──────────────────────────────────────────┐
- │ wallet: operator approval, session   ├───────►│ Siroclimb ── FHE ops (Zama coprocessor)  │
- │ session key: start, cash out, join   │        │   ├─ cUSDCMock (Zama, ERC-7984)          │
+ │ wallet: 1 signature, 1 gas transfer ├───────►│ Siroclimb ── FHE ops (Zama coprocessor)  │
+ │ game account: every game tx         │        │   ├─ cUSDCMock (Zama, ERC-7984)          │
  │ relayer SDK: encrypt, user/public    │        │   ├─ ClimbLadder ── ClimbPriceOracle      │
  │   decrypt (KMS proofs)               │        │   │                    └─ Pyth (Wormhole) │
  │ autopilot: checkpoints, settle,      │        │ ClimbFaucet ─► USDCMock.mint + wrap      │
@@ -149,7 +194,7 @@ and at -100 % the coin falls and the run is worth 0 for good.
 | `contracts/contracts/tokens/` | `MirrorToken` (xStock underlyings) and the OpenZeppelin ERC-7984 wrapper |
 | `contracts/test/` | FHEVM mock tests, HCU budget |
 | `js/api.js` | The front/back contract; Sepolia by default, `?mock` for the simulation |
-| `js/chain/` | Sepolia implementation: config, FHE client, wallet and session, feed, prices, autopilot, bots |
+| `js/chain/` | Sepolia implementation: config, FHE client, wallet and game account, feed, prices, autopilot, bots |
 | `api/` | Server routes: `pyth.js` (Hermes proxy), `prices.js` (reference prices, market hours) |
 | `ops/` | On-chain battery, optional keeper |
 | `tests/chain/` | Puppeteer end to end tests of the real front on Sepolia (injected test wallet) |
@@ -217,7 +262,8 @@ in the same folder, and the ops keeper uses `keeper.key`. No key is ever committ
   reporters. A wider Pyth entitlement makes them trustless with no code change.
 - Solo runs pay from a house bankroll that the testnet auto-mints (`_reserve`). A mainnet version
   would need a real liquidity pool.
-- The session key lives in the browser's local storage. Its power is limited to playing with the
-  approved stake, and it expires after 7 days.
+- The game account key lives in the browser's local storage and holds only test cUSDC and a little
+  gas. It is derived from a wallet signature, so the same wallet recovers it in any browser. A
+  mainnet version would want a passkey or a smart account instead.
 - Market hours come from the reference route. The contract itself does not know the trading
   calendar; a closed market simply has no fresh checkpoint, and `startRun` refuses stale entries.
