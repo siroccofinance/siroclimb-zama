@@ -79,3 +79,4 @@ reproduced, and 4 rounds, two of them with 24 players, finalized with every pot 
 
 Raw results: `ops/battery-results/`.
 | F40 | Last battery, wave 1: 4 players never got past encryption, the in-process relayer client wedging like F33, this time on `encrypt`. | Battery | Input encryptions also run in the worker processes (`decrypt-worker.mjs` handles both), queued with the decryptions. |
+| F41 | Battery round: an `exitAtBell` sent with a fixed gas limit (no estimate) reverted because the player's own cash out had landed just before it. | Battery | A reverted exit is fine when the run shows as ended. The sweep, keeper and autopilot already ignore it. |
