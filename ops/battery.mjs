@@ -180,7 +180,13 @@ async function roundGame(k) {
   // the chain's clock, not ours: wait for a block past the bell
   await view(() => provider.getBlock('latest'), b => b && b.timestamp > endsAt + 1, 60);
   // exits at the bell one per transaction (F24: a 17-exit close needs ~18M gas, over Sepolia's per-transaction cap)
-  for (const rid of ids) if (Number((await view(() => game.getRun(rid))).status) === 1) await keeper.send(game, 'exitAtBell', [rid]).catch(e => { if (!/WrongRunStatus/.test(errText(e))) throw e; });
+  for (const rid of ids) {
+    if (Number((await view(() => game.getRun(rid))).status) !== 1) continue;
+    // a player's cash out can land first (fixed gas, no estimate): a revert is fine if the run has ended
+    await keeper.send(game, 'exitAtBell', [rid]).catch(async e => {
+      if (Number((await view(() => game.getRun(rid), x => Number(x.status) === 2, 10)).status) !== 2) throw e;
+    });
+  }
   await keeper.send(game, 'closeRound', [id]).catch(e => { if (!/WrongRoundStatus/.test(errText(e))) throw e; });
   const handles = await view(() => game.roundScoreHandles(id), hs => hs.length && hs.every(h => !/^0x0+$/.test(h)), 30);
   const { values: scores, proof } = await publicDecrypt([...handles]);
