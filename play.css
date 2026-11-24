@@ -281,12 +281,20 @@ body[data-screen="intro"] .stage::before { opacity: 0; }
 /* ───────── result ───────── */
 .result__text { display: grid; gap: 10px; }
 .eyebrow { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink-soft); }
-.result .title { font-size: clamp(48px, 5.6vw, 84px); letter-spacing: -.04em; }
+.result .title { font-size: clamp(48px, 5.6vw, 84px); letter-spacing: -.04em; text-shadow: 0 2px 24px rgba(60, 20, 5, .25); }
+.result .title small { font-size: .36em; font-weight: 500; letter-spacing: 0; color: var(--ink-soft); margin-left: .1em; }
+.result__eyebrow { display: flex; align-items: center; gap: 12px; letter-spacing: .06em; text-transform: uppercase; font-size: 13px; }
+.result__mk { display: inline-flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; }
+.result__mk::before { content: ""; width: 4px; height: 4px; border-radius: 50%; background: var(--ink-mute); margin-right: 4px; }
+.result__mk b { color: var(--ink); font-size: 15px; }
+.result__mk .pill { font-size: 11px; padding: 2px 7px; }
 .result.is-win .title { color: #ffe6a6; }
-.stats { display: flex; flex-wrap: wrap; gap: 8px 32px; margin: 12px 0 0; }
+.stats { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 12px 0 0; }
 .stats div { display: grid; gap: 2px; }
 .stats dt { font-size: 13px; color: var(--ink-mute); }
-.stats dd { margin: 0; font-size: 17px; font-weight: 600; }
+.stats dd { margin: 0; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stats .is-key dd { font-size: 22px; line-height: 1; margin-top: -3px; }
+.stats .is-key.is-up dd { color: #ffe6a6; }
 .result__note { margin: 8px 0 0; font-size: 16px; color: var(--ink-soft); }
 .result__note b { color: var(--ink); }
 
@@ -552,3 +560,11 @@ body[data-side="short"] .sideglow { --g: var(--short); }
 .share__copy { font: inherit; color: #9a4a26; font-weight: 600; background: none; border: 0; padding: 0; cursor: pointer; }
 .share__copy:hover { text-decoration: underline; }
 @media (max-width: 520px) { .share__go { flex-direction: column-reverse; } .share__go > * { flex: none; min-width: 0; width: 100%; } }
+
+/* small phones, wallet connected: the address and the balance fit beside the four icons */
+@media (max-width: 420px) {
+  .top__actions .icon { width: 28px; }
+  .top__actions .icon svg { width: 20px; height: 20px; }
+  .wallet__btn.is-on { padding: 0 8px; font-size: 12.5px; letter-spacing: -.01em; }
+  .balance { padding-left: 8px; }
+}
