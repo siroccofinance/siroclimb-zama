@@ -119,3 +119,53 @@ those markets to trustless Pyth with no code change.
 **Game scale**: real prices move little in a minute, so every move counts 25x, then the leverage
 applies on top. A 0.1 % move pays 2.5 % at 1x and 10 % at 4x. PnL adds up on a constant notional,
 and at -100 % the coin falls and the run is worth 0 for good.
+
+## Architecture
+
+```
+ browser (static site)                                    Sepolia
+ ┌─────────────────────────────────────┐   tx   ┌──────────────────────────────────────────┐
+ │ wallet: operator approval, session   ├───────►│ Siroclimb ── FHE ops (Zama coprocessor)  │
+ │ session key: start, cash out, join   │        │   ├─ cUSDCMock (Zama, ERC-7984)          │
+ │ relayer SDK: encrypt, user/public    │        │   ├─ ClimbLadder ── ClimbPriceOracle      │
+ │   decrypt (KMS proofs)               │        │   │                    └─ Pyth (Wormhole) │
+ │ autopilot: checkpoints, settle,      │        │ ClimbFaucet ─► USDCMock.mint + wrap      │
+ │   close, reveal, finalize            │        └──────────────────────────────────────────┘
+ │ practice bots (own keys)             │
+ └───────────────┬─────────────────────┘
+                 │ /api/pyth (signed Hermes update, key server-side)
+                 │ /api/prices (reference prices, market hours)
+           server routes (Vercel functions, or dev.mjs locally)
+```
+
+| Path | Content |
+| --- | --- |
+| `contracts/contracts/Siroclimb.sol` | Runs, rounds, packs, sessions, encrypted payouts, KMS-verified standings |
+| `contracts/contracts/ClimbLadder.sol` | Run rules: long and short multipliers on the oracle path |
+| `contracts/contracts/ClimbPriceOracle.sol` | Per-market checkpoints: Pyth, bounded fallback, seeding |
+| `contracts/contracts/ClimbFaucet.sol` | Mint + wrap test cUSDC for any account |
+| `contracts/contracts/tokens/` | `MirrorToken` (xStock underlyings) and the OpenZeppelin ERC-7984 wrapper |
+| `contracts/test/` | FHEVM mock tests, HCU budget |
+| `js/api.js` | The front/back contract; Sepolia by default, `?mock` for the simulation |
+| `js/chain/` | Sepolia implementation: config, FHE client, wallet and session, feed, prices, autopilot, bots |
+| `api/` | Server routes: `pyth.js` (Hermes proxy), `prices.js` (reference prices, market hours) |
+| `ops/` | On-chain battery, optional keeper |
+| `tests/chain/` | Puppeteer end to end tests of the real front on Sepolia (injected test wallet) |
+
+HCU budget per transaction (worst cases, limits 20M global / 5M depth). HCU is not the binding
+limit on Sepolia, gas is: each FHE operation and encrypted transfer costs about 1M gas on the real
+host, and Sepolia caps a transaction at 16.78M gas. Rounds therefore never loop over heavy work in
+one transaction (F24): runs exit at the bell one per transaction (`exitAtBell`), and prizes are
+claimed one per transaction (`claim`).
+
+| Transaction | Global HCU | Depth |
+| --- | --- | --- |
+| `startRun` (encrypted side and stake, clamp, transfer) | 1.32M | 0.68M |
+| `cashOut` solo (select, mul, div, encrypted payout) | 1.95M | 1.74M |
+| `cashOut` packed (4 capped paths selected on ciphertexts) | 2.45M | 1.90M |
+| `joinRound` | 0.67M | 0.37M |
+| `exitAtBell` (one exit, encrypted score) | 0.21M | 0.21M |
+| `closeRound` (worst case: 23 exits at the bell, 24 reveals; mock only) | 4.72M | 0.21M |
+| `finalizeRound` (KMS proof check, ranking, prizes recorded) | 0 | 0 |
+| `claim` (one encrypted prize or refund transfer) | ~0.2M | ~0.2M |
+| `openPack` (encrypted PRNG) | 0.34M | 0.24M |
