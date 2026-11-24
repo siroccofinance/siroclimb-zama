@@ -521,3 +521,34 @@ body[data-side="short"] .sideglow { --g: var(--short); }
 
 .result__note a, .linkish { color: #ffe6a6; text-decoration: underline; text-underline-offset: 3px; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
 .linkish:disabled { opacity: .7; cursor: default; text-decoration: none; }
+
+/* share sheet: the server-rendered card, what to reveal, post or download */
+.sheet__card.share { width: min(640px, 100%); }
+.share h2 { margin-bottom: 8px; }
+.share__lede { font-size: 15px; }
+.share__card { position: relative; margin: 20px 0 16px; aspect-ratio: 1200 / 630; border-radius: 12px; overflow: hidden; background: linear-gradient(120deg, #a8441f, #c9592f 55%, #e57a45);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .5) inset, 0 18px 40px -22px rgba(43, 20, 10, .65); }
+.share__card img { display: block; width: 100%; height: 100%; object-fit: cover; transition: opacity .3s var(--ease); }
+.share__card.is-loading img { opacity: .35; }
+.share__card.is-loading::after { content: ""; position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; margin: -14px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, .35); border-top-color: #fff; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(1turn); } }
+.share__opts { display: flex; flex-wrap: wrap; gap: 10px 24px; }
+.tog { display: inline-flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; color: var(--ink-d); cursor: pointer; user-select: none; }
+.tog input { position: absolute; opacity: 0; pointer-events: none; }
+.tog i { position: relative; width: 38px; height: 22px; border-radius: 11px; background: rgba(43, 33, 26, .18); transition: background .2s var(--ease); flex: none; }
+.tog i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(43, 20, 10, .35); transition: transform .25s var(--ease-out); }
+.tog input:checked + i { background: #c2552d; }
+.tog input:checked + i::after { transform: translateX(16px); }
+.tog input:focus-visible + i { outline: 2px solid #c2552d; outline-offset: 2px; }
+.share__go { display: flex; gap: 12px; margin-top: 22px; }
+.share__go > * { flex: 1; min-width: 0; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+.share__go svg { width: 18px; height: 18px; flex: none; }
+.share__go .cta svg { fill: currentColor; }
+.ghost--ink { color: var(--ink-d); background: transparent; border-color: rgba(43, 33, 26, .25); box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.ghost--ink svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ghost--ink:hover { background: rgba(43, 33, 26, .06); }
+.share__go a[aria-disabled="true"] { opacity: .5; pointer-events: none; }
+.share__fine { line-height: 1.45; }
+.share__copy { font: inherit; color: #9a4a26; font-weight: 600; background: none; border: 0; padding: 0; cursor: pointer; }
+.share__copy:hover { text-decoration: underline; }
+@media (max-width: 520px) { .share__go { flex-direction: column-reverse; } .share__go > * { flex: none; min-width: 0; width: 100%; } }
