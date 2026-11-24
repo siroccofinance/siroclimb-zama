@@ -153,10 +153,19 @@ async function roundGame(k) {
     await p.send(game, 'cashOut', [runOf.get(p.address.toLowerCase()), py ? py.updateData : []], py ? py.fee : 0n).catch(e => log('round cash out', p.name, errText(e)));
   }));
   await sleep(Math.max(0, endsAt * 1000 - Date.now()) + 4000);
+  // exits at the bell one per transaction (F24: a 17-exit close needs ~18M gas, over Sepolia's per-transaction cap)
+  for (const rid of ids) if (Number((await view(() => game.getRun(rid))).status) === 1) await keeper.send(game, 'exitAtBell', [rid]).catch(e => { if (!/WrongRunStatus/.test(errText(e))) throw e; });
   await keeper.send(game, 'closeRound', [id]).catch(e => { if (!/WrongRoundStatus/.test(errText(e))) throw e; });
   const handles = await view(() => game.roundScoreHandles(id), hs => hs.length && hs.every(h => !/^0x0+$/.test(h)), 30);
   const { values: scores, proof } = await publicDecrypt([...handles]);
   await keeper.send(game, 'finalizeRound', [id, scores, proof]).catch(e => { if (!/WrongRoundStatus/.test(errText(e))) throw e; });
+  // prizes are pull payments: every winner's prize is claimed (anyone may claim for anyone)
+  const claimBlock = new Map();
+  for (const rid of ids) {
+    if ((await view(() => game.prizeOf(rid))) === 0n) continue;
+    const rc = await keeper.send(game, 'claim', [rid]);
+    claimBlock.set(rid, rc.blockNumber);
+  }
   const finalBlock = await view(async () => (await game.queryFilter(game.filters.RoundFinalized(id), Math.min(...joinBlock.values()))).at(-1)?.blockNumber, b => b != null, 30);
   // local recomputation of ranks and prizes
   const [rf] = await view(() => game.getRound(id), ([x]) => Number(x.status) === 3, 30);
@@ -178,7 +187,7 @@ async function roundGame(k) {
     const long = sides.get(p);
     const expScore = p === poor ? 0n : (long ? run.multLong : run.multShort) + 1n;
     // exact blocks: just before the join, and the finalize block (prize paid)
-    const delta = p === poor ? 0n : (await balanceAt(p.wallet, finalBlock)) - (await balanceAt(p.wallet, joinBlock.get(p) - 1));
+    const delta = p === poor ? 0n : (await balanceAt(p.wallet, claimBlock.get(ids[i]) ?? finalBlock)) - (await balanceAt(p.wallet, joinBlock.get(p) - 1));
     const ok = scores[i] === expScore && (p === poor || delta === prize.get(i) - 10n * USDC);
     checks.push({ player: p.name, side: long ? 'long' : 'short', score: Number(scores[i]), pnlPct: scores[i] ? (Number(scores[i]) - 1 - 1e6) / 1e4 : null, prize: Number(prize.get(i)) / 1e6, ok });
   }
