@@ -55,7 +55,7 @@ export async function fees() {
   const tip = (fd.maxPriorityFeePerGas ?? 0n) > MIN_TIP ? fd.maxPriorityFeePerGas : MIN_TIP;
   return { maxPriorityFeePerGas: tip, maxFeePerGas: (fd.maxFeePerGas ?? fd.gasPrice ?? 0n) + tip };
 }
-const RETRY = /nonce|underpriced|already known|replacement|timeout|ECONNRESET|socket|fetch failed|503|502|429|missing response|insufficient funds/i;
+const RETRY = /nonce|underpriced|already known|replacement|timeout|ECONNRESET|socket|fetch failed|503|502|429|missing response|insufficient funds|Panic\(50\)/i;
 /** One key, one queue: nonces tracked locally, resynced after any failure (public RPCs lag). */
 export class Sender {
   constructor(k, label = '') { this.wallet = new Wallet(k, provider); this.address = this.wallet.address; this.label = label; this.q = Promise.resolve(); this.nonce = null; this.gasSpent = 0n; }
