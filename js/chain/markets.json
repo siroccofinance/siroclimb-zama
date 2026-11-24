@@ -1,15 +1,14 @@
 {
-  "_doc": "Siroclimb markets, in on-chain order (index = market id in ClimbPriceOracle). Stocks and real world assets only. token: the ERC-7984 confidential token the market tracks (zama = Zama's own Sepolia mock from the Wrappers Registry, mirror = Sirocco mirror deployed by this repo, see DEPLOYMENTS.md). hours: 'us-equity' markets only open while the US equity session (pre, regular, post) has a live price. token.symbol is the clean ticker shown in the game; token.contract the exact Zama contract name when it differs.",
+  "_doc": "Siroclimb markets, in on-chain order (index = market id in ClimbPriceOracle). Stocks and real world assets only. token: the ERC-7984 confidential token the market tracks (zama = Zama's own Sepolia mock from the Wrappers Registry, mirror = Sirocco mirror deployed by this repo, see DEPLOYMENTS.md). hours: 'always' = 24/7. The four stock markets are priced by their xStock (the token cTSLAx etc. wrap), which trades 24/7: Kraken's xStock spot mid (krakenClass tokenized_asset) through the bounded public checkpoints; pythLive false = the on-chain Pyth feed id (Equity.US, regular session only, frozen outside it) is not used. token.symbol is the clean ticker shown in the game; token.contract the exact Zama contract name when it differs.",
   "markets": [
     {
       "id": "TSLAx",
       "name": "Tesla",
       "ticker": "TSLAx",
       "kind": "stock",
-      "hours": "us-equity",
+      "hours": "always",
       "pyth": "0x16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1",
       "pythSymbol": "Equity.US.TSLA/USD",
-      "yahoo": "TSLA",
       "token": {
         "symbol": "cTSLAx",
         "origin": "mirror",
@@ -19,17 +18,19 @@
           "decimals": 18,
           "mainnet": "0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0"
         }
-      }
+      },
+      "kraken": "TSLAxUSD",
+      "krakenClass": "tokenized_asset",
+      "pythLive": false
     },
     {
       "id": "NVDAx",
       "name": "NVIDIA",
       "ticker": "NVDAx",
       "kind": "stock",
-      "hours": "us-equity",
+      "hours": "always",
       "pyth": "0xb1073854ed24cbc755dc527418f52b7d271f6cc967bbf8d8129112b18860a593",
       "pythSymbol": "Equity.US.NVDA/USD",
-      "yahoo": "NVDA",
       "token": {
         "symbol": "cNVDAx",
         "origin": "mirror",
@@ -39,17 +40,19 @@
           "decimals": 18,
           "mainnet": "0xc845b2894dBddd03858fd2D643B4eF725fE0849d"
         }
-      }
+      },
+      "kraken": "NVDAxUSD",
+      "krakenClass": "tokenized_asset",
+      "pythLive": false
     },
     {
       "id": "AAPLx",
       "name": "Apple",
       "ticker": "AAPLx",
       "kind": "stock",
-      "hours": "us-equity",
+      "hours": "always",
       "pyth": "0x49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688",
       "pythSymbol": "Equity.US.AAPL/USD",
-      "yahoo": "AAPL",
       "token": {
         "symbol": "cAAPLx",
         "origin": "mirror",
@@ -59,17 +62,19 @@
           "decimals": 18,
           "mainnet": "0x9d275685dC284C8eB1C79f6ABA7a63Dc75ec890a"
         }
-      }
+      },
+      "kraken": "AAPLxUSD",
+      "krakenClass": "tokenized_asset",
+      "pythLive": false
     },
     {
       "id": "AMZNx",
       "name": "Amazon",
       "ticker": "AMZNx",
       "kind": "stock",
-      "hours": "us-equity",
+      "hours": "always",
       "pyth": "0xb5d0e0fa58a1f8b81498ae670ce93c872d14434b72c364885d4fa1b257cbb07a",
       "pythSymbol": "Equity.US.AMZN/USD",
-      "yahoo": "AMZN",
       "token": {
         "symbol": "cAMZNx",
         "origin": "mirror",
@@ -79,7 +84,10 @@
           "decimals": 18,
           "mainnet": "0x3557Ba345B01EFa20A1bdDC61F573BFD87195081"
         }
-      }
+      },
+      "kraken": "AMZNxUSD",
+      "krakenClass": "tokenized_asset",
+      "pythLive": false
     },
     {
       "id": "XAUt",
