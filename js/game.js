@@ -188,6 +188,8 @@ balEl.onclick = () => { if (api.mode === 'chain') decrypt(); };
 // enough to play: a sealed balance is not a reason to block (the contract moves 0 when short)
 const canPay = amount => { const b = api.balance(); return b == null || b >= amount; };
 const KIND = { stock: 'Stock', gold: 'Gold', fx: 'FX', crypto: 'Crypto' };
+/** A market is named by the confidential token it trades (cTSLAx, cXAUt, ctGBP), the plain name in small. */
+const label = a => a.token || a.ticker;
 
 // ── lobby
 const marketsEl = $('#markets');
@@ -195,8 +197,8 @@ const chip = {};
 for (const a of assets) {
   const b = document.createElement('button');
   b.className = 'market'; b.dataset.v = a.id;
-  b.innerHTML = `<b>${a.ticker}</b><span class="k">${KIND[a.kind] || a.kind}</span><span class="p"></span><span class="c"></span>`;
-  b.title = a.token ? `${a.name}, confidential token ${a.token}` : a.name;
+  b.innerHTML = `<b>${label(a)}</b><span class="k">${KIND[a.kind] || a.kind}</span><span class="n">${a.name}</span><span class="p"></span><span class="c"></span>`;
+  b.title = `${label(a)}: confidential ${a.name} token (ERC-7984)`;
   b.onclick = () => { C.asset = a.id; store.set('asset', a.id); renderLobby(); };
   marketsEl.appendChild(b);
   chip[a.id] = { b, p: b.querySelector('.p'), c: b.querySelector('.c') };
@@ -248,7 +250,7 @@ function renderGo() {
   const open = api.marketOpen(C.asset);
   go.disabled = busy || !open;
   go.textContent = busy ? 'Starting…' : !open ? 'Market closed' : !canPay(C.stake) ? 'Get test cUSDC' : 'Start climbing';
-  meta.textContent = open ? `${C.stake} cUSDC on ${byId[C.asset].ticker} ${C.side}, up to 4x, encrypted on chain` : `${byId[C.asset].name} trades during US market hours. Gold and GBP are open now`;
+  meta.textContent = open ? `${C.stake} cUSDC on ${label(byId[C.asset])} ${C.side}, up to 4x, encrypted on chain` : `${label(byId[C.asset])} (${byId[C.asset].name}) trades during US market hours. cXAUt and ctGBP are open now`;
 }
 
 $('#go').onclick = async () => {
@@ -292,7 +294,7 @@ function enterGame(r) {
   if (G) { G.steps = []; G.dangerTo = 0; G.end = null; G.go = (performance.now() - G.t0) / 1000; }
   if (STAIRS) startTrack(r);
   const a = byId[r.assetId];
-  $('#hT').textContent = a.ticker; $('#hSide').textContent = r.side === 'long' ? 'Long' : 'Short'; $('#hSide').className = 'pill is-' + r.side;
+  $('#hT').textContent = label(a); $('#hN').textContent = a.name; $('#hSide').textContent = r.side === 'long' ? 'Long' : 'Short'; $('#hSide').className = 'pill is-' + r.side;
   buildLadder(r.ladder); rungs[0].classList.add('is-now');
   spark.entry = r.entryPrice; spark.asset = r.assetId;
   setScreen('game');
@@ -404,7 +406,7 @@ function showResult(res) {
   $('.result').classList.toggle('is-win', res.pnl > 0.005);
   const a = byId[run.assetId];
   const stats = [['Return', pct(res.pnlPct)], ['Top leverage', levTxt(res.maxLeverage)], ['Time', `${Math.max(1, Math.round(res.duration))}s`],
-    [`${a.ticker} entry`, price(res.entryPrice)], ['Exit', price(res.exitPrice)]];
+    [`${label(a)} entry`, price(res.entryPrice)], ['Exit', price(res.exitPrice)]];
   if (res.interest != null) stats.push(['Borrowed', `${money(res.borrowed || 0)} cUSDC`], ['Interest paid', `${tiny(res.interest)} cUSDC`]);
   $('#rS').innerHTML = stats.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
   const rr = $('#rR'); rr.hidden = !res.pending;
@@ -441,7 +443,7 @@ async function makeCard(scene) {
   const d = {
     eyebrow: bust ? 'The coin fell' : r.status === 'expired' ? "Time's up, cashed out" : 'Cashed out',
     value: signed(r.pnl), unit: 'cUSDC', win: r.pnl > 0.005,
-    side: mine.side, ticker: a.ticker, logo: await loadLogo('assets/brand/sirocco-mark-safran.svg'),
+    side: mine.side, ticker: label(a), logo: await loadLogo('assets/brand/sirocco-mark-safran.svg'),
     stats: [['Stake', `${money(mine.stake)} cUSDC`], ['Return', pct(r.pnlPct)], ['Top leverage', levTxt(r.maxLeverage)], ['Entry', price(r.entryPrice)], ['Exit', price(r.exitPrice)], ['Time', `${Math.max(1, Math.round(r.duration))}s`]],
   };
   const blob = await toBlob(drawCard(scene, d));
@@ -452,9 +454,9 @@ async function makeCard(scene) {
 function shareText() {
   const a = byId[run.assetId], r = ended, side = run.side === 'short' ? 'short' : 'long';
   const text = r.status === 'busted'
-    ? `My coin fell off the stairs at ${levTxt(r.maxLeverage)} going ${side} on ${a.ticker}. Rematch incoming 🪙`
-    : r.pnl > 0.005 ? `Climbed to ${levTxt(r.maxLeverage)} going ${side} on ${a.ticker} and cashed out ${pct(r.pnlPct)} 🪙📈\n\nCan you climb higher on Siroclimb?`
-    : `Cashed out at ${levTxt(r.maxLeverage)} going ${side} on ${a.ticker} before the stairs gave way 🪙\n\nYour turn on Siroclimb`;
+    ? `My coin fell off the stairs at ${levTxt(r.maxLeverage)} going ${side} on ${label(a)}. Rematch incoming 🪙`
+    : r.pnl > 0.005 ? `Climbed to ${levTxt(r.maxLeverage)} going ${side} on ${label(a)} and cashed out ${pct(r.pnlPct)} 🪙📈\n\nCan you climb higher on Siroclimb?`
+    : `Cashed out at ${levTxt(r.maxLeverage)} going ${side} on ${label(a)} before the stairs gave way 🪙\n\nYour turn on Siroclimb`;
   const url = (card && card.page) || location.origin + location.pathname.replace(/(play|index)\.html$/, '');
   return { text, url };
 }

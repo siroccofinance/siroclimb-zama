@@ -169,12 +169,14 @@ body[data-screen="intro"] .stage::before { opacity: 0; }
 .market:hover:not(:disabled):not([aria-pressed="true"]) { border-color: rgba(255, 255, 255, .3); }
 .market b { font-size: 15px; font-weight: 600; }
 .market .k { justify-self: end; font-size: 11px; color: var(--ink-mute); }
+.market .n { grid-column: 1 / -1; font-size: 11px; color: var(--ink-mute); margin-top: -2px; }
+.mk__n { font-size: 13px; color: var(--ink-soft); }
 .market .p { font-size: 13px; color: var(--ink-soft); }
 .market .c { justify-self: end; font-size: 12px; }
 .market .c.is-up { color: #ffe6a6; }
 .market .c.is-down { color: rgba(255, 255, 255, .62); }
 .market[aria-pressed="true"] { background: #fff; color: var(--ink-d); border-color: #fff; }
-.market[aria-pressed="true"] .p, .market[aria-pressed="true"] .k { color: rgba(43, 33, 26, .62); }
+.market[aria-pressed="true"] .p, .market[aria-pressed="true"] .k, .market[aria-pressed="true"] .n { color: rgba(43, 33, 26, .62); }
 .market[aria-pressed="true"] .c.is-up { color: #9a6b12; }
 .market[aria-pressed="true"] .c.is-down { color: rgba(43, 33, 26, .55); }
 .market:disabled { opacity: .4; }
