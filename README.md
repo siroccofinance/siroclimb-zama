@@ -179,3 +179,10 @@ open "http://127.0.0.1:3043/?mock#play"   # the in-browser simulation, no wallet
 
 Locally, the Pyth route reads the key from `PYTH_API_KEY` or `~/.config/zama/pyth.key`. Without a
 key, every market uses the bounded fallback.
+
+### Contracts
+
+```bash
+cd contracts && npm i && npx hardhat test          # 39 tests on the FHEVM mock, HCU budget
+npm run deploy:sepolia && npm run verify:sourcify  # key: ~/.config/zama/siroclimb-deployer.key
+```
