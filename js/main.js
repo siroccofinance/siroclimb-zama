@@ -1,7 +1,7 @@
 // Siroclimb hero: the film plays first (instant), then the same scene takes over live in WebGL,
 // in sync with the video so the handoff is invisible. "Start playing" brakes the belt, the box under
 // the coin springs up and tosses it, the camera follows it into the terracotta, then the page changes.
-import { createEscalatorScene } from './sirocco-escalator-scene.js?v=4';
+import { createEscalatorScene } from './sirocco-escalator-scene.js?v=5';
 
 const hero = document.querySelector('.hero');
 const media = hero.querySelector('.hero__media');

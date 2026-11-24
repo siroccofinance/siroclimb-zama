@@ -206,17 +206,13 @@ body[data-screen="intro"] .stage::before { opacity: 0; }
 
 
 /* ───────── game HUD ───────── */
-.hud__market { position: absolute; top: calc(var(--top) + 8px); left: max(var(--x), env(safe-area-inset-left, 0px)); display: grid; gap: 2px;
-  width: clamp(300px, 30vw, 440px); padding: 16px 18px 12px; border-radius: 18px;
-  background: linear-gradient(180deg, rgba(43, 20, 10, .34), rgba(43, 20, 10, .18)); border: 1px solid rgba(255, 255, 255, .1);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, .07) inset, 0 24px 48px -28px rgba(43, 20, 10, .8);
-  -webkit-backdrop-filter: blur(10px) saturate(1.1); backdrop-filter: blur(10px) saturate(1.1); }
+.hud__market { position: absolute; top: calc(var(--top) + 8px); left: max(var(--x), env(safe-area-inset-left, 0px)); display: grid; gap: 2px; }
 .mk { display: flex; align-items: center; gap: 10px; }
 .mk__t { font-size: 15px; font-weight: 600; }
 .pill { font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 6px; background: #fff; color: var(--ink-d); text-transform: uppercase; letter-spacing: .04em; }
 .mk__p { font-size: 30px; font-weight: 600; letter-spacing: -.02em; line-height: 1.15; }
 .mk__c { font-size: 14px; color: var(--ink-soft); }
-.spark { width: calc(100% + 18px); height: clamp(110px, 16vh, 150px); margin: 10px -18px 0 0; display: block; }
+.spark { width: 220px; height: 56px; margin-top: 10px; display: block; }
 
 .hud__clock { position: absolute; top: calc(var(--top) + 8px); right: max(var(--x), env(safe-area-inset-right, 0px)); width: 72px; display: grid; justify-items: center; gap: 6px; }
 .ring { width: 64px; height: 64px; transform: rotate(-90deg); grid-area: 1 / 1; }
@@ -389,8 +385,7 @@ body[data-screen="intro"] .stage::before { opacity: 0; }
 
   .hud__market { top: calc(var(--top) + 4px); }
   .mk__p { font-size: 24px; }
-  .hud__market { width: auto; right: calc(var(--x) + 72px); padding: 10px 12px 8px; border-radius: 14px; }
-  .spark { width: calc(100% + 12px); height: 78px; margin: 6px -12px 0 0; }
+  .spark { width: 150px; height: 40px; margin-top: 6px; }
   .hud__clock { top: calc(var(--top) + 4px); width: 60px; }
   .ring { width: 56px; height: 56px; }
   .ladder { top: auto; bottom: 252px; left: var(--x); right: var(--x); width: auto; transform: none; flex-direction: row; gap: 4px; }
@@ -411,7 +406,7 @@ body[data-screen="intro"] .stage::before { opacity: 0; }
   .sheet__card { width: 100%; border-radius: 16px 16px 0 0; padding: 28px 22px max(28px, env(safe-area-inset-bottom, 0px)); }
 }
 @media (max-width: 767px) and (max-height: 700px) {
-  .spark { height: 52px; }
+  .spark { display: none; }
   .hint { display: none; }
 }
 
