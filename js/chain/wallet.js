@@ -25,7 +25,9 @@ export const pythContract = new Contract(ADDR.Pyth, ['function getUpdateFee(byte
 
 // ───────────────────────────── senders (session key, bots)
 const TX_GAS_CAP = 16_000_000n;
-const RETRY = /nonce|underpriced|already known|replacement|timeout|failed to fetch|network|ECONNRESET|503|502|429|insufficient funds/i;
+// 'unknown custom error': right after the operator approval, a lagging node can still refuse the
+// token transfer (the error comes from the token contract); a few seconds later it goes through
+const RETRY = /nonce|underpriced|already known|replacement|timeout|failed to fetch|network|ECONNRESET|503|502|429|insufficient funds|unknown custom error|Panic\(50\)/i;
 
 export class Sender {
   constructor(key) { this.wallet = new Wallet(key, rpc); this.address = this.wallet.address; this.queue = Promise.resolve(); this.nonce = null; }
