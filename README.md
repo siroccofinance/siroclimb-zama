@@ -19,12 +19,14 @@ Confidential Gaming.
 - **Front**: static site (Three.js scene, ES modules), ethers 6, Zama relayer SDK 0.4.1 from Zama's
   CDN, two small server routes (Pyth, reference prices)
 
+**Play it:** https://climb.sirocco.finance (Sepolia)
+
 Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain and their fixes in
 [FINDINGS.md](FINDINGS.md), and the 3-minute video script in [DEMO.md](DEMO.md).
 
 ## How to play (judges)
 
-1. Open the site, click **Start playing**, then **Connect wallet**. Use MetaMask or Rabby on
+1. Open https://climb.sirocco.finance, click **Start playing**, then **Connect wallet**. Use MetaMask or Rabby on
    Sepolia with about 0.05 Sepolia ETH.
 2. Your wallet signs two transactions, once:
    - it approves the game as ERC-7984 operator of your cUSDC (30 days);
@@ -187,9 +189,9 @@ cd contracts && npm i && npx hardhat test          # 39 tests on the FHEVM mock,
 npm run deploy:sepolia && npm run verify:sourcify  # key: ~/.config/siroclimb/sepolia/deployer.key
 ```
 
-### Hosting (Vercel-ready)
+### Hosting
 
-The site is static, and `api/pyth.js` and `api/prices.js` are Vercel Node functions
+Live at https://climb.sirocco.finance (Vercel). The site is static, and `api/pyth.js` and `api/prices.js` are Vercel Node functions
 (`vercel.json`). Deploy the repo root and set `PYTH_API_KEY` as a server-side environment
 variable. No secret ever reaches the bundle. Contract addresses come from
 `js/chain/deployments.json`, and the relayer SDK loads from Zama's CDN.
