@@ -4,7 +4,7 @@ import { MARKETS } from "../scripts/markets";
 
 /**
  * Sirocco mirrors: confidential tokens for markets that have no Zama token on Sepolia
- * (cTSLAx, cNVDAx, cAAPLx). Each is built exactly like Zama's Sepolia mocks: an ERC-20
+ * (cTSLAx, cNVDAx, cAAPLx, cAMZNx). Each is built exactly like Zama's Sepolia mocks: an ERC-20
  * underlying with the real token's name, symbol and decimals and a capped public mint, wrapped
  * by the OpenZeppelin ERC7984ERC20Wrapper (6 decimals, rate = 10^(decimals - 6)).
  * They are not listed in Zama's Wrappers Registry (registration there is owner-only).
