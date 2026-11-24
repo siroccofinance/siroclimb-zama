@@ -78,3 +78,4 @@ Previous deployment (retired, same contracts before the key move): 249 runs sett
 reproduced, and 4 rounds, two of them with 24 players, finalized with every pot paid.
 
 Raw results: `ops/battery-results/`.
+| F40 | Last battery, wave 1: 4 players never got past encryption, the in-process relayer client wedging like F33, this time on `encrypt`. | Battery | Input encryptions also run in the worker processes (`decrypt-worker.mjs` handles both), queued with the decryptions. |
