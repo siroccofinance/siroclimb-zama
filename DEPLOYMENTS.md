@@ -43,24 +43,38 @@ lenders' cUSDC. It is also the reserve's first lender (250,000 cUSDC).
 ### Sirocco mirrors (stock markets)
 
 Tokenized stocks have no Zama confidential token on Sepolia, so Siroclimb deploys mirrors of
-Backed's xStocks. They are built exactly like Zama's Sepolia tokens: an ERC-20 underlying
-(`MirrorToken`) with the real token's name, symbol and decimals (18, like the mainnet xStocks) and a
-public mint capped per call, wrapped by the OpenZeppelin `ERC7984ERC20Wrapper` (6 decimals,
-`rate()` = 10^12). **They are not listed in Zama's Wrappers Registry**, where registration is
-owner-only.
+Backed's xStocks, built with **the same contracts as Zama's own Sepolia tokens**:
+
+- **Confidential token: the same implementation.** Zama's `cUSDCMock`, `ctGBPMock` and `cXAUtMock`
+  are ERC-1967 proxies to Zama's `ConfidentialWrapper` implementation
+  [`0xae37…af04`](https://sepolia.etherscan.io/address/0xae37b998d453e1fabe85dd46cf04295ca4a3af04)
+  (verified on Sourcify: the OpenZeppelin `ERC7984ERC20Wrapper`, upgradeable, plus Zama's
+  multi-chain FHEVM config, owner, pause, deny-list, observers and ERC-1363 wrapping). `cTSLAx`,
+  `cNVDAx`, `cAAPLx` and `cAMZNx` are ERC-1967 proxies (`ConfidentialTokenProxy`) to **that same
+  implementation**, initialized exactly like `ctGBPMock` and `cXAUtMock`: no pauser, no observers,
+  deny-list off. 6 decimals, `rate()` = 10^12, the same name / symbol / contractURI pattern.
+- **Underlying: the same contract.** `MirrorToken` is Zama's `ERC20Mock` (the underlying of
+  `cXAUtMock`, verified on Sourcify): an ERC-20 with the real token's name, symbol and decimals (18,
+  like the mainnet xStocks) and a public mint capped at 1,000,000 tokens per call.
+
+The differences, and only these: the proxy shell is our own build of OpenZeppelin's
+`ERC1967Proxy` (Zama's was compiled with 0.8.29, ours with 0.8.27), the owner is Siroclimb's
+deployer instead of Zama's, and **they are not listed in Zama's Wrappers Registry**, where
+registration is owner-only. The first mirrors (until this change) used the plain OpenZeppelin
+`ERC7984ERC20Wrapper` without Zama's extras; they held no supply and nothing depended on them.
 
 | Market | Confidential token | Underlying | Mainnet xStock |
 | --- | --- | --- | --- |
-| Tesla | `cTSLAx` [`0xaDDb52A774647E8C28ce2CF7f86Ba48E9beFf96a`](https://sepolia.etherscan.io/address/0xaDDb52A774647E8C28ce2CF7f86Ba48E9beFf96a) | Tesla xStock (TSLAx) [`0x28F9…C23E`](https://sepolia.etherscan.io/address/0x28F90781Ce9Af15d070C81DC27C439c39f25C23E) | `0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0` |
-| NVIDIA | `cNVDAx` [`0x82Be7e7C57473867e80a32596911eF58fdceF1B4`](https://sepolia.etherscan.io/address/0x82Be7e7C57473867e80a32596911eF58fdceF1B4) | NVIDIA xStock (NVDAx) [`0xA31c…4c72`](https://sepolia.etherscan.io/address/0xA31c505C280793f0d32c15Ccbc54e5db7A2f4c72) | `0xc845b2894dBddd03858fd2D643B4eF725fE0849d` |
-| Apple | `cAAPLx` [`0x5bc5E456A4e3628Bf2da5FF088671E2BeAF164C9`](https://sepolia.etherscan.io/address/0x5bc5E456A4e3628Bf2da5FF088671E2BeAF164C9) | Apple xStock (AAPLx) [`0x4530…a1b4`](https://sepolia.etherscan.io/address/0x4530495F1dECc8f02C067460EBd6a758E3fBa1b4) | `0x9d275685dC284C8eB1C79f6ABA7a63Dc75ec890a` |
-| Amazon | `cAMZNx` [`0x581E8376F8fA97e75515C9FA94B5D98a19Ced2db`](https://sepolia.etherscan.io/address/0x581E8376F8fA97e75515C9FA94B5D98a19Ced2db) | Amazon.com xStock (AMZNx) [`0xD889…23cB`](https://sepolia.etherscan.io/address/0xD889F2087FA97673C22BB05404b5892A2D0D23cB) | `0x3557Ba345B01EFa20A1bdDC61F573BFD87195081` |
+| Tesla | `cTSLAx` [`0x290737a05b46FA970318A1539c262ba8AcCaC27B`](https://sepolia.etherscan.io/address/0x290737a05b46FA970318A1539c262ba8AcCaC27B) | Tesla xStock (TSLAx) [`0x28F9…C23E`](https://sepolia.etherscan.io/address/0x28F90781Ce9Af15d070C81DC27C439c39f25C23E) | `0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0` |
+| NVIDIA | `cNVDAx` [`0xF441a77c96F24c52CC53bcdB6e8b4B0BEDac3daD`](https://sepolia.etherscan.io/address/0xF441a77c96F24c52CC53bcdB6e8b4B0BEDac3daD) | NVIDIA xStock (NVDAx) [`0xA31c…4c72`](https://sepolia.etherscan.io/address/0xA31c505C280793f0d32c15Ccbc54e5db7A2f4c72) | `0xc845b2894dBddd03858fd2D643B4eF725fE0849d` |
+| Apple | `cAAPLx` [`0xA8b91F85E56EF8d5F8C7b7c0765f73C27ad9f8a9`](https://sepolia.etherscan.io/address/0xA8b91F85E56EF8d5F8C7b7c0765f73C27ad9f8a9) | Apple xStock (AAPLx) [`0x4530…a1b4`](https://sepolia.etherscan.io/address/0x4530495F1dECc8f02C067460EBd6a758E3fBa1b4) | `0x9d275685dC284C8eB1C79f6ABA7a63Dc75ec890a` |
+| Amazon | `cAMZNx` [`0xd432D9B2c87d4497ea7CdCBC23ee5322E6D264ec`](https://sepolia.etherscan.io/address/0xd432D9B2c87d4497ea7CdCBC23ee5322E6D264ec) | Amazon.com xStock (AMZNx) [`0xD889…23cB`](https://sepolia.etherscan.io/address/0xD889F2087FA97673C22BB05404b5892A2D0D23cB) | `0x3557Ba345B01EFa20A1bdDC61F573BFD87195081` |
 
 ### Game parameters
 
 | Parameter | Value |
 | --- | --- |
-| Markets (oracle order) | 0 TSLAx, 1 NVDAx, 2 AAPLx, 3 AMZNx, 4 XAUt, 5 tGBP |
+| Markets (oracle order) | 0 cTSLAx, 1 cNVDAx, 2 cAAPLx, 3 cAMZNx, 4 cXAUt, 5 ctGBP (shown by their confidential token) |
 | Pyth feeds | Equity.US.TSLA/USD, Equity.US.NVDA/USD, Equity.US.AAPL/USD, Equity.US.AMZN/USD, Crypto.XAUT/USD, FX.GBP/USD |
 | Ladder | 1x, 1.5x, 2x, 2.5x, 3x, 3.5x, 4x, one step every 6 s, 60 s runs |
 | Game scale | 25x: a 0.1 % move counts 2.5 % at 1x, 10 % at 4x |
