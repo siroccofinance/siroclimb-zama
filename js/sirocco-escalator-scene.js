@@ -184,7 +184,8 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
     gr.addColorStop(0, rgba(c0, 0.9)); gr.addColorStop(0.35, rgba(c1, 0.35)); gr.addColorStop(1, rgba(c1, 0));
     x.fillStyle = gr; x.fillRect(0, 0, 512, 512);
     const ht = new THREE.CanvasTexture(hc); ht.colorSpace = THREE.SRGBColorSpace;
-    halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: ht, transparent: true, opacity: TH.halo, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+    // no depth test: a camera-facing sprite cut by a tread leaves a hard, screen-horizontal line on the step
+    halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: ht, transparent: true, opacity: TH.halo, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, fog: false }));
     halo.scale.setScalar(1.9 * RC / 0.3); scene.add(halo);
   }
   key.castShadow = shadows; key.shadow.mapSize.set(4096, 4096);
