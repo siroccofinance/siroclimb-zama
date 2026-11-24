@@ -1,9 +1,11 @@
 // Live prices for the screen. The game is settled on chain on oracle checkpoints (a few per
 // minute, Sepolia blocks are 12 s); the screen moves smoothly on the live market in between:
 //  - Pyth (through our server route, signed update + parsed price) for every entitled feed;
-//  - our /api/prices route (Yahoo for stocks and GBP, Binance for gold) for the others, with the
-//    market hours (stocks are closed outside the US session);
-//  - the oracle's latest checkpoints when neither route answers (static hosting).
+//  - our /api/prices route for the others: the stocks' 24/7 xStock book (Kraken), XAUt (Kraken),
+//    GBP (Yahoo), with their hours;
+//  - the oracle's latest checkpoints when the routes never answered (static hosting).
+// One source per market: a market priced by Pyth keeps Pyth through a missed poll (no switch to the
+// reference and back, which drew spikes), and a failed poll after a working one just waits.
 // Ticks are emitted every 250 ms, easing from the previous quote to the new one.
 import { MARKETS, PRICE_DECIMALS } from './config.js';
 import { oracle } from './wallet.js';
@@ -35,8 +37,10 @@ async function poll() {
   const covered = new Set();
   if (pyth.status === 'fulfilled' && pyth.value.ok) {
     pythPayload.at = Date.now(); pythPayload.body = pyth.value;
-    for (const p of pyth.value.prices) if (p.market >= 0 && Date.now() / 1000 - p.publishTime < 60) { covered.add(p.market); feeds[p.market].pyth = true; quote(p.market, p.price, 'pyth'); }
+    for (const p of pyth.value.prices) if (p.market >= 0 && Date.now() / 1000 - p.publishTime < 60) { covered.add(p.market); feeds[p.market].pyth = true; feeds[p.market].pythAt = Date.now(); quote(p.market, p.price, 'pyth'); }
   }
+  // a Pyth market that missed this poll keeps its Pyth price for 20 s rather than jumping to another source
+  feeds.forEach((f, i) => { if (f.pyth && !covered.has(i) && Date.now() - (f.pythAt || 0) < 20_000) covered.add(i); });
   if (ref.status === 'fulfilled' && ref.value.ok) {
     routeOk = true;
     for (const m of ref.value.markets) {
@@ -44,7 +48,7 @@ async function poll() {
       else feeds[m.market].open = m.open || feeds[m.market].open;
       feeds[m.market].ref = m.price; feeds[m.market].session = m.session;
     }
-  } else if (!covered.size) {
+  } else if (!covered.size && routeOk !== true) {             // never answered: static hosting
     routeOk = false;
     try {
       const [ts, px] = await oracle.latestAll();
@@ -82,6 +86,7 @@ export const last = i => feeds[i].price;
 export const isOpen = i => feeds[i].open;
 export const refPrice = i => feeds[i].ref ?? feeds[i].price;
 export const isPyth = i => feeds[i].pyth;
+export const sourceOf = i => feeds[i].source;
 export const markets = () => feeds.map((f, i) => ({ index: i, id: f.id, open: f.open, source: f.source, pyth: f.pyth, price: f.price, session: f.session }));
 export function onMarkets(cb) { metaSubs.add(cb); return () => metaSubs.delete(cb); }
 export const routeAvailable = () => routeOk;
