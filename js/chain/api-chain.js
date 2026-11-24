@@ -46,6 +46,10 @@ export const lastTransaction = () => (lastTx ? { ...lastTx, url: txUrl(lastTx.ha
 let bal = null;               // decrypted balance in cUSDC, null = still encrypted
 const balSubs = new Set();
 const setBal = v => { bal = v == null ? null : Math.round(v * 100) / 100; balSubs.forEach(cb => cb(bal)); };
+// every local change (stake out, payout in) bumps the epoch: a decryption that read the balance
+// before it is stale and must not overwrite it (it is read again instead)
+let balEpoch = 0;
+const moveBal = d => { balEpoch++; if (bal != null) setBal(bal + d); };
 export const balance = () => bal;
 export const balanceSealed = () => bal == null;
 export function onBalance(cb) { balSubs.add(cb); return () => balSubs.delete(cb); }
@@ -96,6 +100,7 @@ export function disconnect() { W.disconnectWallet(); ready = false; setBal(null)
 let balHandle = null;
 export async function refreshBalance(expectChange = false) {
   const a = W.player(); if (!a) return null;
+  const epoch = balEpoch;
   let h = await (typeof expectChange === 'number' ? W.view(() => token.confidentialBalanceOf(a, { blockTag: expectChange })) : token.confidentialBalanceOf(a));
   // after a transfer, a lagging RPC node can still serve the old balance handle: wait for the new one
   for (let i = 0; expectChange === true && h === balHandle && i < 10; i++) { await sleep(2000); h = await token.confidentialBalanceOf(a); }
@@ -103,6 +108,7 @@ export async function refreshBalance(expectChange = false) {
   status({ kind: 'decrypt', text: 'Decrypting your balance…' });
   try {
     const [v] = await userDecrypt(a, W.signTyped, [{ handle: h, contract: ADDR.StakeToken }]);
+    if (epoch !== balEpoch) { refreshSoon(true); return bal; }
     balHandle = h;
     setBal(Number(v) / USDC);
     return bal;
@@ -118,7 +124,7 @@ export async function faucet() {
   try { await s.send(faucetC, 'claimFor', [W.player()], 0n, 'faucet'); }
   catch (e) { throw new Error(friendly(e)); }
   finally { status(null); }
-  if (bal != null) setBal(bal + 1000);
+  moveBal(1000);
   refreshSoon();
   return bal;
 }
@@ -243,7 +249,7 @@ export async function startRun({ assetId, side = 'long', stake }) {
   const run = makeRun({ id: `tx:${sent.hash}`, assetId, side, stake, startedAt: Date.now(), entryPrice: pyth ? pyth.price : feed.last(m) });
   run.tx = sent.hash;
   status({ kind: 'chain', text: 'Locking your entry on Sepolia…' });
-  if (bal != null) setBal(bal - stake);
+  moveBal(-stake);
   sent.mined.then(rc => {
     const ev = parseEvent(rc, 'RunStarted');
     Object.assign(run, { cid: String(ev.runId), startedAt: Number(ev.startAt) * 1000, entryPrice: Number(ev.entryPrice) / 10 ** PRICE_DECIMALS, pending: false });
@@ -252,7 +258,7 @@ export async function startRun({ assetId, side = 'long', stake }) {
     autopilot.watchRun(run);
   }).catch(e => {
     status({ kind: 'error', text: `Start failed: ${friendly(e)}. Nothing was staked` });
-    if (bal != null) setBal(bal + stake);
+    moveBal(stake);
     run.failed = true;
     endLocal(run, 'failed');
   });
@@ -335,7 +341,7 @@ export async function settleFromChain(run) {
       if (!run.local) { run.status = run.chain.status; run.local = run.chain; run.waiters.splice(0).forEach(f => f(run.chain)); }
       run.unsub?.();
       run.settleWaiters.splice(0).forEach(f => f(run.chain));
-      if (bal != null) setBal(bal - 0 + value);
+      moveBal(value);
       refreshSoon(run.txBlock ?? true); record(run);
       return run.chain;
     }
