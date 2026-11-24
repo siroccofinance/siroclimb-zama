@@ -296,7 +296,7 @@ function enterGame(r) {
   const a = byId[r.assetId];
   $('#hT').textContent = label(a); $('#hN').textContent = a.name; $('#hSide').textContent = r.side === 'long' ? 'Long' : 'Short'; $('#hSide').className = 'pill is-' + r.side;
   buildLadder(r.ladder); rungs[0].classList.add('is-now');
-  spark.entry = r.entryPrice; spark.asset = r.assetId;
+  spark.entry = r.entryPrice; spark.asset = r.assetId; spark.side = r.side;
   setScreen('game');
   sound.start(); haptic(10);
   api.onRun(r.id, onUpdate);
@@ -493,26 +493,53 @@ $('#share').onclick = async () => {
   if (card) showTip(copied, href);
 };
 
-// ── sparkline: last 60 s, scrolls smoothly, entry line while playing
-const spark = { el: $('#spark'), entry: 0, asset: 'BTC' };
+// ── price chart: the last minute, scrolling smoothly. Smoothed line over a soft fill, dashed entry line with
+//    its price, the live price as a glowing dot; the line turns gold while the run is in the money.
+const spark = { el: $('#spark'), entry: 0, asset: 'BTC', side: 'long' };
+const SPAN = 60;
 function drawSpark() {
   const c = spark.el; if (screen !== 'game' || !c.offsetWidth) return;
   const w = c.offsetWidth, h = c.offsetHeight, r = Math.min(devicePixelRatio || 1, 2);
-  if (c.width !== w * r) { c.width = w * r; c.height = h * r; }
+  if (c.width !== Math.round(w * r) || c.height !== Math.round(h * r)) { c.width = Math.round(w * r); c.height = Math.round(h * r); }
   const x = c.getContext('2d'); x.setTransform(r, 0, 0, r, 0, 0); x.clearRect(0, 0, w, h);
-  const span = 45, pts = api.history(spark.asset, span + 1); if (pts.length < 2) return;
-  const now = Date.now();
+  const pts = api.history(spark.asset, SPAN + 1); if (pts.length < 2) return;
+  const now = Date.now(), lp = pts[pts.length - 1];
   let lo = Infinity, hi = -Infinity; for (const p of pts) { lo = Math.min(lo, p.price); hi = Math.max(hi, p.price); }
   if (spark.entry) { lo = Math.min(lo, spark.entry); hi = Math.max(hi, spark.entry); }
-  const pad = (hi - lo) * 0.15 || hi * 0.0005; lo -= pad; hi += pad;
-  const X = ts => w - ((now - ts) / 1000 / span) * w, Y = p => h - ((p - lo) / (hi - lo)) * h;
-  x.beginPath(); pts.forEach((p, i) => (i ? x.lineTo(X(p.ts), Y(p.price)) : x.moveTo(X(p.ts), Y(p.price))));
-  const lp = pts[pts.length - 1]; x.lineTo(w, Y(lp.price));
-  x.lineWidth = 1.6; x.strokeStyle = '#fff'; x.lineJoin = 'round'; x.stroke();
-  x.lineTo(w, h); x.lineTo(X(pts[0].ts), h); x.closePath();
-  const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, 'rgba(255,255,255,.22)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fill();
-  if (spark.entry) { x.setLineDash([3, 4]); x.strokeStyle = 'rgba(242,201,76,.95)'; x.lineWidth = 1.2; x.beginPath(); x.moveTo(0, Y(spark.entry)); x.lineTo(w, Y(spark.entry)); x.stroke(); x.setLineDash([]); }
-  x.fillStyle = '#fff'; x.beginPath(); x.arc(w - 2.5, Y(lp.price), 2.5, 0, Math.PI * 2); x.fill();
+  const pad = (hi - lo) * 0.18 || hi * 0.0005; lo -= pad; hi += pad;
+  const R = 18, top = 8, bot = h - 6;                      // room for the dot's glow on the right, the line never touches the edges
+  const X = ts => (w - R) - ((now - ts) / 1000 / SPAN) * (w - R), Y = p => bot - ((p - lo) / (hi - lo)) * (bot - top);
+  const up = spark.entry ? (spark.side === 'short' ? lp.price < spark.entry : lp.price > spark.entry) : false;
+  const col = up ? '255, 230, 166' : '255, 255, 255';
+  // smoothed path: quadratic curves through the midpoints
+  const P = [];                                            // one point per 3 px: the tick noise does not turn into a scribble
+  for (const p of pts) { const px = X(p.ts), py = Y(p.price), q = P[P.length - 1]; if (q && px - q[0] < 3) { q[1] = py; } else P.push([px, py]); }
+  P.push([w - R, Y(lp.price)]);
+  const path = () => { x.moveTo(P[0][0], P[0][1]); for (let i = 1; i < P.length - 1; i++) { const mx = (P[i][0] + P[i + 1][0]) / 2, my = (P[i][1] + P[i + 1][1]) / 2; x.quadraticCurveTo(P[i][0], P[i][1], mx, my); } x.lineTo(...P[P.length - 1]); };
+  // fill
+  x.beginPath(); path(); x.lineTo(w - R, h); x.lineTo(P[0][0], h); x.closePath();
+  const g = x.createLinearGradient(0, top, 0, h); g.addColorStop(0, `rgba(${col}, .26)`); g.addColorStop(0.7, `rgba(${col}, .05)`); g.addColorStop(1, `rgba(${col}, 0)`);
+  x.fillStyle = g; x.fill();
+  // entry line (the label goes on top of the line, below)
+  const ey = spark.entry ? Math.round(Y(spark.entry)) + 0.5 : 0;
+  if (spark.entry) { x.setLineDash([4, 5]); x.strokeStyle = 'rgba(242, 201, 76, .9)'; x.lineWidth = 1.25; x.beginPath(); x.moveTo(0, ey); x.lineTo(w - R, ey); x.stroke(); x.setLineDash([]); }
+  // line, with a soft glow
+  x.beginPath(); path();
+  x.lineJoin = 'round'; x.lineCap = 'round'; x.lineWidth = 2.25; x.strokeStyle = `rgb(${col})`;
+  x.shadowColor = `rgba(${col}, .55)`; x.shadowBlur = 8; x.stroke(); x.shadowBlur = 0;
+  // entry price, on the side of the dashed line away from where the curve starts
+  if (spark.entry) {
+    const t = 'Entry ' + price(spark.entry);
+    x.font = '600 10.5px Inter, -apple-system, sans-serif'; const tw = x.measureText(t).width + 12, th = 17;
+    const ty = Math.min(bot - th / 2, Math.max(top + th / 2, ey + (P[0][1] > ey ? -th / 2 - 5 : th / 2 + 5)));
+    x.fillStyle = 'rgba(242, 201, 76, .95)'; x.beginPath(); x.roundRect ? x.roundRect(0, ty - th / 2, tw, th, 5) : x.rect(0, ty - th / 2, tw, th); x.fill();
+    x.fillStyle = '#2b211a'; x.textBaseline = 'middle'; x.fillText(t, 6, ty + 0.5);
+  }
+  // the live price: a dot with a breathing halo
+  const dx = w - R, dy = Y(lp.price), k = (now % 1600) / 1600;
+  x.fillStyle = `rgba(${col}, ${(0.35 * (1 - k)).toFixed(3)})`; x.beginPath(); x.arc(dx, dy, 4 + 9 * k, 0, Math.PI * 2); x.fill();
+  x.fillStyle = `rgb(${col})`; x.beginPath(); x.arc(dx, dy, 4, 0, Math.PI * 2); x.fill();
+  x.strokeStyle = 'rgba(43, 20, 10, .35)'; x.lineWidth = 1; x.stroke();
 }
 
 // ── sheets
