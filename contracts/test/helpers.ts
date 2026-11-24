@@ -152,7 +152,18 @@ export async function closeAndFinalize(f: Fixture, roundId: bigint) {
   const res = await fhevm.publicDecrypt([...handles]);
   const scores = handles.map((h) => res.clearValues[h] as bigint);
   await f.game.finalizeRound(roundId, scores, res.decryptionProof);
+  await claimAll(f, roundId);
   return scores;
+}
+
+/** Pays every run of a round what it is owed (prize or refund), one claim per run. */
+export async function claimAll(f: Fixture, roundId: bigint) {
+  const [, ids] = await f.game.getRound(roundId);
+  const [r] = await f.game.getRound(roundId);
+  for (const id of ids) {
+    if (Number(r.status) === 3 && (await f.game.prizeOf(id)) === 0n) continue;
+    await f.game.claim(id);
+  }
 }
 
 /** TypeScript mirror of ClimbLadder.multipliers over [{t (s from start), price}]: 6-decimal multipliers. */
