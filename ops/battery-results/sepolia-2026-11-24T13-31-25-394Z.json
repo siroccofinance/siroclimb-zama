@@ -1,0 +1,420 @@
+{
+  "started": "2026-11-24T13:31:25.394Z",
+  "game": "0xf280D0B11E57BAe4Fd959E8E3b8b53FE33C8DE8c",
+  "players": 24,
+  "solo": [],
+  "rounds": [
+    {
+      "ok": true,
+      "round": 4,
+      "market": "tGBP",
+      "players": 24,
+      "funded": 23,
+      "pot": 230,
+      "standings": [
+        {
+          "player": "trader53",
+          "side": "short",
+          "score": 1005701,
+          "pnlPct": 0.57,
+          "prize": 23,
+          "ok": true
+        },
+        {
+          "player": "oasissniper78",
+          "side": "short",
+          "score": 1005701,
+          "pnlPct": 0.57,
+          "prize": 23,
+          "ok": true
+        },
+        {
+          "player": "night_monk",
+          "side": "short",
+          "score": 1005701,
+          "pnlPct": 0.57,
+          "prize": 23,
+          "ok": true
+        },
+        {
+          "player": "night.raven",
+          "side": "short",
+          "score": 1005701,
+          "pnlPct": 0.57,
+          "prize": 23,
+          "ok": true
+        },
+        {
+          "player": "sterling_gecko",
+          "side": "short",
+          "score": 1005701,
+          "pnlPct": 0.57,
+          "prize": 23,
+          "ok": true
+        },
+        {
+          "player": "oasislynx86",
+          "side": "short",
+          "score": 1005701,
+          "pnlPct": 0.57,
+          "prize": 23,
+          "ok": true
+        },
+        {
+          "player": "night.eth",
+          "side": "short",
+          "score": 1005701,
+          "pnlPct": 0.57,
+          "prize": 23,
+          "ok": true
+        },
+        {
+          "player": "zephyrraven45",
+          "side": "short",
+          "score": 1005701,
+          "pnlPct": 0.57,
+          "prize": 23,
+          "ok": true
+        },
+        {
+          "player": "goldape46",
+          "side": "short",
+          "score": 1005701,
+          "pnlPct": 0.57,
+          "prize": 23,
+          "ok": true
+        },
+        {
+          "player": "maxi0",
+          "side": "short",
+          "score": 1005701,
+          "pnlPct": 0.57,
+          "prize": 23,
+          "ok": true
+        },
+        {
+          "player": "maxi59",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "nightfox33",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "oasis.eth",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "sterling.ape",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "raven85",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "zephyr.nomad",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "gold_nomad",
+          "side": "long",
+          "score": 994301,
+          "pnlPct": -0.57,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "sterling.eth",
+          "side": "long",
+          "score": 994301,
+          "pnlPct": -0.57,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "gold.maxi",
+          "side": "long",
+          "score": 994301,
+          "pnlPct": -0.57,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "cedarotter0",
+          "side": "long",
+          "score": 994301,
+          "pnlPct": -0.57,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "zephyr.eth",
+          "side": "long",
+          "score": 994301,
+          "pnlPct": -0.57,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "goldsniper89",
+          "side": "long",
+          "score": 994301,
+          "pnlPct": -0.57,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "gecko25",
+          "side": "long",
+          "score": 994301,
+          "pnlPct": -0.57,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "quiet.nomad",
+          "side": "long",
+          "score": 0,
+          "pnlPct": null,
+          "prize": 0,
+          "ok": true
+        }
+      ]
+    },
+    {
+      "ok": true,
+      "round": 5,
+      "market": "tGBP",
+      "players": 24,
+      "funded": 24,
+      "pot": 240,
+      "standings": [
+        {
+          "player": "goldape46",
+          "side": "long",
+          "score": 1007601,
+          "pnlPct": 0.76,
+          "prize": 20,
+          "ok": true
+        },
+        {
+          "player": "trader53",
+          "side": "long",
+          "score": 1007601,
+          "pnlPct": 0.76,
+          "prize": 20,
+          "ok": true
+        },
+        {
+          "player": "cedarotter0",
+          "side": "long",
+          "score": 1007601,
+          "pnlPct": 0.76,
+          "prize": 20,
+          "ok": true
+        },
+        {
+          "player": "nightfox33",
+          "side": "long",
+          "score": 1007601,
+          "pnlPct": 0.76,
+          "prize": 20,
+          "ok": true
+        },
+        {
+          "player": "zephyr.nomad",
+          "side": "long",
+          "score": 1007601,
+          "pnlPct": 0.76,
+          "prize": 20,
+          "ok": true
+        },
+        {
+          "player": "oasissniper78",
+          "side": "long",
+          "score": 1007601,
+          "pnlPct": 0.76,
+          "prize": 20,
+          "ok": true
+        },
+        {
+          "player": "night.eth",
+          "side": "long",
+          "score": 1007601,
+          "pnlPct": 0.76,
+          "prize": 20,
+          "ok": true
+        },
+        {
+          "player": "gold_nomad",
+          "side": "long",
+          "score": 1007601,
+          "pnlPct": 0.76,
+          "prize": 20,
+          "ok": true
+        },
+        {
+          "player": "raven85",
+          "side": "long",
+          "score": 1007601,
+          "pnlPct": 0.76,
+          "prize": 20,
+          "ok": true
+        },
+        {
+          "player": "oasis.eth",
+          "side": "long",
+          "score": 1007601,
+          "pnlPct": 0.76,
+          "prize": 20,
+          "ok": true
+        },
+        {
+          "player": "sterling_gecko",
+          "side": "long",
+          "score": 1007601,
+          "pnlPct": 0.76,
+          "prize": 20,
+          "ok": true
+        },
+        {
+          "player": "maxi59",
+          "side": "long",
+          "score": 1007601,
+          "pnlPct": 0.76,
+          "prize": 20,
+          "ok": true
+        },
+        {
+          "player": "climber16",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "gecko25",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "night_monk",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "night.raven",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "sterling.ape",
+          "side": "short",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "zephyrraven45",
+          "side": "long",
+          "score": 1000001,
+          "pnlPct": 0,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "maxi0",
+          "side": "short",
+          "score": 992401,
+          "pnlPct": -0.76,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "gold.maxi",
+          "side": "short",
+          "score": 992401,
+          "pnlPct": -0.76,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "goldsniper89",
+          "side": "short",
+          "score": 992401,
+          "pnlPct": -0.76,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "sterling.eth",
+          "side": "short",
+          "score": 992401,
+          "pnlPct": -0.76,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "oasislynx86",
+          "side": "short",
+          "score": 992401,
+          "pnlPct": -0.76,
+          "prize": 0,
+          "ok": true
+        },
+        {
+          "player": "zephyr.eth",
+          "side": "short",
+          "score": 992401,
+          "pnlPct": -0.76,
+          "prize": 0,
+          "ok": true
+        }
+      ]
+    }
+  ],
+  "findings": [],
+  "gas": {},
+  "finished": "2026-11-24T14:05:42.340Z",
+  "summary": {
+    "solo": "0 / 0",
+    "rounds": "2 / 2",
+    "deployerEthSpent": 0
+  }
+}
