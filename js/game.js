@@ -462,6 +462,7 @@ function showResult(res) {
 }
 function fillRound(f) {
   const rr = $('#rR'); rr.hidden = false;
+  if (f.rank == null) { rr.innerHTML = `<b>Round settled, ${f.of} players.</b> See the standings in the leaderboard.`; return; }
   rr.innerHTML = f.prize ? `<b>${ord(f.rank)} of ${f.of}.</b> You win ${money(f.prize)} cUSDC from the pot.` : `<b>${ord(f.rank)} of ${f.of}.</b> The top 3 share the pot.`;
   if (f.prize) { sound.cash(); toast(`+${money(f.prize)} cUSDC prize`); }
 }
