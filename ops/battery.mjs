@@ -78,7 +78,7 @@ function expectedPaid(stake) { return stake > 100n * USDC ? 100n * USDC : stake;
 async function soloRun(p, wave, delay = 0) {
   await sleep(delay);                                    // staggered starts: the relayer is shared
   let open = await openMarkets();
-  if (!open.length) open = [3];                          // gold trades around the clock
+  if (!open.length) open = [MARKETS.findIndex(m => m.id === 'XAUt')];   // gold trades around the clock
   const market = open[Math.floor(Math.random() * open.length)];
   const long = Math.random() < 0.5;
   const scenario = p === poor ? 'unfunded' : Math.random() < 0.12 ? 'clamp' : Math.random() < 0.15 && p.hasPack ? 'pack' : Math.random() < 0.35 ? 'expire' : 'cash';
