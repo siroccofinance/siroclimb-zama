@@ -1,10 +1,11 @@
 // Shared by the ops scripts (battery, keeper): Sepolia provider, contracts, nonce-safe senders,
 // the Zama relayer SDK (Node build), price checkpoints (same server code as the site's routes).
 import { readFileSync, existsSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Contract, HDNodeWallet, JsonRpcProvider, Mnemonic, Wallet, formatEther, parseEther } from 'ethers';
+import { Contract, FetchRequest, HDNodeWallet, JsonRpcProvider, Mnemonic, Wallet, formatEther, parseEther } from 'ethers';
 import { pythUpdate } from '../api/pyth.js';
 import { prices } from '../api/prices.js';
 
@@ -13,8 +14,15 @@ const json = p => JSON.parse(readFileSync(join(root, p), 'utf8'));
 export const ADDR = json('js/chain/deployments.json')['11155111'];
 export const ABI = json('js/chain/abi.json');
 export const MARKETS = json('js/chain/markets.json').markets;
-export const RPC_URL = process.env.RPC_URL || 'https://sepolia.gateway.tenderly.co';
-export const provider = new JsonRpcProvider(RPC_URL, 11155111, { staticNetwork: true, batchMaxCount: 1, cacheTimeout: -1, pollingInterval: 2000 });
+// publicnode: it takes battery load (Tenderly's gateway rate-limits it, F34); reads after writes wait (F27)
+export const RPC_URL = process.env.RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
+// a request the RPC never answers fails after 20 s (ethers waits 5 minutes by default), and is retried
+const rpcRequest = new FetchRequest(RPC_URL);
+rpcRequest.timeout = 20_000;
+// on HTTP 429 ethers retries up to 12 times with growing back-off (minutes of silence): keep it short,
+// our own senders retry rate limits anyway (F34)
+rpcRequest.setThrottleParams({ maxAttempts: 3, slotInterval: 500 });
+export const provider = new JsonRpcProvider(rpcRequest, 11155111, { staticNetwork: true, batchMaxCount: 1, cacheTimeout: -1, pollingInterval: 2000 });
 export const game = new Contract(ADDR.Siroclimb, ABI.Siroclimb, provider);
 export const oracle = new Contract(ADDR.ClimbPriceOracle, ABI.ClimbPriceOracle, provider);
 export const ladder = new Contract(ADDR.ClimbLadder, ABI.ClimbLadder, provider);
@@ -39,6 +47,8 @@ export function errText(e) {
   return e?.shortMessage || e?.message || String(e);
 }
 
+/** A relayer request can hang without an answer: give up after `ms` so the caller retries. */
+export const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout: ${what}`)), ms))]);
 /** Polls for a receipt (ethers' waitForTransaction can miss blocks behind a load balancer). */
 export async function receipt(hash, ms = 240_000) {
   const t0 = Date.now();
@@ -49,6 +59,8 @@ export async function receipt(hash, ms = 240_000) {
   }
   return null;
 }
+/** Gas limits of game calls measured on Sepolia (about 2x the largest use seen). */
+const FIXED_GAS = { startRun: 6_000_000n, cashOut: 4_500_000n, settleRun: 4_000_000n, joinRound: 5_000_000n, exitAtBell: 2_500_000n, claim: 2_500_000n, publishRun: 400_000n, recordRun: 1_500_000n };
 const MIN_TIP = 200_000_000n;
 export async function fees() {
   const fd = await provider.getFeeData();
@@ -64,12 +76,21 @@ export class Sender {
       for (let attempt = 0; ; attempt++) {
         try {
           const c = contract.connect(this.wallet);
-          const est = await c[method].estimateGas(...args, { value });
-          const gasLimit = est * 2n > 16_000_000n ? 16_000_000n : est * 2n;
+          const tr = (what) => process.env.TRACE && console.log(`    ${this.name || this.label || this.address.slice(0, 8)} ${method} ${what}`);
+          // game calls with a known cost skip eth_estimateGas, which the public RPC answers slowly under
+          // load (F35); a call that would revert is still caught by the receipt
+          let gasLimit = FIXED_GAS[method];
+          if (!gasLimit) {
+            tr('estimating');
+            const est = await withTimeout(c[method].estimateGas(...args, { value }), 60_000, `estimate ${method}`);
+            tr('estimated');
+            gasLimit = est * 2n > 16_000_000n ? 16_000_000n : est * 2n;
+          }
           const pending = await provider.getTransactionCount(this.address, 'pending');
           const nonce = this.nonce == null ? pending : Math.max(this.nonce, pending);
-          const tx = await c[method](...args, { value, gasLimit, nonce, ...(await fees()) });
+          const tx = await withTimeout(c[method](...args, { value, gasLimit, nonce, ...(await fees()) }), 60_000, `send ${method}`);
           this.nonce = nonce + 1;
+          tr(`sent ${tx.hash.slice(0, 10)} nonce ${nonce}`);
           const rc = await receipt(tx.hash);
           if (!rc) throw new Error(`timeout waiting for ${method} ${tx.hash}`);
           if (rc.status !== 1) throw new Error(`${method} reverted ${tx.hash}`);
@@ -102,8 +123,6 @@ export class Sender {
   async eth() { return Number(formatEther(await provider.getBalance(this.address))); }
 }
 
-/** A relayer request can hang without an answer: give up after `ms` so the caller retries. */
-export const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout: ${what}`)), ms))]);
 
 // ── FHE (Zama relayer SDK, Node build)
 let fheP = null;
@@ -122,30 +141,46 @@ export async function encryptRun(sender, long, stakeUnits) {
     } catch (e) { if (attempt >= 4) throw e; await sleep(2000 + attempt * 2000); }   // relayer busy: retry
   }
 }
+// The relayer's user decryption slows down sharply with many concurrent requests (F31): at most
+// RELAYER_SLOTS run at once, the others queue.
+const RELAYER_SLOTS = Number(process.env.RELAYER_SLOTS || 4);
+let active = 0;
+const waiting = [];
+async function slot(fn) {
+  if (active >= RELAYER_SLOTS) await new Promise(r => waiting.push(r));
+  active++;
+  try { return await fn(); } finally { active--; waiting.shift()?.(); }
+}
 const grants = new Map();
-/** User decryption by a wallet we hold (EIP-712 grant signed in Node). */
+/** User decryption by a wallet we hold, in a child process (see decrypt-worker.mjs), queued. */
 export async function userDecrypt(wallet, items) {
-  const f = await fhe();
-  let g = grants.get(wallet.address);
-  if (!g) {
-    const kp = f.generateKeypair(), start = Math.floor(Date.now() / 1000), contracts = [ADDR.Siroclimb, ADDR.StakeToken];
-    const t = f.createEIP712(kp.publicKey, contracts, start, 1);
-    const types = { ...t.types }; delete types.EIP712Domain;
-    const sig = await wallet.signTypedData(t.domain, types, t.message);
-    g = { kp, start, contracts, sig }; grants.set(wallet.address, g);
-  }
   const live = items.filter(i => !/^0x0+$/.test(i.handle));
   const out = new Map();
   if (live.length) {
     for (let attempt = 0; ; attempt++) {
       try {
-        const res = await withTimeout(f.userDecrypt(live.map(i => ({ handle: i.handle, contractAddress: i.contract })), g.kp.privateKey, g.kp.publicKey, g.sig.replace('0x', ''), g.contracts, wallet.address, g.start, 1), 45_000, 'relayer user decryption');
-        for (const i of live) out.set(i.handle, BigInt(res[i.handle]));
+        const values = await slot(() => worker(wallet.privateKey, live, 60_000));
+        live.forEach((i, k) => out.set(i.handle, BigInt(values[k])));
         break;
-      } catch (e) { if (process.env.TRACE) console.log('    user decryption retry', attempt, e.message?.slice(0, 80)); if (attempt >= 5) throw e; await sleep(3000 + attempt * 2000); }
+      } catch (e) {
+        if (process.env.TRACE) console.log('    user decryption retry', attempt, e.message?.slice(0, 80));
+        if (attempt >= 5) throw e;
+        await sleep(2000 + attempt * 2000);
+      }
     }
   }
   return items.map(i => out.get(i.handle) ?? 0n);
+}
+function worker(key, items, ms) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'decrypt-worker.mjs')], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, TRACE: '' } });
+    let out = '', err = '';
+    const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('timeout: relayer user decryption')); }, ms);
+    child.stdout.on('data', d => (out += d));
+    child.stderr.on('data', d => (err += d));
+    child.on('close', code => { clearTimeout(timer); if (code === 0) { try { resolve(JSON.parse(out)); } catch (e) { reject(e); } } else reject(new Error(err.trim().split('\n').pop() || `worker exit ${code}`)); });
+    child.stdin.end(JSON.stringify({ key, items }));
+  });
 }
 export async function balanceOf(wallet, notHandle = null) {
   // a lagging RPC node can still serve the previous balance handle: wait until it changed

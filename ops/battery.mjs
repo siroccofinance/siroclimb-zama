@@ -17,7 +17,7 @@
 // usage: node battery.mjs [players=16] [soloWaves=2] [rounds=2]
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { Contract } from 'ethers';
-import { ADDR, MARKETS, SCALE, Sender, USDC, balanceAt, provider, balanceOf, settledBlock, view, batteryWallet, encryptRun, errText, faucet, fallbackFor, game, handle, key, ladder, openMarkets, publicDecrypt, pushIfStale, pythFor, sleep, token, userDecrypt } from './lib.mjs';
+import { ADDR, MARKETS, SCALE, Sender, USDC, balanceAt, provider, withTimeout, balanceOf, settledBlock, view, batteryWallet, encryptRun, errText, faucet, fallbackFor, game, handle, key, ladder, openMarkets, publicDecrypt, pushIfStale, pythFor, sleep, token, userDecrypt } from './lib.mjs';
 
 const N = Number(process.argv[2] || 16), WAVES = Number(process.argv[3] || 2), ROUNDS = Number(process.argv[4] || 2);
 const OFFSET = Number(process.env.OFFSET || 1);         // index 0 is the browser e2e player
@@ -87,8 +87,10 @@ async function soloRun(p, wave, delay = 0) {
   const step = (what) => process.env.TRACE && log(`  ${p.name} ${what}`);
   const enc = await encryptRun(p.address, long, stake);
   step('encrypted');
-  const py = await pythFor(market);
-  const fb = py ? 0n : await fallbackFor(market);
+  const py = await withTimeout(pythFor(market), 30_000, 'pyth update').catch(() => null);
+  step(`pyth ${py ? 'rides along' : 'not covering'}`);
+  const fb = py ? 0n : await withTimeout(fallbackFor(market), 30_000, 'fallback price').catch(() => 0n);
+  step('prices ready');
   const rc = await p.send(game, 'startRun', [market, enc.handles[0], enc.handles[1], enc.proof, scenario === 'pack', py ? py.updateData : [], fb], py ? py.fee : 0n);
   const ev = rc.logs.map(l => { try { return game.interface.parseLog(l); } catch { return null; } }).find(e => e?.name === 'RunStarted');
   const id = ev.args.runId;
@@ -107,10 +109,10 @@ async function soloRun(p, wave, delay = 0) {
   step('exit sent');
   const r = await view(() => game.getRun(id), x => Number(x.status) === 2, 30);
   step('settled seen');
-  await view(() => game.runHandles(id), h => !/^0x0+$/.test(h[3]), 30);
+  const handles = await view(() => game.runHandles(id), h => !/^0x0+$/.test(h[3]) && !/^0x0+$/.test(h[2]), 30);
   const sb = await settledBlock(id, rc.blockNumber);       // recompute at the settlement block (lagging nodes)
   const [mL, mS] = await view(() => ladder.multipliers(market, r.entryIndex, r.exitIndex, r.startAt, 6, { blockTag: sb }));
-  const [, paidH, valueH, multH, , capH] = await game.runHandles(id);
+  const [, paidH, valueH, multH, , capH] = handles;              // the same read that showed them set
   step('decrypting');
   const [paid, value, mult, cap] = await userDecrypt(p.wallet, [{ handle: paidH, contract: ADDR.Siroclimb }, { handle: valueH, contract: ADDR.Siroclimb }, { handle: multH, contract: ADDR.Siroclimb }, { handle: capH, contract: ADDR.Siroclimb }]);
   let expMult = long ? r.multLong : r.multShort;
