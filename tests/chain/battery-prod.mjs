@@ -43,7 +43,10 @@ const ui = () => pg.evaluate(() => {
   };
 });
 // the coherence rules, checked on every poll
+let liveCap = null;   // during a run: the balance may not exceed what it was before minus the stake
 function check(u, where) {
+  if (liveCap != null && (u.screen === 'game' || u.screen === 'ending') && u.state === 'ready' && num(u.bal) > liveCap + 0.005)
+    issues.push(`${T()} ${where}: balance ${u.bal} during a run, above ${liveCap.toFixed(2)} (the stake came back before the payout)`);
   const shown = /\d/.test(u.bal || '');
   const decryptingText = /decrypt/i.test(`${u.line} ${u.toast}`);
   if (shown && u.state === 'ready' && decryptingText) issues.push(`${T()} ${where}: "${u.line || u.toast}" while the pill shows a decrypted ${u.bal}`);
@@ -80,6 +83,7 @@ for (const m of MARKETS) for (const side of SIDES) {
   const open = await pg.$eval('#go', e => !e.disabled);
   if (!open) { results.push({ tag, skipped: await pg.$eval('#goMeta', e => e.textContent) }); continue; }
   const before = num((await ui()).bal), ts = Date.now();
+  liveCap = before - 10;
   await pg.click('#go');
   const g = await watch(u => u.screen === 'game', 60_000, `${tag} start`);
   if (!g) { results.push({ tag, error: 'no start' }); await pg.reload(); await wait(4000); continue; }
@@ -87,6 +91,7 @@ for (const m of MARKETS) for (const side of SIDES) {
   await watch(() => false, 15000, `${tag} climb`, true);   // past 1x: the HUD shows what is borrowed
   const borrowed = (await ui()).borrowed; await shot(`${tag}-game`);
   const tcash = Date.now();
+  liveCap = null;
   await pg.click('#cash');
   const r = await watch(u => u.screen === 'result' && (/Settled on chain/.test(u.rr) || /did not go through/.test(u.rr)), 120_000, `${tag} cashout`);
   const settleS = ((Date.now() - tcash) / 1000).toFixed(1);

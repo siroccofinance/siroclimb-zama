@@ -28,7 +28,9 @@ export const pythContract = new Contract(ADDR.Pyth, ['function getUpdateFee(byte
 const TX_GAS_CAP = 16_000_000n;
 /** Gas limits of game calls, about 1.5x to 2x the peak measured on Sepolia (FINDINGS F35). */
 // a run borrows from the Sirocco Reserve on start and repays it at the end (one encrypted transfer each)
-const FIXED_GAS = { startRun: 6_000_000n, cashOut: 6_000_000n, settleRun: 6_000_000n };
+// deposit and withdraw too: estimated right after the reserve's operator approval, the estimate landed on a
+// node that had not seen it yet (ERC7984UnauthorizedSpender); with a fixed limit they queue behind it (F64)
+const FIXED_GAS = { startRun: 6_000_000n, cashOut: 6_000_000n, settleRun: 6_000_000n, deposit: 4_500_000n, withdraw: 4_500_000n };
 // 'unknown custom error': right after the operator approval, a lagging node can still refuse the
 // token transfer (the error comes from the token contract); a few seconds later it goes through
 const RETRY = /nonce|underpriced|already known|replacement|timeout|failed to fetch|network|ECONNRESET|503|502|429|insufficient funds|unknown custom error|Panic\(50\)/i;
