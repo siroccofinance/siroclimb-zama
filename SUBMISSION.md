@@ -27,8 +27,8 @@ The leverage is real: every run borrows `stake x (leverage - 1)` from the **Siro
 cUSDC lending pool whose lenders hold encrypted shares (`rcUSDC`, ERC-7984), earn the borrow interest
 (20 % APR, by the second) and carry the players' gains and losses.
 
-Prices: xStocks trade 24/7, so the stock markets never close; they follow the xStock itself (Kraken's
-tokenized-asset book). Every run settles on an on-chain oracle path with bounded checkpoints, and the
+Prices: every market is open 24/7. The stocks follow the xStock itself (Kraken's tokenized-asset
+book), gold and the pound follow Kraken spot (XAUTUSD, GBPUSD), weekends included. Every run settles on an on-chain oracle path with bounded checkpoints, and the
 contract computes the outcome from it.
 
 A player's first visit is one wallet signature: a game account (a key derived from that signature,
@@ -67,7 +67,7 @@ short); posting a return reveals which one; a reserve reveal on a quiet testnet 
 **0:45 to 1:35 · A run.** *cTSLAx, Short, 50, Start climbing. HUD: price from the 24/7 xStock, the
 leverage gauge, "Borrowed 100.00 cUSDC from the Sirocco Reserve" at 3x. Cash out.*
 > "My side and stake were encrypted while I picked them, so the climb starts at the click. xStocks
-> trade around the clock, so the market is live at any hour. At 3x on 50 I borrow 100 from the reserve
+> trade around the clock, and so do gold and the pound here, so every market is live at any hour. At 3x on 50 I borrow 100 from the reserve
 > and pay interest by the second. Cash out: the contract computed both a long and a short from the
 > public prices, my encrypted side picked one, multiplied my encrypted stake, and paid me with an
 > encrypted transfer in the same transaction."

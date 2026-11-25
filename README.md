@@ -65,7 +65,8 @@ Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain 
 
 xStocks trade 24/7, so the stock markets never close: cTSLAx, cNVDAx, cAAPLx and cAMZNx follow the
 xStock they wrap (TSLAx and the others), priced from Kraken's xStock spot book around the clock.
-cXAUt follows XAUt (also 24/7) and ctGBP follows GBP/USD (closed on weekends).
+cXAUt follows XAUt and ctGBP follows GBP/USD, both on Kraken spot, which trades around the clock,
+weekends included: **every market is open 24/7**. One source per market, the mid of the book.
 
 **Nothing has to run on our side.** Every keeper duty is a permissionless call, and the player's
 browser does each one itself (autopilot):
@@ -211,7 +212,7 @@ screen animates smoothly on live prices and the chain settles on 3 to 6 checkpoi
    prices. Entry and exit rides along with `startRun` and `cashOut`, which makes them the freshest
    verified price (at most 25 s old).
 2. **Bounded public fallback**. Markets the Hermes plan does not cover take the reference price from
-   `/api/prices` (Kraken's 24/7 xStock book for the stocks, Kraken for XAUt, Yahoo for GBP) through
+   `/api/prices` (Kraken, 24/7: the xStock book for the stocks, XAUTUSD and GBPUSD spot, mid of the book) through
    `pushPublic`. The oracle bounds it: at most every 10 s, +/-0.5 % per checkpoint, +/-3 % from the
    last Pyth price, and only while Pyth has nothing fresher than 2 minutes for that market.
    *Trade-off*: in this mode players are semi-trusted price reporters within those bounds. Each
@@ -349,6 +350,7 @@ in the same folder, and the ops keeper uses `keeper.key`. No key is ever committ
 - The game account key lives in the browser's local storage and holds only test cUSDC and a little
   gas. It is derived from a wallet signature, so the same wallet recovers it in any browser. A
   mainnet version would want a passkey or a smart account instead.
-- Market hours come from the reference route (the stocks are 24/7 xStocks, GBP closes on weekends).
+- Market hours come from the reference route: every market is 24/7 now (xStocks, XAUt and GBP on
+  Kraken).
   The contract itself does not know the trading calendar; a closed market simply has no fresh
   checkpoint, and `startRun` refuses stale entries.
