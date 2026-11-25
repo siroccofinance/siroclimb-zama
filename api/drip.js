@@ -20,7 +20,7 @@ const ADDR = JSON.parse(readFileSync(join(root, 'js/chain/deployments.json'), 'u
 // which covers one 6M-gas transaction at up to 0.4 gwei.
 const GAS_ETH = '0.005', MIN_ETH = 0.0025;           // SESSION_FUND_ETH / SESSION_MIN_ETH in js/chain/config.js
 const WARN_ETH = 0.05;                              // logs a warning when the drip key runs low
-const REDRIP_MS = 10 * 60_000;                      // gas at most once per 10 min per address (this instance)
+const REDRIP_MS = 2 * 60_000;                       // gas at most once per 2 min per address (this instance)
 const FAUCET_ABI = ['function claimFor(address account)', 'function waitOf(address account) view returns (uint256)', 'function lastClaim(address account) view returns (uint256)'];
 
 function key() {
