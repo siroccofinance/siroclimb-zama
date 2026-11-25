@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/{prices,pyth,share,s}.js": {
-      "includeFiles": "js/chain/markets.json",
+      "includeFiles": "js/chain/{markets,deployments,abi}.json",
       "maxDuration": 10
     },
     "api/drip.js": {
@@ -9,7 +9,7 @@
       "maxDuration": 20
     },
     "api/og.js": {
-      "includeFiles": "{js/chain/markets.json,assets/share/**,assets/brand/sirocco-mark-safran.svg}",
+      "includeFiles": "{js/chain/markets.json,js/chain/deployments.json,js/chain/abi.json,assets/share/**,assets/brand/sirocco-mark-safran.svg}",
       "maxDuration": 10
     }
   },
