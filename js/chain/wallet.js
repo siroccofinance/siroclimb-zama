@@ -252,6 +252,8 @@ export function ensureOperatorFor(spender, s = currentSession()) {
   if (!operatorFor.has(k)) operatorFor.set(k, (async () => {
     if (await token.isOperator(s.address, spender)) return;
     await s.send(token, 'setOperator', [spender, Math.floor(Date.now() / 1000) + 365 * 86400], 0n, 'setOperator');
+    // the next call is estimated against a node that must already see the approval
+    for (let i = 0; i < 12 && !(await token.isOperator(s.address, spender).catch(() => false)); i++) await sleep(1500);
   })().catch(e => { operatorFor.delete(k); throw e; }));
   return operatorFor.get(k);
 }
@@ -302,6 +304,8 @@ const FRIENDLY = [
   [/user rejected|denied|4001/i, 'Cancelled in the wallet'],
   [/insufficient funds/i, 'Not enough Sepolia ETH for gas'],
   [/StaleEntry/, 'The price is being refreshed, try again in a few seconds'],
+  [/UnauthorizedSpender/, 'The approval is still landing on Sepolia, try again in a few seconds'],
+  [/Panic\(50\)|Panic\(0x32\)/, 'Sepolia is still catching up, try again in a few seconds'],
   [/FaucetCooldown/, 'Faucet already used, try again in a few minutes'],
   [/PackCooldown/, 'One pack every 10 minutes'],
   [/ReserveFull/, 'The Sirocco Reserve has no free liquidity right now, try again in a minute'],
