@@ -3,7 +3,7 @@
 // Same exported names and event shapes as the Sepolia version (js/chain/api-chain.js); the
 // contract between the front and the back end is documented at the top of js/api.js.
 // Prices here are a random walk that moves faster than the market, so a minute has stakes.
-import { closePosition, loanInterest, openPosition } from './position.js';
+import { APR_BPS, closePosition, loanInterest, openPosition } from './position.js';
 
 // ─────────────────────────────── MOCK ───────────────────────────────
 
@@ -150,7 +150,7 @@ const pool = { assets: 250_000, shares: 250_000, interest: 0, mine: store.get('r
 export async function reserveStats() {
   const live = [...runs.values()].filter(r => r.status === 'live').length, price = pool.assets / pool.shares;
   return { tvl: pool.assets, shares: pool.shares, sharePrice: price, interestEarned: pool.interest, syncedAt: Date.now(), syncPending: false,
-    locked: live * 1000, openLoans: live, utilization: (live * 1000) / pool.assets, aprPct: APR * 100, apyPct: null, returnPct: (price - 1) * 100, days: 0 };
+    locked: live * 1000, openLoans: live, utilization: (live * 1000) / pool.assets, aprPct: APR_BPS / 100, apyPct: null, returnPct: (price - 1) * 100, days: 0 };
 }
 export async function reservePosition() { return { shares: pool.mine, value: pool.mine * pool.assets / pool.shares }; }
 export async function reserveDeposit(amount) {
