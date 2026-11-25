@@ -17,7 +17,8 @@ const writing = new Map();
 export const inflight = m => writing.get(m) || Promise.resolve();
 async function pushIfStale(s, m, maxAge) {
   const p = push(s, m, maxAge);
-  writing.set(m, p.catch(() => null));
+  // a cash out waits for this (at most 8 s on its side); the map forgets a push after 30 s whatever happens
+  writing.set(m, Promise.race([p.catch(() => null), new Promise(r => setTimeout(() => r(null), 30_000))]));
   const src = await p.finally(() => { if (writing.get(m)) writing.delete(m); });
   if (src) api?.checkpointed?.(m);
   return src;
@@ -76,8 +77,11 @@ async function gasOk(k) {
   let eth = await k.eth().catch(() => 0);
   // checkpoints and settlements cost ~0.2M gas each (~0.00004 ETH at 0.2 gwei): a small float is plenty
   if (eth < 0.0004) {
+    // the server drip funds the keeper key too; the game account chips in only with gas to spare
     const s = W.currentSession();
-    if (s && (await s.eth().catch(() => 0)) > 0.0045) { await s.sendEth(k.address, 0.001).catch(() => {}); eth = await k.eth().catch(() => 0); }   // never below the account's own floor
+    const d = s && (await api?.askDrip?.(s.address, k.address));
+    if (d?.keeper) { await W.receipt(d.keeper, 45_000).catch(() => null); eth = await k.eth().catch(() => 0); }
+    else if (s && (await s.eth().catch(() => 0)) > 0.0045) { await s.sendEth(k.address, 0.001).catch(() => {}); eth = await k.eth().catch(() => 0); }
   }
   gasCheck.ok = eth > 0.0001;
   return gasCheck.ok;
