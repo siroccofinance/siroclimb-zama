@@ -328,6 +328,9 @@ export async function startRun({ assetId, side = 'long', stake }) {
   if (!(stake > 0) || stake > MAX_STAKE) throw new Error(`Stake between 1 and ${MAX_STAKE} cUSDC`);
   if (bal != null && stake > bal) throw new Error('Not enough cUSDC: use the faucet');
   const s = await session();
+  // the game must be the account's ERC-7984 operator before the start pulls the stake: the approval is
+  // queued first (broadcast-only, one nonce before the start, same block), never after it
+  await W.ensureOperator(s);
   const units = Math.round(stake * USDC);
   if (!preEnc.has(`${s.address}:${encKey(side === 'long', units)}`)) status({ kind: 'fhe', text: 'Encrypting your side and stake…' });
   const enc = await takeEncryption(s, side === 'long', units);
