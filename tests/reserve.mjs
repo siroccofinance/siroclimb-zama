@@ -17,17 +17,17 @@ const text = s => pg.$eval(s, e => e.textContent.trim());
 const fail = m => { console.log('FAIL', m); process.exitCode = 1; };
 await pg.goto(`http://localhost:${srv.address().port}/index.html?mock#play`, { waitUntil: 'networkidle2' });
 await wait(2500);
-// a run: the borrowed amount follows the leverage (25 cUSDC stake at 2x borrows 25)
+// a run: the real position holds 4x the stake in tokens, 3x of it borrowed (25 cUSDC stake borrows 75)
 await pg.click('#stake button[data-v="25"]');
 await pg.click('#go'); await wait(14000);
 const borrowed = await text('#borrow');
 console.log('hud', borrowed);
-if (!/Borrowed [\d.,]+ cUSDC from the Sirocco Reserve/.test(borrowed)) fail('no borrowed line');
+if (!/(Holding|Short) [\d.,]+ c\w+ · borrowed 75\.00 cUSDC from the Sirocco Reserve/.test(borrowed)) fail('no holding and borrowed line');
 await pg.click('#cash');
 for (let i = 0; i < 60 && (await pg.evaluate(() => document.body.dataset.screen)) !== 'result'; i++) await wait(100);
 const stats = await text('#rS');
 console.log('result', stats);
-if (!/Borrowed[\d.,]+ cUSDC/.test(stats) || !/Interest paid0\.0000\d\d cUSDC|Interest paid0\.00 cUSDC/.test(stats)) fail('no borrowed or interest stat');
+if (!/Real position \([\d.,]+ c\w+\)[\d.,]+ cUSDC/.test(stats) || !/Game boost \(moves ×25\)[+−][\d.,]+ cUSDC/.test(stats) || !/Borrowed[\d.,]+ cUSDC/.test(stats) || !/Interest paid0\.0000\d\d cUSDC|Interest paid0\.00 cUSDC/.test(stats)) fail('no borrowed or interest stat');
 await pg.screenshot({ path: `${out}/reserve-1result.png` });
 // the reserve panel
 await pg.click('[data-open=reserve]'); await wait(800);

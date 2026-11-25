@@ -72,17 +72,9 @@ async function settlerTick() {
 
 // ── solo
 function expectedPaid(stake) { return stake > 100n * USDC ? 100n * USDC : stake; }
-// borrow interest on S x (L - 1) over the run's seconds (Siroclimb.borrowedTenthSeconds, Sirocco Reserve APR)
+// borrow interest on the real position's loan, 3 x the stake for the run's seconds (Siroclimb.borrowedTenthSeconds)
 const APR_BPS = await game.borrowAprBps(), INTEREST_DIVISOR = await game.interestDivisor();
-function borrowedTenthSeconds(elapsed, cap = 6) {
-  let total = 0n;
-  for (let i = 0n; i <= 6n; i++) {
-    const from = i * 6n; if (elapsed <= from) break;
-    let to = i === 6n ? elapsed : (i + 1n) * 6n; if (to > elapsed) to = elapsed;
-    total += 5n * (i > BigInt(cap) ? BigInt(cap) : i) * (to - from);
-  }
-  return total;
-}
+const borrowedTenthSeconds = elapsed => 30n * BigInt(elapsed);
 async function soloRun(p, wave, delay = 0) {
   await sleep(delay);                                    // staggered starts: the relayer is shared
   let open = await openMarkets();
@@ -133,7 +125,7 @@ async function soloRun(p, wave, delay = 0) {
   if (scenario === 'pack') { const [cl, cs] = await ladder.multipliers(market, r.entryIndex, r.exitIndex, r.startAt, Number(cap)); expMult = long ? cl : cs; }
   const expPaid = scenario === 'unfunded' ? 0n : expectedPaid(stake);
   const gross = (expPaid * expMult) / SCALE;
-  const owed = (expPaid * APR_BPS * borrowedTenthSeconds(r.endAt - r.startAt, scenario === 'pack' ? Number(cap) : 6)) / INTEREST_DIVISOR;
+  const owed = (expPaid * APR_BPS * borrowedTenthSeconds(r.endAt - r.startAt)) / INTEREST_DIVISOR;
   const expInterest = owed < gross ? owed : gross;
   const expValue = gross - expInterest;
   const after = p === poor ? 0n : await balanceAt(p.wallet, sb);

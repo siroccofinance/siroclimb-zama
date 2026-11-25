@@ -76,14 +76,14 @@ async function gasOk(k) {
   gasCheck.at = Date.now();
   let eth = await k.eth().catch(() => 0);
   // checkpoints and settlements cost ~0.2M gas each (~0.00004 ETH at 0.2 gwei): a small float is plenty
-  if (eth < 0.0004) {
+  if (eth < 0.003) {
     // the server drip funds the keeper key too; the game account chips in only with gas to spare
     const s = W.currentSession();
     const d = s && (await api?.askDrip?.(s.address, k.address));
     if (d?.keeper) { await W.receipt(d.keeper, 45_000).catch(() => null); eth = await k.eth().catch(() => 0); }
-    else if (s && (await s.eth().catch(() => 0)) > 0.0045) { await s.sendEth(k.address, 0.001).catch(() => {}); eth = await k.eth().catch(() => 0); }
+    else if (s && (await s.eth().catch(() => 0)) > 0.01) { await s.sendEth(k.address, 0.003).catch(() => {}); eth = await k.eth().catch(() => 0); }
   }
-  gasCheck.ok = eth > 0.0001;
+  gasCheck.ok = eth > 0.0025;   // a settlement reserves 12M gas
   return gasCheck.ok;
 }
 

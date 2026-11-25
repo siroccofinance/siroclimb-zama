@@ -8,6 +8,7 @@ import {
   NVDA,
   type Fixture,
   MAX_PAYOUT,
+  position,
   SCALE,
   SEED,
   USDC,
@@ -95,20 +96,22 @@ describe("SiroccoReserve: the lending pool behind the leverage", function () {
     const mult = model([{ t: 0, p: BASE[NVDA] }, { t: 14, p: p1 }]).long;
     const paid = payout(stake, mult, 20);
     const charged = interest(stake, 20);
-    expect(borrowed(20)).to.eq(30n + 60n + 30n); // tenths: 6-12 s at +0.5x, 12-18 s at +1x, 18-20 s at +1.5x
+    expect(borrowed(20)).to.eq(600n); // tenths: the position borrows 3x the stake (30 tenths) for 20 s
     expect(charged).to.be.gt(0n);
     expect(await balance(f, f.alice)).to.eq(before - stake + paid);
     const [, , , , , , interestH] = await f.game.runHandles(id);
     expect(await decrypt64(f, interestH, f.alice)).to.eq(charged);
     expect(await f.reserve.lockedAssets()).to.eq(0n);
     expect(await f.reserve.openLoans()).to.eq(0n);
-    // the lenders carry the run: assets = seed + stake - payout (interest included)
+    // the lenders carry the run: assets = seed + stake + the real position's cash flows - payout. They
+    // receive the loan back with its interest and settle the game boost (payout - real position)
+    const pos = position(stake, true, BASE[NVDA], p1, 20);
     const [assets, supply, earned] = await sync(f);
-    expect(assets).to.eq(SEED + stake - paid);
+    expect(assets).to.eq(SEED + stake + pos.cashIn - pos.cashOut - paid);
     expect(supply).to.eq(SEED);
     expect(earned).to.eq(charged);
-    expect(await f.reserve.syncedAssets()).to.eq(SEED + stake - paid);
-    expect(await f.reserve.sharePrice()).to.eq(((SEED + stake - paid) * 1_000_000n) / SEED);
+    expect(await f.reserve.syncedAssets()).to.eq(SEED + stake + pos.cashIn - pos.cashOut - paid);
+    expect(await f.reserve.sharePrice()).to.eq(((SEED + stake + pos.cashIn - pos.cashOut - paid) * 1_000_000n) / SEED);
   });
 
   it("syncs at most every 10 minutes, and only with the KMS proof", async function () {
@@ -210,7 +213,7 @@ describe("SiroccoReserve: the lending pool behind the leverage", function () {
     await expect(f.reserve.connect(f.alice).setGame.staticCall(f.alice.address)).to.be.reverted;
   });
 
-  it("a packed run pays interest on its capped leverage only", async function () {
+  it("a packed run caps the game ladder, not the real position: same loan, same interest", async function () {
     await f.game.connect(f.alice).openPack();
     const tier = Number(await fhevm.userDecryptEuint(FhevmType.euint8, await f.game.packHandle(f.alice.address), f.gameAddress, f.alice));
     const cap = [1, 2, 4, 6][tier];
@@ -220,7 +223,7 @@ describe("SiroccoReserve: the lending pool behind the leverage", function () {
     await at(run.startAt, 45);
     await f.game.connect(f.alice).cashOut(id, []);
     const [, , , , , , interestH] = await f.game.runHandles(id);
-    expect(await decrypt64(f, interestH, f.alice)).to.eq(interest(30n * USDC, 45, cap));
-    expect(borrowed(45, 1)).to.be.lt(borrowed(45, 6));
+    expect(cap).to.be.gte(1);
+    expect(await decrypt64(f, interestH, f.alice)).to.eq(interest(30n * USDC, 45));
   });
 });

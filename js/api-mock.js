@@ -3,6 +3,7 @@
 // Same exported names and event shapes as the Sepolia version (js/chain/api-chain.js); the
 // contract between the front and the back end is documented at the top of js/api.js.
 // Prices here are a random walk that moves faster than the market, so a minute has stakes.
+import { APR_BPS, closePosition, loanInterest, openPosition } from './position.js';
 
 // ─────────────────────────────── MOCK ───────────────────────────────
 
@@ -82,23 +83,24 @@ function advance(run, ts) {
   if (run.value <= 0) { run.value = 0; run.status = 'busted'; run.endedAt = ts; }
   else if (t >= run.duration) { run.status = 'expired'; run.endedAt = ts; }
 }
-// the leverage is borrowed from the (simulated) Sirocco Reserve: S x (L - 1), interest per second at the APR
-const APR = 0.2, YEAR = 365 * 86400;
-function interestOf(run, t) {
-  let bt = 0;
-  for (let i = 0; i < run.ladder.length; i++) { const from = i * run.stepEvery; if (t <= from) break; const to = Math.min(i === run.ladder.length - 1 ? t : (i + 1) * run.stepEvery, t); bt += (run.ladder[i] - 1) * (to - from); }
-  return run.stake * APR * bt / YEAR;
-}
+// the real position: stake + (POSITION_LEVERAGE - 1) x stake borrowed from the (simulated) Sirocco Reserve
+// buys (long) or borrows and sells (short) the market token at the desk; interest on the loan at the APR
+const interestOf = (run, t) => loanInterest(run.stake, t);
+const realOf = (run, t, value) => {
+  const p = closePosition(run.stake, run.side === 'long', run.entryPrice, run.last, t);
+  return { borrowed: p.borrowed, qty: p.qty, token: ASSETS.find(a => a.id === run.assetId)?.token || run.assetId, position: p.value, boost: value - p.value };
+};
 const netOf = (run, t) => { const i = Math.min(interestOf(run, t), run.value); return { value: run.value - i, interest: i }; };
 function update(run, ts) {
   const t = Math.max(0, (Math.min(ts, run.endedAt || ts) - run.startedAt) / 1000), step = stepOf(run, t), { value, interest } = netOf(run, t);
   return { t, price: run.last, step, leverage: run.ladder[step], value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100,
-    risk: Math.min(1, Math.max(0, 1 - run.value / run.stake)), borrowed: run.stake * (run.ladder[step] - 1), interest, status: run.status };
+    risk: Math.min(1, Math.max(0, 1 - run.value / run.stake)), borrowed: openPosition(run.stake, run.side === 'long', run.entryPrice).borrowed,
+    qty: openPosition(run.stake, run.side === 'long', run.entryPrice).qty, interest, status: run.status };
 }
 function settle(run) {
   const duration = ((run.endedAt || Date.now()) - run.startedAt) / 1000, { value, interest } = netOf(run, duration);
   const r = { status: run.status, value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, maxLeverage: run.maxLev,
-    duration, entryPrice: run.entryPrice, exitPrice: run.last, borrowed: run.stake * (run.maxLev - 1), interest };
+    duration, entryPrice: run.entryPrice, exitPrice: run.last, interest, ...realOf(run, duration, value) };
   setBal(bal + value); record(run, r);
   pool.assets += run.stake - value; pool.interest += interest;
   return r;
@@ -148,7 +150,7 @@ const pool = { assets: 250_000, shares: 250_000, interest: 0, mine: store.get('r
 export async function reserveStats() {
   const live = [...runs.values()].filter(r => r.status === 'live').length, price = pool.assets / pool.shares;
   return { tvl: pool.assets, shares: pool.shares, sharePrice: price, interestEarned: pool.interest, syncedAt: Date.now(), syncPending: false,
-    locked: live * 1000, openLoans: live, utilization: (live * 1000) / pool.assets, aprPct: APR * 100, apyPct: null, returnPct: (price - 1) * 100, days: 0 };
+    locked: live * 1000, openLoans: live, utilization: (live * 1000) / pool.assets, aprPct: APR_BPS / 100, apyPct: null, returnPct: (price - 1) * 100, days: 0 };
 }
 export async function reservePosition() { return { shares: pool.mine, value: pool.mine * pool.assets / pool.shares }; }
 export async function reserveDeposit(amount) {

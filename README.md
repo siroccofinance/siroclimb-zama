@@ -2,9 +2,13 @@
 
 Pick a market, go long or short, and the Sirocco coin climbs a staircase that follows the price.
 Your leverage climbs from 1x to 4x every 6 seconds over a 60-second run, and you cash out whenever
-you want. Every run is solo, and its leverage is real: it is borrowed from the **Sirocco Reserve**,
-a confidential cUSDC lending pool. Lenders earn the borrow interest and carry the players' gains and
-losses.
+you want. Every run is solo, and it holds **real tokens**: your stake plus three times your stake
+borrowed from the **Sirocco Reserve**, a confidential cUSDC lending pool, buys the market's
+confidential token at the **Sirocco desk** (a long), or the token is borrowed from the desk and sold
+(a short). At the end the position is closed with the desk and the loan is repaid with interest.
+The game keeps its amplification on top: every price move counts **×25** on the stairs, and the
+part of the payout beyond the real position, the **game boost**, is settled with the reserve.
+Lenders earn the borrow interest and carry the players' gains and losses.
 
 Siroclimb is about real world assets, and you trade them as **confidential tokens** (ERC-7984):
 `cTSLAx`, `cNVDAx`, `cAAPLx` and `cAMZNx` (the Tesla, NVIDIA, Apple and Amazon xStocks), `cXAUt`
@@ -100,9 +104,9 @@ waits for it on screen.
 | Step | Who signs | Kind | Waits | Gas |
 | --- | --- | --- | --- | --- |
 | Encrypt side and stake (relayer proof) | browser | off chain | no, done in the lobby when picked | none |
-| `startRun` with the signed Pyth price (or a bounded public price); the reserve lends the run's liquidity in the same transaction | game account | transaction | the coin moves at the click; the entry snaps in when mined | 3.65M to 3.96M |
+| `startRun` with the entry price; the reserve lends the run's liquidity, and the run opens its real position with the desk (4 encrypted transfers) in the same transaction | game account | transaction | the coin moves at the click; the entry snaps in when mined | 8.45M |
 | Price checkpoints (`pushPyth` / `pushPublic`) | game account (autopilot) | transaction | no, background | 340k (Pyth) |
-| `cashOut` with the signed Pyth price frozen at the click: payout net of interest to the player, the rest back to the reserve | game account | transaction | no: the result shows in 1.5 s, marked "Settling on chain" | 3.65M to 4.07M |
+| `cashOut` at the price frozen at the click: the position is closed with the desk (3 encrypted transfers), payout net of interest to the player, the rest back to the reserve | game account | transaction | no: the result shows in 1.5 s, marked "Settling on chain" | 7.26M |
 | `settleRun` at the 60th second, if not cashed out | game account (autopilot, anyone) | transaction | no, background | 3.64M to 3.67M |
 | Balance decryption after the payout | game account | off chain | no, automatic | none |
 | `publishRun` then `recordRun` with the KMS proof | game account | 2 transactions | only when the player clicks **Post** | small |
@@ -165,17 +169,52 @@ Honest limits:
   old. Someone who saw a big win since then could deposit before the next reveal at the old price.
   The reveal window bounds it.
 
+## Real positions: the Sirocco desk
+
+Every run trades the market's real confidential token (`cTSLAx`, `cNVDAx`, `cAAPLx`, `cAMZNx`,
+`cXAUt`, `ctGBP`) with `SiroccoDesk`, a desk that holds inventories of every market token and of
+cUSDC and quotes at the oracle price plus or minus a 10 bps half spread.
+
+- **Long.** Stake S plus 3S borrowed from the reserve (notional 4S) buys `qty = 4S / ask` tokens.
+  At the end the run sells `qty` at the bid.
+- **Short.** The run borrows `qty = 4S / ask` tokens from the desk's lending book and sells them at
+  the bid. At the end it buys `qty` back at the ask and returns them.
+- **The real position at the end** = S + what came in - what went out - the loan's interest,
+  floored at 0 (`positionHandles`, decryptable by the player). The **payout** follows the game ladder
+  (`stake x multiplier - interest`, moves ×25, leverage 1x to 4x on the stairs). The difference, the
+  **game boost**, positive or negative, is settled with the reserve in the same transaction: the game
+  sends the reserve `stake + lent + cash in - cash out - payout`. The result screen shows both parts.
+- **Encrypted all the way.** Quantities are computed on ciphertexts at a public price
+  (`FHE.mul`, `FHE.div` by a plaintext); every amount moves as an ERC-7984 transfer. The side is an
+  encrypted bool and **both legs of every trade always move**, one with an encrypted 0: at the open
+  the desk sends the run `qty` tokens, the run pays `long ? notional : 0` cUSDC and sends back
+  `long ? 0 : qty` tokens, the desk pays `long ? 0 : sale` cUSDC; at the close the run sends
+  `long ? qty : 0` tokens, the desk pays `long ? sale : 0`, the run pays `long ? 0 : buy-back`.
+  A long and a short make the same transfers (`test/Desk.ts` checks it).
+- **What the desk's flows reveal.** Public: that a run traded, which market and token, when, and the
+  public entry and exit prices (and so the desk's quotes). Encrypted: the quantity, the cash amounts,
+  the side, and the desk's inventories (readable by its owner only). Like any ERC-7984 holder, the
+  desk's balance changes are not visible, so its inventory does not reveal the net side of the
+  players either.
+- **Inventory.** The desk was stocked at deployment by minting the public underlyings and wrapping
+  them into the desk: our mirrors (TSLAx, NVDAx, AAPLx, AMZNx) and Zama's `XAUtMock`, `GBPMock`
+  and `USDCMock` all have a public mint (DEPLOYMENTS.md lists the amounts). If the desk runs out of
+  a token, the ERC-7984 transfer moves 0 and that run's position is empty (the payout is unchanged,
+  the reserve carries it): the inventory is sized for thousands of runs.
+- **Trust.** Only the game trades on the desk (`setGame`, once); the game makes the desk its ERC-7984
+  operator for cUSDC and the market tokens so the desk pulls the runs' legs itself.
+
 ## The Sirocco Reserve: real leverage, borrowed
 
 `SiroccoReserve` is a cUSDC lending pool, and it is the only source of a run's leverage.
 
-- **Borrowing.** A run of stake S at leverage L has a notional of S x L; S x (L - 1) of it is
-  borrowed. The leverage climbs the ladder (1x, 1.5x ... 4x, a step every 6 s), so the loan grows
-  with it. The HUD shows it live; the contract never needs it as a number.
-- **Interest.** `interest = paid x APR x B / (10,000 x 10 x 365 days)`, where B, the borrowed
-  time, is the sum over the run's seconds of (leverage - 1), in tenths (`borrowedTenthSeconds`, in
-  clear, from the exit time). With the stated **20 % APR**, a 100 cUSDC stake held to the 60th
-  second (B = 1,170) pays 0.000074 cUSDC. A minute of borrowing is cheap: the APR is a yearly rate.
+- **Borrowing.** A run's real position is 4x its stake S: 3S of it is borrowed for the whole run
+  and buys (or backs) the market tokens at the desk. The HUD shows the tokens held and the loan; the
+  contract never needs them as numbers.
+- **Interest.** `interest = paid x APR x B / (10,000 x 10 x 365 days)`, where B = 30 x the run's
+  seconds (the loan is 3x the stake, in tenths: `borrowedTenthSeconds`). With the stated **20 % APR**,
+  a 100 cUSDC stake held to the 60th second pays 0.000114 cUSDC. A minute of borrowing is cheap: the
+  APR is a yearly rate.
 - **Payout.** `stake x multiplier - interest`, floored at 0, paid as an encrypted transfer in the
   cash-out transaction. The most a player loses is the stake; there is no liquidation, the reserve
   absorbs a shortfall. Everything else (`stake + lent - payout`) goes back to the reserve in the same
@@ -239,6 +278,8 @@ and at -100 % the coin falls and the run is worth 0 for good.
  │ wallet: 1 signature                 ├───────►│ Siroclimb ── FHE ops (Zama coprocessor)  │
  │ game account: every game tx         │        │   ├─ SiroccoReserve (lends the leverage, │
  │                                     │        │   │    rcUSDC shares, KMS-synced totals)  │
+ │                                     │        │   ├─ SiroccoDesk (real token trades:     │
+ │                                     │        │   │    cTSLAx … ctGBP, cUSDC inventory)   │
  │                                     │        │   ├─ cUSDCMock (Zama, ERC-7984)          │
  │ relayer SDK: encrypt, user/public    │        │   ├─ ClimbLadder ── ClimbPriceOracle      │
  │   decrypt (KMS proofs)               │        │   │                    └─ Pyth (Wormhole) │
@@ -255,6 +296,7 @@ and at -100 % the coin falls and the run is worth 0 for good.
 | Path | Content |
 | --- | --- |
 | `contracts/contracts/Siroclimb.sol` | Runs, packs, sessions, borrowing and interest, encrypted payouts, KMS-verified posted results |
+| `contracts/contracts/SiroccoDesk.sol` | The desk: real trades of the market tokens at the oracle price ± spread, token lending for shorts, encrypted legs |
 | `contracts/contracts/SiroccoReserve.sol` | The lending pool: encrypted deposits and shares (ERC-7984), loans to runs, KMS-verified reveals |
 | `contracts/contracts/ClimbLadder.sol` | Run rules: long and short multipliers on the oracle path |
 | `contracts/contracts/ClimbPriceOracle.sol` | Per-market checkpoints: Pyth, bounded fallback, seeding |
@@ -274,9 +316,10 @@ handles a single run.
 
 | Transaction | Global HCU | Depth |
 | --- | --- | --- |
-| `startRun` (encrypted side and stake, clamp, transfer, the reserve's loan) | 1.48M | 0.68M |
-| `cashOut` (select, mul, div, interest, encrypted payout, repayment to the reserve) | 5.13M | 2.44M |
-| `cashOut` packed (4 capped paths and 4 interest rates selected on ciphertexts) | 5.95M | 2.61M |
+| `startRun` (encrypted side and stake, clamp, transfer, the reserve's loan, the desk: 4 transfers) | 6.71M | 3.57M |
+| `startRun` packed | 7.04M | 3.57M |
+| `cashOut` (select, mul, div, interest, the desk: 3 transfers, encrypted payout, repayment to the reserve) | 10.21M | 2.61M |
+| `cashOut` packed (4 capped paths selected on ciphertexts) | 10.70M | 2.77M |
 | `openPack` (encrypted PRNG) | 0.34M | 0.24M |
 | reserve `deposit` (encrypted amount, shares at the synced price) | 3.09M | 2.66M |
 | reserve `withdraw` (all or nothing on ciphertexts) | 3.53M | 2.52M |
@@ -296,7 +339,8 @@ key, every market uses the bounded checkpoints.
 ### Contracts
 
 ```bash
-cd contracts && npm i && npx hardhat test          # 39 tests on the FHEVM mock, HCU budget
+cd contracts && npm i && npx hardhat test          # 44 tests on the FHEVM mock, HCU budget
+npx hardhat run scripts/stock-desk.ts --network sepolia   # stock the desk (idempotent)
 npm run deploy:sepolia && npm run verify:sourcify  # key: ~/.config/siroclimb/sepolia/deployer.key
 ```
 

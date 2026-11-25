@@ -10,6 +10,7 @@ import type {
   MirrorToken,
   MockPyth,
   Siroclimb,
+  SiroccoDesk,
   SiroccoReserve,
 } from "../types";
 
@@ -39,23 +40,34 @@ export const SEED = 200_000n * USDC;
 export const MAX_PAYOUT = 1000n * USDC;
 export const INTEREST_DIVISOR = 10_000n * 10n * 365n * 86_400n;
 
-/** (leverage - 1) x seconds borrowed over `elapsed` seconds, in tenths (mirror of the contract). */
-export function borrowed(elapsed: number, cap = 6): bigint {
-  let total = 0;
-  for (let i = 0; i <= 6; i++) {
-    const from = i * 6;
-    if (elapsed <= from) break;
-    const to = Math.min(i === 6 ? elapsed : (i + 1) * 6, elapsed);
-    total += 5 * Math.min(i, cap) * (to - from);
-  }
-  return BigInt(total);
+/** The real position: stake + borrowed = POSITION_LEVERAGE x the stake. The desk's half spread (bps). */
+export const POSITION_LEVERAGE = 4n;
+export const SPREAD_BPS = 10n;
+export const PRICE_ONE = 10_000_000_000n;
+/** Leverage tenths x seconds borrowed over `elapsed` seconds: (4 - 1) x the stake for the whole run. */
+export function borrowed(elapsed: number): bigint {
+  return 10n * (POSITION_LEVERAGE - 1n) * BigInt(Math.max(0, elapsed));
 }
-export const interest = (paid: bigint, elapsed: number, cap = 6) => (paid * APR_BPS * borrowed(elapsed, cap)) / INTEREST_DIVISOR;
+export const interest = (paid: bigint, elapsed: number) => (paid * APR_BPS * borrowed(elapsed)) / INTEREST_DIVISOR;
 /** What a funded run pays: stake x multiplier, minus the borrow interest (never below 0). */
-export function payout(paid: bigint, mult: bigint, elapsed: number, cap = 6) {
+export function payout(paid: bigint, mult: bigint, elapsed: number) {
   const gross = (paid * mult) / SCALE;
-  const i = interest(paid, elapsed, cap);
+  const i = interest(paid, elapsed);
   return gross - (i < gross ? i : gross);
+}
+/** The desk's quotes around a public price (mirror of SiroccoDesk.quotes). */
+export const quotes = (p: bigint) => ({ bid: (p * (10_000n - SPREAD_BPS)) / 10_000n, ask: (p * (10_000n + SPREAD_BPS)) / 10_000n });
+/** Mirror of the real position of a funded run: tokens, cash legs, and what it is worth at the end. */
+export function position(paid: bigint, long: boolean, entry: bigint, exit: bigint, elapsed: number) {
+  const notional = paid * POSITION_LEVERAGE;
+  const q0 = quotes(entry), q1 = quotes(exit);
+  const qty = (notional * PRICE_ONE) / q0.ask;
+  const proceeds = (qty * q0.bid) / PRICE_ONE;
+  const cashLeg = long ? notional : proceeds;
+  const cashIn = long ? (qty * q1.bid) / PRICE_ONE : cashLeg;
+  const cashOut = long ? cashLeg : (qty * q1.ask) / PRICE_ONE;
+  const pin = paid + cashIn, pout = cashOut + interest(paid, elapsed);
+  return { notional, qty, cashLeg, cashIn, cashOut, value: pin >= pout ? pin - pout : 0n };
 }
 
 export interface Fixture {
@@ -73,11 +85,16 @@ export interface Fixture {
   game: Siroclimb;
   reserve: SiroccoReserve;
   reserveAddress: string;
+  desk: SiroccoDesk;
+  deskAddress: string;
+  /** The markets' confidential tokens and their public underlyings, in market order. */
+  marketTokens: ConfidentialTokenWrapper[];
+  marketUnderlyings: MirrorToken[];
   gameAddress: string;
   tokenAddress: string;
 }
 
-export async function deployFixture(opts: { fund?: number; seed?: bigint } = {}): Promise<Fixture> {
+export async function deployFixture(opts: { fund?: number; seed?: bigint; desk?: boolean } = {}): Promise<Fixture> {
   const [deployer, ...players] = await ethers.getSigners();
   const usdc = (await (await ethers.getContractFactory("MirrorToken")).deploy("Test USDC", "USDC", 6)) as MirrorToken;
   const token = (await (
@@ -97,13 +114,39 @@ export async function deployFixture(opts: { fund?: number; seed?: bigint } = {})
     APR_BPS,
   )) as SiroccoReserve;
   const reserveAddress = await reserve.getAddress();
+  const desk = (await (await ethers.getContractFactory("SiroccoDesk")).deploy(deployer.address, await token.getAddress(), SPREAD_BPS)) as SiroccoDesk;
+  const deskAddress = await desk.getAddress();
+  // the markets' confidential tokens (6 decimals, like cTSLAx and Zama's cXAUtMock / ctGBPMock)
+  const marketTokens: ConfidentialTokenWrapper[] = [];
+  const marketUnderlyings: MirrorToken[] = [];
+  for (const m of MARKETS) {
+    const u = (await (await ethers.getContractFactory("MirrorToken")).deploy(m, m, 6)) as MirrorToken;
+    const w = (await (await ethers.getContractFactory("ConfidentialTokenWrapper")).deploy(await u.getAddress(), `Confidential ${m}`, `c${m}`)) as ConfidentialTokenWrapper;
+    marketUnderlyings.push(u);
+    marketTokens.push(w);
+  }
   const game = (await (await ethers.getContractFactory("Siroclimb")).deploy(
     deployer.address,
     await token.getAddress(),
     await ladder.getAddress(),
     reserveAddress,
+    deskAddress,
+    await Promise.all(marketTokens.map((t) => t.getAddress())),
   )) as Siroclimb;
   await reserve.setGame(await game.getAddress());
+  await desk.setGame(await game.getAddress());
+  // the desk's inventories: every market token, and cUSDC for the shorts' sales
+  if (opts.desk !== false) {
+    for (const [i, u] of marketUnderlyings.entries()) {
+      const amount = 1_000_000n * USDC;
+      await u.mint(deployer.address, amount);
+      await u.approve(deskAddress, amount);
+      await desk.stock(await marketTokens[i].getAddress(), amount);
+    }
+    await usdc.mint(deployer.address, 100_000n * USDC);
+    await usdc.approve(deskAddress, 100_000n * USDC);
+    await desk.stock(await token.getAddress(), 100_000n * USDC);
+  }
   // the deployer is the first lender
   if (opts.seed !== 0n) {
     const seed = opts.seed ?? SEED;
@@ -121,7 +164,7 @@ export async function deployFixture(opts: { fund?: number; seed?: bigint } = {})
     await faucet.claimFor(p.address);
     await token.connect(p).setOperator(gameAddress, until);
   }
-  return { deployer, players, alice: players[0], bob: players[1], carol: players[2], usdc, token, faucet, pyth, oracle, ladder, game, reserve, reserveAddress, gameAddress, tokenAddress };
+  return { deployer, players, alice: players[0], bob: players[1], carol: players[2], usdc, token, faucet, pyth, oracle, ladder, game, reserve, reserveAddress, desk, deskAddress, marketTokens, marketUnderlyings, gameAddress, tokenAddress };
 }
 
 /** Pushes BASE prices scaled per market in basis points (10000 = unchanged), one block later. */
