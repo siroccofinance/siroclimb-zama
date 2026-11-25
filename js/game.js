@@ -474,51 +474,78 @@ async function makeCard(scene) {
   card = { blob, src: URL.createObjectURL(blob), page: null };
   api.shareCard(blob, r).then(u => { if (card && card.blob === blob) card.page = u; }).catch(() => {});
 }
-// the post: the result, a punchy line, then what made it private (Zama's handle is @zama, from zama.org)
+// the post: the result, a punchy line, then what made it private (Zama's handle is @zama, from zama.org).
+// v: the run as the chain has it (from /api/share), or the screen's result when there is no chain run
 function shareText(o = {}) {
-  const a = byId[run.assetId], r = ended, on = `${o.side === false ? '' : ` going ${run.side === 'short' ? 'short' : 'long'}`} on ${label(a)}`;
-  const zama = "My side and stake stayed encrypted on-chain with @zama's FHE, confidential tokens (ERC-7984).";
+  const v = o.run, a = byId[run.assetId], r = v || ended;
+  const side = v ? (o.side && v.side) : (o.side !== false && run.side);
+  const on = `${side ? ` going ${side}` : ''} on ${label(a)}`;
+  const zama = v ? "My stake stayed encrypted on-chain with @zama's FHE, confidential tokens (ERC-7984); the result is verified on Sepolia."
+    : "My side and stake stayed encrypted on-chain with @zama's FHE, confidential tokens (ERC-7984).";
   const text = r.status === 'busted'
     ? `My coin fell off the stairs at ${levTxt(r.maxLeverage)}${on} 🪙 Rematch incoming.\n\n${zama}\n\nCan you climb higher?`
-    : r.pnl > 0.005 ? `Climbed to ${levTxt(r.maxLeverage)}${on} and cashed out ${pct(r.pnlPct)} 🪙📈\n\n${zama}\n\nYour turn on Siroclimb:`
+    : r.pnlPct > 0.005 ? `Climbed to ${levTxt(r.maxLeverage)}${on} and cashed out ${pct(r.pnlPct)} 🪙📈\n\n${zama}\n\nYour turn on Siroclimb:`
     : `Cashed out at ${levTxt(r.maxLeverage)}${on} (${pct(r.pnlPct)}) before the stairs gave way 🪙\n\n${zama}\n\nYour turn on Siroclimb:`;
   const url = o.url || (card && card.page) || location.origin + location.pathname.replace(/(play|index)\.html$/, '');
   return { text, url };
 }
 const intent = ({ text, url }) => 'https://x.com/intent/post?' + new URLSearchParams({ text, url }).toString();
 
-// ── share sheet: the player picks what to reveal, the server signs it and renders the card (api/share, api/og)
+// ── share sheet: the server reads the finished run on chain and renders the card (api/share, api/og).
+//    Only a published return can be shared: the sheet offers to publish it (KMS public decryption) first.
 const sh = { seq: 0, link: null };
-const shEl = { card: $('#shCard'), img: $('#shImg'), side: $('#shSide'), amt: $('#shAmt'), dl: $('#shDl'), x: $('#shX'), copy: $('#shCopy') };
-shEl.side.checked = store.get('shareSide', true); shEl.amt.checked = store.get('shareAmt', true);
+const shEl = { card: $('#shCard'), img: $('#shImg'), side: $('#shSide'), dl: $('#shDl'), x: $('#shX'), copy: $('#shCopy'), veil: $('#shVeil'), veilT: $('#shVeilT'), pub: $('#shPub') };
+shEl.side.checked = store.get('shareSide', true);
 const shareable = () => ended && run && ended.status !== 'failed';
-async function signShare() {
-  const r = ended, reveal = { side: shEl.side.checked, amt: shEl.amt.checked };
-  const body = { market: run.assetId, status: r.status, pnlPct: r.pnlPct, maxLeverage: r.maxLeverage, duration: Math.max(1, Math.round(r.duration)),
-    ...(reveal.amt ? { pnl: r.pnl } : {}), ...(reveal.side ? { side: run.side } : {}) };
-  const res = await fetch('/api/share', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Share links unavailable');
-  return { ...(await res.json()), reveal };
+const chainRunId = () => (api.mode !== 'chain' ? null : ended?.chain ? ended.runId : api.runInfo(run.id)?.chainId ?? null);
+function veil(text, button = false) {
+  shEl.veil.hidden = !text; shEl.veilT.textContent = text || ''; shEl.pub.hidden = !button;
+  [shEl.dl, shEl.x].forEach(a => a.setAttribute('aria-disabled', 'true'));
+}
+async function signShare(runId) {
+  const res = await fetch('/api/share', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ runId: Number(runId), showSide: shEl.side.checked }) });
+  const b = await res.json().catch(() => ({}));
+  if (res.status === 409) return { unpublished: true };
+  if (!res.ok) throw Object.assign(new Error(b.error || 'Share links unavailable'), { status: res.status });
+  return b;
 }
 async function refreshShare() {
   if (!shareable()) return;
-  const n = ++sh.seq;
+  const n = ++sh.seq, id = chainRunId();
+  if (id == null) { closeSheet(true); legacyShare(); return; }          // simulation: the picture drawn in the browser
   shEl.card.classList.add('is-loading'); [shEl.dl, shEl.x].forEach(a => a.setAttribute('aria-disabled', 'true'));
+  if (!ended.chain) { veil('Settling on chain. The card is read from the settled run…'); shEl.card.classList.remove('is-loading'); return; }
   try {
-    const l = await signShare(); if (n !== sh.seq) return;
-    sh.link = l;
+    const l = await signShare(id); if (n !== sh.seq) return;
+    if (l.unpublished) { shEl.card.classList.remove('is-loading'); veil('Your return is still encrypted. Publishing it decrypts it publicly (Zama KMS proof, one transaction), then the card can show it.', true); return; }
+    sh.link = l; veil(null);
     await new Promise(res => { shEl.img.onload = shEl.img.onerror = res; shEl.img.src = l.image; });
     if (n !== sh.seq) return;
     shEl.dl.href = l.image; shEl.dl.download = `siroclimb-${label(byId[run.assetId])}.png`;
-    shEl.x.href = intent(shareText({ url: l.url, side: l.reveal.side }));
+    shEl.x.href = intent(shareText({ url: l.url, run: l.run, side: shEl.side.checked }));
     [shEl.dl, shEl.x].forEach(a => a.removeAttribute('aria-disabled'));
     shEl.card.classList.remove('is-loading');
   } catch (e) {
     if (n !== sh.seq) return;
-    closeSheet(true); legacyShare();                   // no server (static hosting, offline): the picture drawn in the browser
+    shEl.card.classList.remove('is-loading');
+    if (e.status == null || e.status === 503) { closeSheet(true); legacyShare(); return; }   // no share server (static hosting)
+    veil(e.message);
   }
 }
-[shEl.side, shEl.amt].forEach(i => i.addEventListener('change', () => { store.set('shareSide', shEl.side.checked); store.set('shareAmt', shEl.amt.checked); sound.tick(); refreshShare(); }));
+shEl.pub.onclick = async () => {
+  const id = chainRunId(); if (id == null) return;
+  shEl.pub.disabled = true; veil('Publishing your return: one transaction, then the KMS proof…');
+  try {
+    await api.publishRun(id);
+    // the share server reads the chain on its own node, which may be a block behind: wait for it to see the record
+    veil('Published. Building your card from the chain…');
+    for (let i = 0; i < 10 && (await signShare(id).catch(() => ({}))).unpublished; i++) await new Promise(r => setTimeout(r, 2500));
+    await refreshShare();
+  }
+  catch (e) { veil(`Could not publish: ${e.message}`, true); }
+  finally { shEl.pub.disabled = false; }
+};
+shEl.side.addEventListener('change', () => { store.set('shareSide', shEl.side.checked); sound.tick(); refreshShare(); });
 shEl.x.addEventListener('click', () => { sound.tick(); setTimeout(closeSheet, 300); });
 shEl.copy.onclick = async () => { if (!sh.link) return; try { await navigator.clipboard.writeText(sh.link.url); toast('Link copied'); } catch { toast(sh.link.url); } };
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);

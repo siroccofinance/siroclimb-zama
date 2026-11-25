@@ -468,7 +468,9 @@ function record(run) {
 /** Reveals a finished solo run on the leaderboard (multiplier public, stake stays private). */
 export async function publishRun(id) {
   const s = await session();
-  await s.send(game, 'publishRun', [BigInt(id)], 0n, 'publishRun');
+  const r = await W.view(() => game.getRun(BigInt(id)));
+  if (r.published) return true;
+  if (!r.publishRequested) await s.send(game, 'publishRun', [BigInt(id)], 0n, 'publishRun');   // a retry only records
   const [, , , multH] = await game.runHandles(BigInt(id));
   for (let i = 0; i < 10; i++) {
     try { const { values, proof } = await publicDecrypt([multH]); await s.send(game, 'recordRun', [BigInt(id), values[0], proof], 0n, 'recordRun'); return true; }

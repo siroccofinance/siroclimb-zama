@@ -1,16 +1,19 @@
 // GET /s/<id> (rewritten here): the page a shared link opens. Crawlers (X, Discord, Slack…) read the
 // summary_large_image card; people are sent on to the game.
-import { fmt, headline, idOf, origin, verify } from './_share.js';
+import { fmt, headline, idOf, origin, resolve } from './_share.js';
+import { verifiedRun } from './_run.js';
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-export default function handler(req, res) {
-  const id = idOf(req), s = verify(id), o = origin(req);
+export default async function handler(req, res) {
+  const id = idOf(req), o = origin(req), r = await resolve(id, verifiedRun).catch(() => null);
   const play = `${o}/#play`;
-  if (!s) { res.statusCode = 302; res.setHeader('location', play); return res.end(); }
-  const title = `Siroclimb: ${headline(s)}`;
-  const desc = `${fmt.eyebrow(s)}${s.pnl != null ? ` ${fmt.amt(s.pnl)} cUSDC` : ''}. Side and stake stay encrypted on chain with Zama's FHE. Self-reported, decrypted by the player. Can you climb higher?`;
-  const img = `${o}/api/og?id=${encodeURIComponent(id)}`, url = `${o}/s/${id}`;
+  if (!r) { res.statusCode = 302; res.setHeader('location', play); return res.end(); }
+  const s = r.run;
+  const title = s ? `Siroclimb: ${headline(s)}` : 'Siroclimb: climb the live price, confidentially';
+  const desc = s ? `${fmt.eyebrow(s)}. Verified on Sepolia (run #${s.runId}): the return was published with Zama's KMS proof; the stake stays encrypted with Zama's FHE. Can you climb higher?`
+    : 'A climbing game on live prices. Side and stake stay encrypted on chain with Zama\'s FHE, confidential tokens (ERC-7984).';
+  const img = `${o}/api/og?id=${encodeURIComponent(s ? id : 'game')}`, url = `${o}/s/${id}`;
   res.statusCode = 200;
   res.setHeader('content-type', 'text/html; charset=utf-8');
   res.setHeader('cache-control', 'public, max-age=300, s-maxage=86400');

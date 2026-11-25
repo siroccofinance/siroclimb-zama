@@ -1,6 +1,6 @@
 // A live climb on Sepolia with a price timing log: what the HUD shows every second (price, change,
 // source, value, level of the coin), then the run's on-chain checkpoints (price and source).
-// usage: node tests/chain/climb.mjs [baseUrl] [market] [seconds]
+// usage: node tests/chain/climb.mjs [baseUrl] [market] [seconds]   SHARE=1: publish and share the result
 import puppeteer from 'puppeteer-core';
 import { Wallet } from 'ethers';
 import { readFileSync } from 'node:fs';
@@ -38,4 +38,13 @@ const runId = await pg.evaluate(async () => { const { _debug } = await import('/
 await pg.click('#cash');
 for (let i = 0; i < 60; i++) { const r = await pg.$eval('#rR', e => e.textContent); if (/Settled/.test(r)) { console.log(T(), r.slice(0, 80)); break; } await wait(2000); }
 console.log('run', runId);
+if (process.env.SHARE) {                       // verified share: publish the return from the sheet, then the chain-built card
+  await pg.click('#share'); await wait(3000);
+  console.log(T(), 'sheet:', await pg.$eval('#shVeilT', e => e.textContent));
+  await pg.screenshot({ path: 'out/share-0veil.png' });
+  if (await pg.$eval('#shPub', e => !e.hidden)) await pg.click('#shPub');
+  for (let i = 0; i < 90; i++) { const src = await pg.$eval('#shImg', e => e.getAttribute('src') || ''); const v = await pg.$eval('#shVeilT', e => e.textContent); if (i % 5 === 0) console.log(T(), 'share:', v || src.slice(-40)); if (/api\/og\?id=r/.test(src) && !v) break; await wait(2000); }
+  await wait(1500); await pg.screenshot({ path: 'out/share-1card.png' });
+  console.log(T(), 'post:', decodeURIComponent(await pg.$eval('#shX', e => e.href)).slice(0, 400));
+}
 await b.close();

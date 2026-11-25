@@ -297,12 +297,16 @@ npm run deploy:sepolia && npm run verify:sourcify  # key: ~/.config/siroclimb/se
 ### Hosting
 
 Live at https://climb.sirocco.finance (Vercel). The site is static, and `api/pyth.js` and `api/prices.js` are Vercel Node functions
-(`vercel.json`), as are the share routes: `POST /api/share` signs the result the player chose to reveal
-(HMAC-SHA256 with `SHARE_SECRET`), `/s/<id>` serves the `summary_large_image` page X unfolds, and
-`/api/og?id=` renders the 1200×630 card (satori + resvg, the 3D coin still from `3d/coin-still.mjs`).
-Side and stake are encrypted on chain, so a card is self-reported: the player decrypts their own result
-and picks whether the side and the cUSDC amount show. Deploy the repo root and set `PYTH_API_KEY` and
-`SHARE_SECRET` as server-side environment variables. No secret ever reaches the bundle. Contract addresses come from
+(`vercel.json`), as are the share routes and the first-visit drip (`api/drip.js`). Share links are
+verified on chain: `POST /api/share { runId }` reads the finished run from the Siroclimb contract
+(`api/_run.js`: market, top leverage, time, entry, exit, and the return the player published with the
+KMS proof) and signs a link naming the run (HMAC-SHA256 with `SHARE_SECRET`); nothing from the browser
+reaches the card. A run whose return is not published yet gets a 409, and the share sheet offers to
+publish it first. Publishing makes the return public, and since a run's long and short results are
+public, it also tells the side; the stake stays encrypted. `/s/<id>` serves the `summary_large_image`
+page X unfolds, `/api/og?id=` renders the 1200×630 card (satori + resvg, the 3D coin still from
+`3d/coin-still.mjs`). Older self-reported links still open the game, with a generic card. Deploy the
+repo root and set `PYTH_API_KEY`, `SHARE_SECRET` and `DRIP_KEY` as server-side environment variables. No secret ever reaches the bundle. Contract addresses come from
 `js/chain/deployments.json`, and the relayer SDK loads from Zama's CDN.
 
 ### Tests on Sepolia

@@ -203,17 +203,16 @@
     <div class="sheet__card share" tabindex="-1">
       <button class="icon sheet__x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       <h2 id="share-title">Share your climb</h2>
-      <p class="share__lede">Your side and stake are encrypted on chain, only you can decrypt them. Pick what the card shows.</p>
-      <div class="share__card" id="shCard"><img id="shImg" alt="Your Siroclimb result card" width="1200" height="630"></div>
+      <p class="share__lede" id="shLede">The card is read from the chain: only a published return can be shared. Your stake stays encrypted.</p>
+      <div class="share__card" id="shCard"><img id="shImg" alt="Your Siroclimb result card" width="1200" height="630"><div class="share__veil" id="shVeil" hidden><span id="shVeilT"></span><button class="cta" id="shPub">Reveal my return and share</button></div></div>
       <div class="share__opts">
-        <label class="tog"><input type="checkbox" id="shSide"><i aria-hidden="true"></i><span>Show my side</span></label>
-        <label class="tog"><input type="checkbox" id="shAmt"><i aria-hidden="true"></i><span>Show the cUSDC amount</span></label>
+        <label class="tog"><input type="checkbox" id="shSide"><i aria-hidden="true"></i><span>Show my side on the card</span></label>
       </div>
       <div class="share__go">
         <a class="ghost ghost--ink" id="shDl" href="#" download="siroclimb.png"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 19.5h14"/></svg>Download image</a>
         <a class="cta" id="shX" href="#" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.75 3h3.07l-6.7 7.66L22 21h-6.17l-4.83-6.32L5.47 21H2.4l7.17-8.2L2 3h6.33l4.37 5.77L17.75 3zm-1.08 16.18h1.7L7.4 4.73H5.58l11.09 14.45z"/></svg>Post on X</a>
       </div>
-      <p class="fine share__fine"><button class="share__copy" id="shCopy">Copy link</button> · Self-reported: the card shows what you decrypted, signed by Siroclimb so the link cannot be edited.</p>
+      <p class="fine share__fine"><button class="share__copy" id="shCopy">Copy link</button> · Verified: every number on the card comes from the Siroclimb contract on Sepolia. Publishing your return makes it public (Zama KMS proof); since the long and short results of a run are public, it also tells which side you took. Your stake stays encrypted.</p>
     </div>
   </div>
 
@@ -236,6 +235,6 @@
   </script>
 
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
-  <script type="module" src="js/game.js?v=23"></script>
+  <script type="module" src="js/game.js?v=24"></script>
 </body>
 </html>
