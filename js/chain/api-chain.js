@@ -9,7 +9,7 @@
 //  - the leverage of every run is borrowed from the Sirocco Reserve (SiroccoReserve), a confidential
 //    cUSDC lending pool: S x (L - 1) is borrowed, interest is charged on it, the PnL goes to lenders;
 //  - this browser is also the keeper (autopilot.js): price checkpoints, expired runs, reserve syncs.
-import { ADDR, LADDER, MARKETS, MAX_STAKE, MOVE_SCALE, PRICE_DECIMALS, RUN_SECONDS, SCALE, SESSION_MIN_ETH, STEP_SECONDS, USDC, indexOf, txUrl } from './config.js';
+import { ADDR, LADDER, MARKETS, MAX_STAKE, MOVE_SCALE, PRICE_DECIMALS, RUN_SECONDS, SCALE, SESSION_MIN_ETH, SESSION_TX_ETH, STEP_SECONDS, USDC, indexOf, txUrl } from './config.js';
 import * as feed from './feed.js';
 import { encryptAmount, encryptRun, ensureGrant, hasGrant, publicDecrypt, userDecrypt, warmUp } from './fhe.js';
 import * as W from './wallet.js';
@@ -102,27 +102,28 @@ async function askDrip(player) {
 export async function connect() {
   if (!W.account()) { status({ kind: 'wallet', text: 'Connect your wallet…' }); await W.connectWallet(false); status(null); }
   const needs = await W.setupNeeds();
+  // first visit: the steps show under the balance; a returning account that only needs gas tops up quietly
+  const first = needs.includes('key');
   if (needs.length) {
-    const first = needs.includes('key');
-    const steps = first ? 3 : 2;
+    const steps = 3;
     let n = 0;
     try {
-      await W.setup(t => setSetup({ step: Math.min(++n, steps), steps, text: t }), {
+      await W.setup(t => first && setSetup({ step: Math.min(++n, steps), steps, text: t }), {
         // as soon as the game account exists: gas + the first 1,000 cUSDC from the server, and the
         // decryption grant signed (locally) meanwhile
         onAccount: async a => {
-          setBalState('sealed');
+          if (bal == null) setBalState('sealed');
           drip = askDrip(a);
           ensureGrant(a, W.signTyped).catch(() => {});   // local signature, ready before the balance is
           const d = await drip;
-          if (d) setSetup({ step: steps - 1, steps, text: 'Getting your 1,000 test cUSDC…' });
-          return !!d;
+          if (d && first) setSetup({ step: steps - 1, steps, text: 'Getting your 1,000 test cUSDC…' });
+          return !!d?.gas;                               // gas on its way: the wallet is not asked
         },
       });
     } catch (e) { setSetup(null); throw new Error(friendly(e)); }
   }
   ready = true;
-  afterConnect(true);
+  afterConnect(first);
   return { address: W.player() };
 }
 
@@ -198,11 +199,17 @@ async function session() {
   await W.gasReady;
   if (!W.player() || !ready) await connect();
   const s = W.currentSession();
-  // re-drip on demand: an account below the floor asks the server again (at most every 2 min) and waits for it
-  if (Date.now() - lastRedrip > 120_000 && (await s.eth().catch(() => 1)) < SESSION_MIN_ETH) {
+  // re-drip on demand, below the floor: in the background while there is still gas for this transaction,
+  // waited for only when there is not (never in the middle of a cash out otherwise)
+  const eth = await s.eth().catch(() => 1);
+  if (eth < SESSION_MIN_ETH && Date.now() - lastRedrip > 45_000) {
     lastRedrip = Date.now();
-    const d = await askDrip(s.address);
-    if (d?.gas) { status({ kind: 'chain', text: 'Topping up your game gas…' }); await W.receipt(d.gas, 60_000).catch(() => {}); status(null); }
+    const top = askDrip(s.address);
+    if (eth < SESSION_TX_ETH) {
+      const d = await top;
+      if (!d?.gas) throw new Error('Your game account is out of gas and the top-up did not go through. Try again in a minute');
+      status({ kind: 'chain', text: 'Topping up your game gas…' }); await W.receipt(d.gas, 60_000).catch(() => {}); status(null);
+    }
   }
   return s;
 }
@@ -434,6 +441,13 @@ async function sendCashOut(run, frozenPyth, after = null) {
 
 /** Reads the settled run from the chain: the public long/short multipliers + the player's side. */
 export async function settleFromChain(run) {
+  // the cash out and the 60th-second settlement can both get here: the payout is counted once
+  if (run.chain) return run.chain;
+  if (run.settlePromise) return run.settlePromise;
+  run.settlePromise = settleOnce(run).finally(() => { run.settlePromise = null; });
+  return run.settlePromise;
+}
+async function settleOnce(run) {
   for (let i = 0; i < 40; i++) {
     // a node behind the load balancer may not have the run's block yet (it reverts Panic 0x32): retried
     const r = await W.view(() => game.getRun(BigInt(run.cid), ...(run.txBlock ? [{ blockTag: run.txBlock }] : [])), 6);
