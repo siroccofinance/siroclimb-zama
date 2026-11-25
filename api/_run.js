@@ -1,0 +1,63 @@
+// A finished run, read from the Siroclimb contract on Sepolia, never from the browser: player, market,
+// top leverage, times, entry and exit prices, the public long and short multipliers, and, once the player
+// has published it (publishRun + recordRun with the KMS proof), the player's own return. The side stays an
+// encrypted bool; a published return equals one of the two public multipliers, so the side follows from it.
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { Contract, JsonRpcProvider } from 'ethers';
+import { MARKETS } from './_markets.js';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const json = p => JSON.parse(readFileSync(join(root, p), 'utf8'));
+const ADDR = json('js/chain/deployments.json')['11155111'];
+const ABI = json('js/chain/abi.json');
+const LADDER = [1, 1.5, 2, 2.5, 3, 3.5, 4], SCALE = 1e6, RUN_SECONDS = 60, ENDED = 2;
+const RPC = process.env.CHAIN_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
+let game = null;
+const contract = () => (game ||= new Contract(ADDR.Siroclimb, ABI.Siroclimb, new JsonRpcProvider(RPC, 11155111, { staticNetwork: true, batchMaxCount: 1 })));
+
+const cache = new Map();   // runId -> verified run (a published run never changes)
+
+async function retry(fn, n = 3) { for (let i = 0; ; i++) { try { return await fn(); } catch (e) { if (i >= n) throw e; await new Promise(r => setTimeout(r, 1200)); } } }
+
+/** The published return of `runId` (pnl in millionths), or null when the run has not been published. */
+async function publishedPnl(g, runId) {
+  const n = Number(await retry(() => g.resultCount()));
+  for (let to = n; to > 0; to -= 400) {
+    const from = Math.max(0, to - 400);
+    const list = await retry(() => g.results(from, to - from));
+    for (let i = list.length - 1; i >= 0; i--) if (Number(list[i].runId) === runId) return Number(list[i].pnlPpm);
+    if (n - from > 4000) break;                     // far enough back
+  }
+  return null;
+}
+
+/**
+ * The run as the chain has it: { runId, player, market, token, name, status, maxLeverage, duration,
+ * entryPrice, exitPrice, published, pnlPct, side } (pnlPct and side null until published),
+ * or null when the run does not exist or is not over.
+ */
+export async function verifiedRun(runId) {
+  runId = Number(runId);
+  if (!Number.isInteger(runId) || runId < 0) return null;
+  if (cache.has(runId)) return cache.get(runId);
+  const g = contract();
+  if (runId >= Number(await retry(() => g.runCount()))) return null;
+  const r = await retry(() => g.getRun(BigInt(runId)));
+  if (Number(r.status) !== ENDED) return null;
+  const m = MARKETS[Number(r.market)]; if (!m) return null;
+  const duration = Number(r.endAt - r.startAt), mL = Number(r.multLong), mS = Number(r.multShort);
+  const pnl = r.published ? await publishedPnl(g, runId) : null;
+  const mult = pnl == null ? null : pnl + SCALE;
+  const side = mult == null || mL === mS ? null : mult === mL ? 'long' : mult === mS ? 'short' : null;
+  const v = {
+    runId, player: r.player, market: m.id, token: m.token?.symbol || m.ticker, name: m.name,
+    status: mult === 0 ? 'busted' : duration >= RUN_SECONDS ? 'expired' : 'cashed',
+    maxLeverage: LADDER[Math.min(LADDER.length - 1, Number(r.topStep))], duration,
+    entryPrice: Number(r.entryPrice) / 1e10, exitPrice: Number(r.exitPrice) / 1e10,
+    published: pnl != null, pnlPct: pnl == null ? null : pnl / 1e4, side,
+  };
+  if (v.published) cache.set(runId, v);
+  return v;
+}
