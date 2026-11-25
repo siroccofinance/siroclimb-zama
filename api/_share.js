@@ -4,9 +4,11 @@
 // Nothing the browser sends ends up on the card. The id is HMAC-signed with a server secret so links
 // cannot be minted for runs whose player did not ask (the side flag is the player's choice).
 //
-// v2 id = r<runId>[s].<sig>      s: show the side (inferred from the published return, see _run.js)
+// v3 id = x<runId>[s].<sig>      the current game; s: show the side (inferred from the published return, _run.js)
+// v2 id = r<runId>[s].<sig>      the game before real positions (LEGACY_GAME), still read there
 // v1 ids (<market>_<status>_…, self-reported, before 2026-11-25) still open the game, with a generic card.
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { LEGACY_GAME } from './_run.js';
 
 function secret() {
   const s = process.env.SHARE_SECRET;
@@ -18,18 +20,18 @@ const mac = (payload, key, v = 'v2') => createHmac('sha256', key).update(`sirocl
 
 export function sign({ runId, showSide }) {
   const key = secret(); if (!key) throw new Error('SHARE_SECRET is not set');
-  const payload = `r${runId}${showSide ? 's' : ''}`;
-  return payload + '.' + mac(payload, key);
+  const payload = `x${runId}${showSide ? 's' : ''}`;
+  return payload + '.' + mac(payload, key, 'v3');
 }
 
-/** id → { runId, showSide } (v2), { legacy: true } (a valid v1 link), or null. */
+/** id → { runId, showSide, legacyGame } (v3, v2), { legacy: true } (a valid v1 link), or null. */
 export function verify(id) {
   const key = secret(); if (!key || typeof id !== 'string' || id.length > 160) return null;
   const dot = id.lastIndexOf('.'); if (dot < 0) return null;
   const payload = id.slice(0, dot), sig = Buffer.from(id.slice(dot + 1));
   const ok = v => { const want = Buffer.from(mac(payload, key, v)); return sig.length === want.length && timingSafeEqual(sig, want); };
-  const m = /^r(\d{1,9})(s?)$/.exec(payload);
-  if (m) return ok('v2') ? { runId: Number(m[1]), showSide: m[2] === 's' } : null;
+  const m = /^([xr])(\d{1,9})(s?)$/.exec(payload);
+  if (m) return ok(m[1] === 'x' ? 'v3' : 'v2') ? { runId: Number(m[2]), showSide: m[3] === 's', legacyGame: m[1] === 'r' } : null;
   return payload.includes('_') && ok('v1') ? { legacy: true } : null;
 }
 
@@ -64,6 +66,6 @@ export async function resolve(id, verifiedRun) {
   const v = verify(id);
   if (!v) return null;
   if (v.legacy) return { kind: 'game' };
-  const run = await verifiedRun(v.runId).catch(() => null);
+  const run = await (v.legacyGame ? verifiedRun(v.runId, LEGACY_GAME) : verifiedRun(v.runId)).catch(() => null);
   return run && run.published ? { kind: 'run', run: { ...run, showSide: v.showSide }, showSide: v.showSide } : { kind: 'game' };
 }
