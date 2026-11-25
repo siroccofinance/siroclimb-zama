@@ -586,3 +586,9 @@ body[data-side="short"] .sideglow { --g: var(--short); }
 .setup.is-done i::after { content: ""; position: absolute; left: 4px; top: 2px; width: 4px; height: 7px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
 @media (max-width: 767px) { .setup { font-size: 12px; } }
 .mini-spin { display: inline-block; vertical-align: -1px; width: 11px; height: 11px; margin-right: 7px; border-radius: 50%; border: 2px solid rgba(43, 33, 26, .2); border-top-color: #c2552d; animation: spin .8s linear infinite; }
+.share__veil { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 14px; padding: 20px; text-align: center;
+  background: rgba(43, 20, 10, .62); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); color: #fff; font-size: 15px; font-weight: 500; line-height: 1.4; }
+.share__veil[hidden] { display: none; }
+.share__veil .cta { height: 48px; min-width: 0; font-size: 15px; padding: 0 22px; }
+.share__veil .cta[hidden] { display: none; }
+.share__card img:not([src]) { visibility: hidden; }
