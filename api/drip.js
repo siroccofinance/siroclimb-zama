@@ -15,12 +15,12 @@ const RPC = process.env.DRIP_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode
 const root = join(new URL('.', import.meta.url).pathname, '..');
 const ADDR = JSON.parse(readFileSync(join(root, 'js/chain/deployments.json'), 'utf8'))['11155111'];
 // Measured on Sepolia (F60): startRun 3.46M gas, cashOut 3.67M, deposit 2.08M, setOperator 0.13M, paid at
-// the 0.2 gwei tip floor: ~0.0014 ETH per start + cash out. A drip of 0.005 ETH covers the first few runs
-// with margin; the front asks again (re-drip on demand) when the account falls below SESSION_MIN_ETH,
+// the 0.2 gwei tip floor: ~0.0014 ETH per start + cash out, plus the browser keeper's float (0.001). A drip of
+// 0.006 ETH covers the float and three runs; the front asks again (re-drip on demand) when the account falls below SESSION_MIN_ETH,
 // which covers one 6M-gas transaction at up to 0.4 gwei.
-const GAS_ETH = '0.005', MIN_ETH = 0.0025;           // SESSION_FUND_ETH / SESSION_MIN_ETH in js/chain/config.js
+const GAS_ETH = '0.006', MIN_ETH = 0.0025;           // SESSION_FUND_ETH / SESSION_MIN_ETH in js/chain/config.js
 const WARN_ETH = 0.05;                              // logs a warning when the drip key runs low
-const REDRIP_MS = 2 * 60_000;                       // gas at most once per 2 min per address (this instance)
+const REDRIP_MS = 45_000;                           // gas at most once per 45 s per address (this instance)
 const FAUCET_ABI = ['function claimFor(address account)', 'function waitOf(address account) view returns (uint256)', 'function lastClaim(address account) view returns (uint256)'];
 
 function key() {
@@ -34,7 +34,7 @@ let nonceLock = Promise.resolve();
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { ok: false, error: 'POST only' });
-  if (limited(req, 6)) return send(res, 429, { ok: false, error: 'Too many requests, try again in a minute' });
+  if (limited(req, 6, 'drip')) return send(res, 429, { ok: false, error: 'Too many requests, try again in a minute' });
   const k = key(); if (!k) return send(res, 503, { ok: false, error: 'Drip not configured' });
   let player;
   try { player = getAddress(String((await readJson(req)).player || '')); } catch { return send(res, 400, { ok: false, error: 'Bad address' }); }
@@ -46,12 +46,15 @@ export default async function handler(req, res) {
     const needGas = Number(formatEther(eth)) < MIN_ETH && Date.now() - (seen.get(player) || 0) >= REDRIP_MS, needClaim = last === 0n && Date.now() - (claimed.get(player) || 0) >= REDRIP_MS;
     if (needGas) seen.set(player, Date.now());
     if (needClaim) claimed.set(player, Date.now());
-    if (!needGas && !needClaim) return send(res, 200, { ok: true, gas: null, claim: null });
+    if (!needGas && !needClaim) { console.log(`drip ${player}: nothing to send (${formatEther(eth)} ETH)`); return send(res, 200, { ok: true, gas: null, claim: null }); }
     // both transactions leave together from one key: consecutive nonces, taken under a lock
     const out = await (nonceLock = nonceLock.catch(() => {}).then(async () => {
       let n = await provider.getTransactionCount(w.address, 'pending');
       const fee = await provider.getFeeData();
-      const opts = { maxFeePerGas: fee.maxFeePerGas * 2n, maxPriorityFeePerGas: fee.maxPriorityFeePerGas * 2n };
+      // the same 0.2 gwei tip floor as the game account: Sepolia's suggested tip can be a few wei, and such a
+      // transaction may wait several blocks (a first visit once waited 41 s for its claim)
+      const MIN_TIP = 200_000_000n, tip = fee.maxPriorityFeePerGas * 2n > MIN_TIP ? fee.maxPriorityFeePerGas * 2n : MIN_TIP;
+      const opts = { maxFeePerGas: fee.maxFeePerGas * 2n + tip, maxPriorityFeePerGas: tip };
       const sent = await Promise.all([
         needGas ? w.sendTransaction({ to: player, value: parseEther(GAS_ETH), nonce: n++, ...opts }) : null,
         needClaim ? faucet.claimFor(player, { nonce: n++, gasLimit: 1_600_000n, ...opts }) : null,
