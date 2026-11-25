@@ -220,8 +220,12 @@ async function session() {
     const top = askDrip(s.address);
     if (eth < SESSION_TX_ETH) {
       const d = await top;
-      if (!d?.gas) throw new Error('Your game account is out of gas and the top-up did not go through. Try again in a minute');
-      status({ kind: 'chain', text: 'Topping up your game gas…' }); await W.receipt(d.gas, 60_000).catch(() => {}); status(null);
+      status({ kind: 'chain', text: 'Topping up your game gas…' });
+      if (d?.gas) await W.receipt(d.gas, 60_000).catch(() => {});
+      // nothing sent now: a top-up sent moments ago (first visit) may still be landing, or this node lags
+      for (let i = 0; i < 20 && (await s.eth().catch(() => 0)) < SESSION_TX_ETH; i++) await sleep(1500);
+      status(null);
+      if ((await s.eth().catch(() => 0)) < SESSION_TX_ETH) throw new Error('Your game account is out of gas and the top-up did not go through. Try again in a minute');
     }
   }
   return s;
