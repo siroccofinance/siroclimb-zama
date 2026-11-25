@@ -27,9 +27,10 @@ export const STEP_SECONDS = 6;
 export const RUN_SECONDS = 60;
 export const MOVE_SCALE = 25;
 export const MAX_STAKE = 100;
-/** Gas sent once from the wallet to the browser's session key (it pays every game transaction). */
-export const SESSION_FUND_ETH = '0.03';
-export const SESSION_MIN_ETH = 0.006;
+/** Gas for the game account (it pays every game transaction): the server drip sends SESSION_FUND_ETH
+ *  and again when the account falls below SESSION_MIN_ETH (one 6M-gas transaction at 0.4 gwei, F60). */
+export const SESSION_FUND_ETH = '0.005';
+export const SESSION_MIN_ETH = 0.0025;
 
 export const txUrl = h => `${EXPLORER}/tx/${h}`;
 export const addressUrl = a => `${EXPLORER}/address/${a}`;
