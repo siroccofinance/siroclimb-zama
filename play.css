@@ -165,6 +165,8 @@ body[data-screen="intro"] .stage::before { opacity: 0; }
 .markets { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 .markets::-webkit-scrollbar { display: none; }
 .markets > * { flex: none; }
+/* the focus ring sits inside the card: the scrolling row clips anything drawn outside it */
+.market:focus-visible { outline-offset: -3px; border-radius: 12px; }
 /* laptops and up: the six markets share one row, always whole. The cards shrink with the row
    (container queries): first the kind label goes, then the plain name, then price and change stack. */
 @media (min-width: 768px) {
