@@ -262,7 +262,7 @@ function renderLobby() {
   for (const [id, c] of Object.entries(chip)) c.b.setAttribute('aria-pressed', String(id === C.asset));
   api.focus(C.asset);
   api.prepare({ side: C.side, stake: C.stake });     // encrypt the pick now, so the click only sends it
-  $('#lobbyHint').textContent = STAIRS ? 'The coin rolls on the live price. Leverage grows every 6 seconds. Your side and stake stay encrypted.' : 'Climb at your own pace. The coin steps up every 6 seconds.';
+  $('#lobbyHint').textContent = STAIRS ? 'You hold real tokens, 4x your stake. The coin rolls on the live price, moves count ×25, the game leverage grows every 6 seconds. Side and stake stay encrypted.' : 'Climb at your own pace. The coin steps up every 6 seconds.';
   renderGo();
 }
 function renderGo() {
@@ -354,6 +354,8 @@ function hudFrame(dt) {
   $('#pL').textContent = levTxt(run.ladder[shownStep]);
   $('#cashV').textContent = money(Math.max(0, D.value));
   $('#bV').textContent = money(u && u.borrowed != null ? u.borrowed : 0);
+  if (u && u.qty != null) $('#bQ').textContent = `${u.qty.toFixed(u.qty < 1 ? 4 : 2)} ${label(byId[run.assetId])}`;
+  $('#bS').textContent = run.side === 'short' ? 'Short' : 'Holding';
   const left = Math.max(0, 1 - D.danger);
   $('#sBar').style.transform = `scaleX(${left})`;
   $('#sTxt').textContent = D.danger < 0.02 ? 'Stake safe' : `${Math.round(left * 100)}% of stake left`;
@@ -430,6 +432,9 @@ function showResult(res) {
   const a = byId[run.assetId];
   const stats = [['Return', pct(res.pnlPct)], ['Top leverage', levTxt(res.maxLeverage)], ['Time', `${Math.max(1, Math.round(res.duration))}s`],
     [`${label(a)} entry → exit`, `${price(res.entryPrice)} → ${price(res.exitPrice)}`]];
+  // the payout = the real position (tokens bought or borrowed at the real price) + the game boost (moves x25)
+  if (res.position != null) stats.push([`Real position (${res.qty != null ? `${res.qty.toFixed(res.qty < 1 ? 4 : 2)} ` : ''}${res.token || label(a)})`, `${money(res.position)} cUSDC`],
+    ['Game boost (moves ×25)', `${signed(res.boost)} cUSDC`]);
   if (res.interest != null) stats.push(['Borrowed', `${money(res.borrowed || 0)} cUSDC`], ['Interest paid', `${tiny(res.interest)} cUSDC`]);
   $('#rS').innerHTML = stats.map(([k, v], i) => `<div${i ? '' : ` class="is-key${res.pnlPct > 0.005 ? ' is-up' : ''}"`}><dt>${k}</dt><dd>${v}</dd></div>`).join('');
   const rr = $('#rR'); rr.hidden = !res.pending;
