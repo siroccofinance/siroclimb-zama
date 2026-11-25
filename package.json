@@ -13,12 +13,12 @@
     "test:chain:solo": "node tests/chain/solo.mjs"
   },
   "devDependencies": {
-    "ethers": "^6.17.0",
     "puppeteer-core": "^22.15.0",
     "three": "^0.160.0"
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",
-    "satori": "^0.63.2"
+    "satori": "^0.63.2",
+    "ethers": "^6.17.0"
   }
 }
