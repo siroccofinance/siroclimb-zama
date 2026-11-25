@@ -58,7 +58,8 @@ export default async function handler(req, res) {
   if (limited(req, 90)) return send(res, 429, { ok: false, reason: 'rate-limited' });
   try {
     const body = await pythUpdate();
-    send(res, body.ok ? 200 : 503, body);
+    // no entitled feed is a normal state (the front then uses /api/prices): 200, so browsers do not log errors
+    send(res, body.ok || body.reason === 'no-entitled-feed' || body.reason === 'no-key' ? 200 : 503, body, body.ok ? 0 : 60);
   } catch (e) {
     send(res, 502, { ok: false, reason: e.name || 'error' });
   }

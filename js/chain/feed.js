@@ -32,8 +32,11 @@ function quote(i, price, source, open) {
 // a short flat history so the first chart and step size have something to work with
 function seed(f) { const now = Date.now(); for (let k = 40; k > 0; k--) f.hist.push({ price: f.price, ts: now - k * 1000 }); }
 
+let pythOffUntil = 0;   // no entitled Pyth feed: ask again once a minute, not every poll
 async function poll() {
-  const [pyth, ref] = await Promise.allSettled([getJson('/api/pyth'), getJson('/api/prices')]);
+  const askPyth = Date.now() >= pythOffUntil;
+  const [pyth, ref] = await Promise.allSettled([askPyth ? getJson('/api/pyth') : Promise.reject(new Error('off')), getJson('/api/prices')]);
+  if (askPyth && pyth.status === 'fulfilled' && !pyth.value.ok) pythOffUntil = Date.now() + 60_000;
   const covered = new Set();
   if (pyth.status === 'fulfilled' && pyth.value.ok) {
     pythPayload.at = Date.now(); pythPayload.body = pyth.value;
