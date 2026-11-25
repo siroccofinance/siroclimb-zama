@@ -14,10 +14,17 @@ const ADDR = json('js/chain/deployments.json')['11155111'];
 const ABI = json('js/chain/abi.json');
 const LADDER = [1, 1.5, 2, 2.5, 3, 3.5, 4], SCALE = 1e6, RUN_SECONDS = 60, ENDED = 2;
 const RPC = process.env.CHAIN_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
-let game = null;
-const contract = () => (game ||= new Contract(ADDR.Siroclimb, ABI.Siroclimb, new JsonRpcProvider(RPC, 11155111, { staticNetwork: true, batchMaxCount: 1 })));
+/** The game before real positions (2026-11-25): share links minted for its runs keep reading it. */
+export const LEGACY_GAME = '0x890b2bAb3f2EC280FcD4761cC0C655eaE13f03a0';
+let provider = null;
+const games = new Map();
+const contract = (address = ADDR.Siroclimb) => {
+  provider ||= new JsonRpcProvider(RPC, 11155111, { staticNetwork: true, batchMaxCount: 1 });
+  if (!games.has(address)) games.set(address, new Contract(address, ABI.Siroclimb, provider));
+  return games.get(address);
+};
 
-const cache = new Map();   // runId -> verified run (a published run never changes)
+const cache = new Map();   // game:runId -> verified run (a published run never changes)
 
 async function retry(fn, n = 3) { for (let i = 0; ; i++) { try { return await fn(); } catch (e) { if (i >= n) throw e; await new Promise(r => setTimeout(r, 1200)); } } }
 
@@ -38,11 +45,12 @@ async function publishedPnl(g, runId) {
  * entryPrice, exitPrice, published, pnlPct, side } (pnlPct and side null until published),
  * or null when the run does not exist or is not over.
  */
-export async function verifiedRun(runId) {
+export async function verifiedRun(runId, game = ADDR.Siroclimb) {
   runId = Number(runId);
   if (!Number.isInteger(runId) || runId < 0) return null;
-  if (cache.has(runId)) return cache.get(runId);
-  const g = contract();
+  const key = `${game}:${runId}`;
+  if (cache.has(key)) return cache.get(key);
+  const g = contract(game);
   if (runId >= Number(await retry(() => g.runCount()))) return null;
   const r = await retry(() => g.getRun(BigInt(runId)));
   if (Number(r.status) !== ENDED) return null;
@@ -58,6 +66,6 @@ export async function verifiedRun(runId) {
     entryPrice: Number(r.entryPrice) / 1e10, exitPrice: Number(r.exitPrice) / 1e10,
     published: pnl != null, pnlPct: pnl == null ? null : pnl / 1e4, side,
   };
-  if (v.published) cache.set(runId, v);
+  if (v.published) cache.set(key, v);
   return v;
 }
