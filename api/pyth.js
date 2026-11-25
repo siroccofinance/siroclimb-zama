@@ -55,7 +55,7 @@ export async function pythUpdate() {
 }
 
 export default async function handler(req, res) {
-  if (limited(req, 90)) return send(res, 429, { ok: false, reason: 'rate-limited' });
+  if (limited(req, 90, 'pyth')) return send(res, 429, { ok: false, reason: 'rate-limited' });
   try {
     const body = await pythUpdate();
     // no entitled feed is a normal state (the front then uses /api/prices): 200, so browsers do not log errors
