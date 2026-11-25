@@ -205,30 +205,44 @@ export async function setupNeeds() {
 }
 
 /**
- * First visit: one wallet signature (derives the game account) and one transfer (gas for it). The
- * account then approves the game as ERC-7984 operator of its own cUSDC in the background, queued
- * before its first game transaction. `step(label)` reports progress.
+ * First visit: one wallet signature (derives the game account), then gas for it. `onAccount(address)`
+ * runs as soon as the account exists and returns true when the server drip is sending the gas (the
+ * wallet is then not asked for a transfer); otherwise the wallet sends it. The account approves the
+ * game as ERC-7984 operator in the background. `step(label)` reports progress.
  */
-export async function setup(step = () => {}) {
+export async function setup(step = () => {}, { onAccount = null } = {}) {
   if (!storedGameKey(wallet.address)) {
-    step('Sign once to create your game account (wallet)');
+    step('Sign once to create your game account');
     const sig = await wallet.signer.signMessage(gameMessage(wallet.address));
     store.set(keyStore(wallet.address), keccak256(sig));
   }
   const s = currentSession();
+  const dripping = onAccount ? await onAccount(s.address) : false;
+  if (dripping && (await s.eth()) < SESSION_MIN_ETH) {
+    // the server's gas lands in the next block: the player plays on meanwhile, the account's own
+    // transactions (operator approval, start) wait for it
+    gasReady = (async () => { for (let i = 0; i < 80 && (await s.eth()) < SESSION_MIN_ETH; i++) await sleep(1500); })();
+    gasReady.then(() => ensureOperator(s)).catch(() => {});
+    return s;
+  }
   if ((await s.eth()) < SESSION_MIN_ETH) {
-    const spare = (await walletEth()) - 0.002;
-    const fund = Math.min(Number(SESSION_FUND_ETH), spare);
-    if (fund < 0.008) throw new Error('Your wallet needs a little Sepolia ETH (about 0.03) for game gas. Get some from a Sepolia faucet');
-    step('Send gas to your game account (wallet)');
-    const tx = await wallet.signer.sendTransaction({ to: s.address, value: parseEther(fund.toFixed(6)) });
-    emitTx({ label: 'fund', hash: tx.hash, from: wallet.address, state: 'sent' });
-    step('Confirming on Sepolia…');
-    await mined(tx.hash, 'gas transfer');
+    {
+      const spare = (await walletEth()) - 0.002;
+      const fund = Math.min(Number(SESSION_FUND_ETH), spare);
+      if (fund < 0.008) throw new Error('Your wallet needs a little Sepolia ETH (about 0.03) for game gas. Get some from a Sepolia faucet');
+      step('Send gas to your game account (wallet)');
+      const tx = await wallet.signer.sendTransaction({ to: s.address, value: parseEther(fund.toFixed(6)) });
+      emitTx({ label: 'fund', hash: tx.hash, from: wallet.address, state: 'sent' });
+      step('Confirming the gas on Sepolia…');
+      await mined(tx.hash, 'gas transfer');
+    }
   }
   ensureOperator(s);
   return s;
 }
+
+/** Resolves once the game account has its gas (first visit: the server drip is on its way). */
+export let gasReady = Promise.resolve();
 
 /** The game account lets `spender` (the game, or the reserve for deposits) pull its cUSDC (ERC-7984 operator), once. */
 const operatorFor = new Map();
@@ -247,7 +261,10 @@ export function ensureOperator(s = currentSession()) {
   if (!s) return Promise.resolve();
   operatorChecked ||= (async () => {
     if (await token.isOperator(s.address, ADDR.Siroclimb)) return;
-    await s.send(token, 'setOperator', [ADDR.Siroclimb, Math.floor(Date.now() / 1000) + 365 * 86400], 0n, 'setOperator');
+    // broadcast only: a start queued behind it leaves right after (next nonce, same block) instead of
+    // waiting a block for this approval to be mined (startRun has a fixed gas limit, no estimate)
+    const sent = await s.send(token, 'setOperator', [ADDR.Siroclimb, Math.floor(Date.now() / 1000) + 365 * 86400], 0n, 'setOperator', { fast: true });
+    sent.mined.catch(() => { operatorChecked = null; });
   })().catch(e => { operatorChecked = null; throw e; });
   return operatorChecked;
 }
