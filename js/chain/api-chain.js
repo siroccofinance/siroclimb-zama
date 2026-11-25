@@ -9,7 +9,7 @@
 //  - the leverage of every run is borrowed from the Sirocco Reserve (SiroccoReserve), a confidential
 //    cUSDC lending pool: S x (L - 1) is borrowed, interest is charged on it, the PnL goes to lenders;
 //  - this browser is also the keeper (autopilot.js): price checkpoints, expired runs, reserve syncs.
-import { ADDR, LADDER, MARKETS, MAX_STAKE, MOVE_SCALE, PRICE_DECIMALS, RUN_SECONDS, SCALE, STEP_SECONDS, USDC, indexOf, txUrl } from './config.js';
+import { ADDR, LADDER, MARKETS, MAX_STAKE, MOVE_SCALE, PRICE_DECIMALS, RUN_SECONDS, SCALE, SESSION_MIN_ETH, STEP_SECONDS, USDC, indexOf, txUrl } from './config.js';
 import * as feed from './feed.js';
 import { encryptAmount, encryptRun, ensureGrant, hasGrant, publicDecrypt, userDecrypt, warmUp } from './fhe.js';
 import * as W from './wallet.js';
@@ -193,10 +193,18 @@ export async function faucet() {
   return bal;
 }
 
+let lastRedrip = 0;
 async function session() {
   await W.gasReady;
   if (!W.player() || !ready) await connect();
-  return W.currentSession();
+  const s = W.currentSession();
+  // re-drip on demand: an account below the floor asks the server again (at most every 2 min) and waits for it
+  if (Date.now() - lastRedrip > 120_000 && (await s.eth().catch(() => 1)) < SESSION_MIN_ETH) {
+    lastRedrip = Date.now();
+    const d = await askDrip(s.address);
+    if (d?.gas) { status({ kind: 'chain', text: 'Topping up your game gas…' }); await W.receipt(d.gas, 60_000).catch(() => {}); status(null); }
+  }
+  return s;
 }
 
 // ───────────────────────────── runs

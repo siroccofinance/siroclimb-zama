@@ -229,7 +229,7 @@ export async function setup(step = () => {}, { onAccount = null } = {}) {
     {
       const spare = (await walletEth()) - 0.002;
       const fund = Math.min(Number(SESSION_FUND_ETH), spare);
-      if (fund < 0.008) throw new Error('Your wallet needs a little Sepolia ETH (about 0.03) for game gas. Get some from a Sepolia faucet');
+      if (fund < SESSION_MIN_ETH) throw new Error('Your wallet needs a little Sepolia ETH (about 0.005) for game gas. Get some from a Sepolia faucet');
       step('Send gas to your game account (wallet)');
       const tx = await wallet.signer.sendTransaction({ to: s.address, value: parseEther(fund.toFixed(6)) });
       emitTx({ label: 'fund', hash: tx.hash, from: wallet.address, state: 'sent' });
