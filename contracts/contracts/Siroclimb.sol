@@ -10,6 +10,7 @@ import {IERC7984} from "@openzeppelin/confidential-contracts/interfaces/IERC7984
 import {ClimbPriceOracle} from "./ClimbPriceOracle.sol";
 import {ClimbLadder} from "./ClimbLadder.sol";
 import {SiroccoReserve} from "./SiroccoReserve.sol";
+import {SiroccoDesk} from "./SiroccoDesk.sol";
 
 /// @title Siroclimb
 /// @notice The Sirocco climbing game on the Zama Protocol: pick a market, go long or short, the
@@ -27,8 +28,17 @@ import {SiroccoReserve} from "./SiroccoReserve.sol";
 ///    pool: a run of stake S at leverage L borrows S x (L - 1), and pays interest on it for the
 ///    time it is borrowed. The borrowed amount and the interest follow the encrypted stake, so they
 ///    stay encrypted; the reserve commits liquidity in clear with the public bound of a run;
+///  - every run holds a real position in its market's confidential token, traded with the Sirocco
+///    desk (`SiroccoDesk`) at the oracle price plus or minus a spread: stake + borrowed cUSDC
+///    (`POSITION_LEVERAGE` x the stake) buys the token for a long; a short borrows the token from the
+///    desk and sells it. At the end the long sells, the short buys back and returns, the loan and its
+///    interest go back to the reserve. Quantities and cash legs are encrypted, and both legs of every
+///    trade move whatever the side (one with an encrypted 0);
+///  - the payout keeps the game's amplification: every move counts `moveScale` times on the ladder
+///    (`ClimbLadder`). The part of the payout beyond the real position ("game boost", positive or
+///    negative) is settled with the reserve, encrypted; the player can decrypt both parts;
 ///  - leverage packs are drawn with the on-chain encrypted PRNG and stay private: a packed run's
-///    leverage cap is selected on ciphertexts (and so is the interest of its capped path).
+///    leverage cap is selected on ciphertexts.
 ///
 /// Every lifecycle step after a player's own action is permissionless (`settleRun`, `recordRun`,
 /// price pushes), so the players' browsers can run the game with nothing else.
@@ -47,6 +57,9 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
     ///         a few blocks); a fallback price can ride along to refresh it in the same transaction.
     uint64 public constant MAX_ENTRY_AGE = 60;
     uint64 public constant PACK_COOLDOWN = 10 minutes;
+    /// @notice The real position of a run: stake + borrowed cUSDC = this many times the stake, held
+    ///         from the start to the end (the borrowed part is (POSITION_LEVERAGE - 1) x the stake).
+    uint64 public constant POSITION_LEVERAGE = 4;
 
     // ---------------------------------------------------------------- types
 
@@ -83,6 +96,9 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
         euint64 interest; // borrow interest charged at the end
         euint32 mult; // the player's own multiplier (selected with the encrypted side)
         euint8 cap; // packed runs: encrypted top ladder step
+        euint64 qty; // market tokens held (long) or owed to the desk (short)
+        euint64 cashLeg; // long: cUSDC paid for them; short: cUSDC the sale brought in
+        euint64 position; // what the real position is worth at the end: stake + sale - cost - interest, floored at 0
     }
 
     struct Result {
@@ -105,10 +121,15 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
     ClimbLadder public immutable ladder;
     /// @notice The Sirocco Reserve: lends the leverage of every run, receives its PnL and interest.
     SiroccoReserve public immutable reserve;
+    /// @notice The Sirocco desk: real trades of the market tokens for every run's position.
+    SiroccoDesk public immutable desk;
     /// @notice Borrow rate (reserve's APR in basis points) and its divisor, see `interestOf`.
     uint64 public immutable borrowAprBps;
     uint64 public immutable interestDivisor;
     uint256 public immutable marketCount;
+
+    /// @notice The confidential token of each market (cTSLAx, cNVDAx, cAAPLx, cAMZNx, cXAUt, ctGBP).
+    IERC7984[] public marketTokens;
 
     Run[] private _runs;
     mapping(uint256 runId => Sealed) private _sealed;
@@ -163,17 +184,34 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
     event PublishRequested(uint256 indexed runId, bytes32 multHandle);
     event Borrowed(uint256 indexed runId, bytes32 lentHandle);
     event InterestCharged(uint256 indexed runId, bytes32 interestHandle);
+    event PositionOpened(uint256 indexed runId, address indexed token, uint64 price, bytes32 qtyHandle, bytes32 cashHandle);
+    event PositionClosed(uint256 indexed runId, uint64 price, bytes32 positionHandle);
 
-    constructor(address owner_, IERC7984 token_, ClimbLadder ladder_, SiroccoReserve reserve_) Ownable(owner_) {
+    constructor(
+        address owner_,
+        IERC7984 token_,
+        ClimbLadder ladder_,
+        SiroccoReserve reserve_,
+        SiroccoDesk desk_,
+        IERC7984[] memory marketTokens_
+    ) Ownable(owner_) {
         token = token_;
         ladder = ladder_;
         reserve = reserve_;
+        desk = desk_;
         oracle = ladder_.oracle();
         marketCount = oracle.marketCount();
         borrowAprBps = reserve_.borrowAprBps();
         interestDivisor = reserve_.interestDivisor();
         if (ladder_.SCALE() != SCALE || ladder_.MAX_MULT() != MAX_MULT) revert BadLadder();
         if (address(reserve_.asset()) != address(token_)) revert BadLadder();
+        if (address(desk_.cash()) != address(token_) || marketTokens_.length != marketCount) revert BadLadder();
+        // the desk pulls the runs' legs itself (ERC-7984 operator of the game's cUSDC and market tokens)
+        token_.setOperator(address(desk_), type(uint48).max);
+        for (uint256 i; i < marketTokens_.length; ++i) {
+            marketTokens.push(marketTokens_[i]);
+            marketTokens_[i].setOperator(address(desk_), type(uint48).max);
+        }
     }
 
     // ---------------------------------------------------------------- players and sessions
@@ -292,6 +330,17 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
         s.lent = reserve.lend(runId, MAX_PAYOUT);
         FHE.allowThis(s.lent);
         emit Borrowed(runId, FHE.toBytes32(s.lent));
+
+        // the real position: stake + borrowed cUSDC buys the market token (long), or the token is
+        // borrowed from the desk and sold (short). A run the reserve could not fund takes no position.
+        euint64 notional = FHE.select(FHE.eq(s.lent, MAX_PAYOUT), FHE.mul(s.paid, POSITION_LEVERAGE), FHE.asEuint64(0));
+        FHE.allowTransient(s.long, address(desk));
+        FHE.allowTransient(notional, address(desk));
+        IERC7984 mt = marketTokens[market];
+        (s.qty, s.cashLeg) = desk.open(runId, mt, s.long, notional, price);
+        _own64(s.qty, player);
+        _own64(s.cashLeg, player);
+        emit PositionOpened(runId, address(mt), price, FHE.toBytes32(s.qty), FHE.toBytes32(s.cashLeg));
         emit RunStarted(runId, player, market, r.startAt, price, r.packed, FHE.toBytes32(s.long), FHE.toBytes32(s.paid));
     }
 
@@ -391,18 +440,18 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
         );
     }
 
-    /// @notice What a run borrows over `elapsed` seconds, in (leverage - 1) x seconds, tenths: the
-    ///         ladder is 1x, 1.5x ... 4x (10 + 5 x step tenths), one step every 6 s, capped at `cap`.
+    /// @notice What a run borrows over `elapsed` seconds, in leverage tenths x seconds: the position
+    ///         borrows (POSITION_LEVERAGE - 1) x the stake for the whole run (30 tenths at 4x).
     ///         Interest = paid x borrowAprBps x this / interestDivisor.
-    function borrowedTenthSeconds(uint64 elapsed, uint8 cap) public pure returns (uint64 total) {
-        for (uint64 i; i <= TOP_STEP; ++i) {
-            uint64 from = i * STEP_SECONDS;
-            if (elapsed <= from) break;
-            uint64 to = i == TOP_STEP ? elapsed : (i + 1) * STEP_SECONDS;
-            if (to > elapsed) to = elapsed;
-            uint64 step = i > cap ? cap : i;
-            total += 5 * step * (to - from);
-        }
+    function borrowedTenthSeconds(uint64 elapsed) public pure returns (uint64) {
+        return 10 * (POSITION_LEVERAGE - 1) * elapsed;
+    }
+
+    /// @notice Handles of a run's real position: market tokens held (long) or owed (short), its cash leg,
+    ///         and what the position was worth at the end. Player only.
+    function positionHandles(uint256 runId) external view returns (bytes32 qty, bytes32 cashLeg, bytes32 position) {
+        Sealed storage s = _sealed[runId];
+        return (FHE.toBytes32(s.qty), FHE.toBytes32(s.cashLeg), FHE.toBytes32(s.position));
     }
 
     function resultCount() external view returns (uint256) {
@@ -443,14 +492,8 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
                 mult = FHE.select(FHE.eq(s.cap, caps[k]), FHE.select(s.long, FHE.asEuint32(cl), FHE.asEuint32(cs)), mult);
             }
         }
-        // interest on the borrowed part, S x (L - 1) over time; a packed run borrows along its cap
-        euint64 rate = FHE.asEuint64(borrowAprBps * borrowedTenthSeconds(t, TOP_STEP));
-        if (r.packed) {
-            uint8[3] memory caps = [uint8(1), 2, 4];
-            for (uint256 k; k < 3; ++k)
-                rate = FHE.select(FHE.eq(s.cap, caps[k]), FHE.asEuint64(borrowAprBps * borrowedTenthSeconds(t, caps[k])), rate);
-        }
-        euint64 interest = FHE.div(FHE.mul(s.paid, rate), interestDivisor);
+        // interest on what the position borrowed, (POSITION_LEVERAGE - 1) x the stake, for the run's time
+        euint64 interest = FHE.div(FHE.mul(s.paid, borrowAprBps * borrowedTenthSeconds(t)), interestDivisor);
         euint64 gross = FHE.div(FHE.mul(s.paid, FHE.asEuint64(mult)), SCALE);
         // the reserve could not lend: no leverage was taken, the stake goes back as it came
         ebool funded = FHE.eq(s.lent, MAX_PAYOUT);
@@ -465,13 +508,29 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
         s.interest = charged;
         _own64(value, r.player);
         _own64(charged, r.player);
+
+        // close the real position with the desk: the long sells, the short buys back and returns
+        FHE.allowTransient(s.long, address(desk));
+        FHE.allowTransient(s.qty, address(desk));
+        FHE.allowTransient(s.cashLeg, address(desk));
+        (euint64 cashIn, euint64 cashPaid) = desk.close(runId, marketTokens[r.market], s.long, s.qty, s.cashLeg, exitPrice);
+        // the real position: stake + what came in - what went out - interest on the loan (never below 0)
+        euint64 posIn = FHE.add(s.paid, cashIn);
+        euint64 posOut = FHE.add(cashPaid, FHE.select(funded, interest, FHE.asEuint64(0)));
+        s.position = FHE.select(FHE.ge(posIn, posOut), FHE.sub(posIn, posOut), FHE.asEuint64(0));
+        _own64(s.position, r.player);
+
         _pay(r.player, value);
-        // everything else goes back to the reserve: stake + lent - payout (interest included)
-        _pay(address(reserve), FHE.sub(FHE.add(s.paid, s.lent), value));
+        // everything else goes back to the reserve: stake + lent + cash in - cash out - payout. It repays the
+        // loan with its interest, and settles the game boost (payout minus the real position) either way.
+        euint64 held = FHE.add(posIn, s.lent);
+        euint64 owed = FHE.add(cashPaid, value);
+        _pay(address(reserve), FHE.select(FHE.ge(held, owed), FHE.sub(held, owed), FHE.asEuint64(0)));
         FHE.allowTransient(s.lent, address(reserve));
         FHE.allowTransient(charged, address(reserve));
         reserve.repaid(runId, MAX_PAYOUT, s.lent, charged);
         emit InterestCharged(runId, FHE.toBytes32(charged));
+        emit PositionClosed(runId, exitPrice, FHE.toBytes32(s.position));
         emit RunEnded(runId, r.player, exitAt, exitPrice, ml, ms, FHE.toBytes32(s.value));
     }
 
