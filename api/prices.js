@@ -79,6 +79,6 @@ export async function prices() {
 }
 
 export default async function handler(req, res) {
-  if (limited(req, 120)) return send(res, 429, { ok: false, reason: 'rate-limited' });
+  if (limited(req, 120, 'prices')) return send(res, 429, { ok: false, reason: 'rate-limited' });
   try { send(res, 200, await prices()); } catch (e) { send(res, 502, { ok: false, reason: e.message }); }
 }

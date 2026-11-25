@@ -14,10 +14,11 @@ export function send(res, status, body, maxAge = 0) {
 }
 
 const hits = new Map();
-/** Per-client rate limit (requests per minute); true when over. */
-export function limited(req, perMinute) {
+/** Per-client, per-route rate limit (requests per minute); true when over. Each route has its own
+ *  count: the price polling (30 a minute) must not use up the drip's or the share link's budget. */
+export function limited(req, perMinute, route = (req.url || '').split('?')[0]) {
   const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'local').split(',')[0].trim();
-  const now = Date.now(), h = hits.get(ip);
-  if (!h || now > h.reset) { hits.set(ip, { n: 1, reset: now + 60_000 }); return false; }
+  const k = `${route}|${ip}`, now = Date.now(), h = hits.get(k);
+  if (!h || now > h.reset) { hits.set(k, { n: 1, reset: now + 60_000 }); return false; }
   return ++h.n > perMinute;
 }

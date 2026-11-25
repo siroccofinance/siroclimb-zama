@@ -77,7 +77,7 @@ async function gasOk(k) {
   // checkpoints and settlements cost ~0.2M gas each (~0.00004 ETH at 0.2 gwei): a small float is plenty
   if (eth < 0.0004) {
     const s = W.currentSession();
-    if (s && (await s.eth().catch(() => 0)) > 0.003) { await s.sendEth(k.address, 0.0012).catch(() => {}); eth = await k.eth().catch(() => 0); }
+    if (s && (await s.eth().catch(() => 0)) > 0.0045) { await s.sendEth(k.address, 0.001).catch(() => {}); eth = await k.eth().catch(() => 0); }   // never below the account's own floor
   }
   gasCheck.ok = eth > 0.0001;
   return gasCheck.ok;

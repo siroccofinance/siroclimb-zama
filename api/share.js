@@ -8,7 +8,7 @@ import { origin, sign } from './_share.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.setHeader('allow', 'POST'); return send(res, 405, { error: 'POST only' }); }
-  if (limited(req, 30)) return send(res, 429, { error: 'Too many share links, try again in a minute' });
+  if (limited(req, 30, 'share')) return send(res, 429, { error: 'Too many share links, try again in a minute' });
   let b;
   try { b = await readJson(req); } catch { return send(res, 400, { error: 'Bad request' }); }
   const runId = Number(b.runId);
