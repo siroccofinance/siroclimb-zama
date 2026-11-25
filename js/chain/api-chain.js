@@ -424,7 +424,8 @@ async function sendCashOut(run, frozenPyth, after = null) {
 /** Reads the settled run from the chain: the public long/short multipliers + the player's side. */
 export async function settleFromChain(run) {
   for (let i = 0; i < 40; i++) {
-    const r = await game.getRun(BigInt(run.cid));
+    // a node behind the load balancer may not have the run's block yet (it reverts Panic 0x32): retried
+    const r = await W.view(() => game.getRun(BigInt(run.cid), ...(run.txBlock ? [{ blockTag: run.txBlock }] : [])), 6);
     if (Number(r.status) === 2) {
       const m = run.side === 'long' ? r.multLong : r.multShort, mult = Number(m) / SCALE;
       const { value, interest } = net(run.stake, m, Number(r.endAt - r.startAt));
