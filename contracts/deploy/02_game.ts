@@ -15,6 +15,17 @@ const FAUCET_COOLDOWN = 600;
 /** Sirocco Reserve: borrow APR in basis points, and the deployer's seed as first lender (cUSDC). */
 export const BORROW_APR_BPS = Number(process.env.BORROW_APR_BPS ?? 2000);
 const RESERVE_SEED = BigInt(process.env.RESERVE_SEED ?? 250_000) * 1_000_000n;
+/** Sirocco desk: half spread around the oracle price (bps), and its inventories (whole tokens). */
+export const DESK_SPREAD_BPS = Number(process.env.DESK_SPREAD_BPS ?? 10);
+const DESK_CASH = 500_000n; // cUSDC, for the shorts' sales
+const DESK_STOCK: Record<string, bigint> = { TSLAx: 100_000n, NVDAx: 200_000n, AAPLx: 100_000n, AMZNx: 100_000n, XAUt: 2_000n, tGBP: 1_000_000n };
+const ERC20_ABI = [
+  "function mint(address,uint256)",
+  "function approve(address,uint256) returns (bool)",
+  "function allowance(address,address) view returns (uint256)",
+  "function balanceOf(address) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+];
 
 const REGISTRY_ABI = [
   "function getConfidentialTokenAddress(address token) view returns (bool, address)",
@@ -51,12 +62,39 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const oracle = await deploy("ClimbPriceOracle", { from: deployer, args: [deployer, pyth, MARKETS.map((m) => m.pyth)], log: true });
   const ladder = await deploy("ClimbLadder", { from: deployer, args: [oracle.address, MOVE_SCALE], log: true });
   const reserve = await deploy("SiroccoReserve", { from: deployer, args: [deployer, stake, BORROW_APR_BPS], log: true });
+  const desk = await deploy("SiroccoDesk", { from: deployer, args: [deployer, stake, DESK_SPREAD_BPS], log: true });
+  // the markets' confidential tokens: Zama's for XAUt and GBP, our mirrors for the stocks (01_mirrors)
+  const marketTokens: string[] = [];
+  for (const m of MARKETS) {
+    if (m.token.origin === "zama" && sepolia) marketTokens.push(m.token.sepolia!);
+    else marketTokens.push((await hre.deployments.getOrNull(m.token.symbol))?.address ?? (await deployLocalToken(hre, deployer, m.token.symbol)));
+  }
   const game = await deploy("Siroclimb", {
     from: deployer,
-    args: [deployer, stake, ladder.address, reserve.address],
+    args: [deployer, stake, ladder.address, reserve.address, desk.address, marketTokens],
     log: true,
   });
   if ((await read("SiroccoReserve", "game")) === hre.ethers.ZeroAddress) await execute("SiroccoReserve", { from: deployer, log: true }, "setGame", game.address);
+  if ((await read("SiroccoDesk", "game")) === hre.ethers.ZeroAddress) await execute("SiroccoDesk", { from: deployer, log: true }, "setGame", game.address);
+  // the desk's inventories: every market token (minted from its public underlying, wrapped in the desk)
+  // and cUSDC for the shorts' sales. Zama's XAUtMock, GBPMock and USDCMock mint publicly, like our mirrors.
+  const signer = await hre.ethers.getSigner(deployer);
+  const stockDesk = async (wrapperAddr: string, whole: bigint, label: string) => {
+    const w = await hre.ethers.getContractAt(["function underlying() view returns (address)"], wrapperAddr);
+    const u = await hre.ethers.getContractAt(ERC20_ABI, await w.underlying(), signer);
+    const amount = whole * 10n ** BigInt(await u.decimals());
+    const perCall = 1_000_000n * 10n ** BigInt(await u.decimals());
+    for (let left = amount; left > 0n; left -= left > perCall ? perCall : left) await (await u.mint(deployer, left > perCall ? perCall : left)).wait();
+    await (await u.approve(desk.address, amount)).wait();
+    for (let i = 0; i < 20 && (await u.allowance(deployer, desk.address)) < amount; i++) await new Promise((r) => setTimeout(r, 3000));
+    await execute("SiroccoDesk", { from: deployer, log: true }, "stock", wrapperAddr, amount);
+    log(`desk stocked with ${whole} ${label}`);
+  };
+  // stocked once, when the desk is new (STOCK_DESK=1 stocks it again)
+  if (desk.newlyDeployed || process.env.STOCK_DESK) {
+    for (const [i, m] of MARKETS.entries()) await stockDesk(marketTokens[i], DESK_STOCK[m.id] ?? 100_000n, m.token.symbol);
+    await stockDesk(stake, DESK_CASH, "cUSDC");
+  }
   // the deployer is the first lender: mints the public underlying, deposits it (public amount)
   if ((await read("SiroccoReserve", "syncedShares")) == 0n) {
     const wrapper = await hre.ethers.getContractAt(["function underlying() view returns (address)"], stake);
@@ -89,9 +127,16 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     log(`seed ${MARKETS.map((m, i) => `${m.id}=${Number(prices[i]) / 1e10}`).join(" ")}`);
     await execute("ClimbPriceOracle", { from: deployer, log: true }, "pushPrices", MARKETS.map((_, i) => i), prices);
   }
-  log(`stake ${stake}\nfaucet ${faucet.address}\noracle ${oracle.address}\nladder ${ladder.address}\nreserve ${reserve.address}\ngame ${game.address}`);
+  log(`stake ${stake}\nfaucet ${faucet.address}\noracle ${oracle.address}\nladder ${ladder.address}\nreserve ${reserve.address}\ndesk ${desk.address}\ngame ${game.address}`);
 };
 
+/** Local networks: a confidential market token over a mintable underlying (6 decimals). */
+async function deployLocalToken(hre: HardhatRuntimeEnvironment, deployer: string, symbol: string) {
+  const { deploy } = hre.deployments;
+  const u = await deploy(`${symbol}Underlying`, { contract: "MirrorToken", from: deployer, args: [symbol, symbol, 6], log: true });
+  return (await deploy(symbol, { contract: "ConfidentialTokenWrapper", from: deployer, args: [u.address, `Confidential ${symbol}`, symbol], log: true })).address;
+}
+
 export default func;
-func.id = "siroclimb_game_v8";
+func.id = "siroclimb_game_v9_desk";
 func.tags = ["Siroclimb"];
