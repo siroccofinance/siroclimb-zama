@@ -33,7 +33,9 @@ Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain 
    Sepolia with about 0.05 Sepolia ETH.
 2. On the first visit your wallet signs one message and sends one transaction:
    - the signature creates your **game account**, a key derived from it and kept in your browser;
-   - the transaction sends 0.03 Sepolia ETH of gas to that game account.
+   - the game account gets its gas (0.005 Sepolia ETH, topped up again when it runs low) and its first
+     1,000 cUSDC from the server drip (`api/drip.js`), in one block; the wallet sends nothing (it only
+     sends the gas itself if the drip is down).
 
    From then on the game account sends every game transaction, with no pop-ups. It approves the
    game as ERC-7984 operator of its cUSDC and claims 1,000 test cUSDC from the faucet in the
@@ -84,7 +86,7 @@ waits for it on screen.
 | Step | Who signs | Kind | Waits | Gas |
 | --- | --- | --- | --- | --- |
 | Create the game account (`personal_sign` of a fixed message) | wallet | signature | yes | none |
-| Send 0.03 Sepolia ETH to the game account | wallet | transaction | yes (one block) | 21k |
+| Gas (0.005 ETH) and the first 1,000 cUSDC for the game account | server drip | 2 transactions, parallel | yes (one block) | 21k + 1M |
 | `setOperator(Siroclimb)` on cUSDC, 365 days | game account | transaction | no, background | 136k |
 | `ClimbFaucet.claimFor`: mint and wrap 1,000 cUSDC | game account | transaction | no, background | 856k |
 | User-decryption grant (EIP-712, 7 days), then the balance is decrypted | game account | signature | no, automatic | none |
