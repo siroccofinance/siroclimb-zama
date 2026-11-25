@@ -24,6 +24,7 @@ const out = {
   ClimbLadder: read("ClimbLadder")!.address,
   ClimbFaucet: read("ClimbFaucet")!.address,
   SiroccoReserve: read("SiroccoReserve")!.address,
+  SiroccoDesk: read("SiroccoDesk")?.address ?? null,
   StakeToken: read("cUSDC")?.address ?? SEPOLIA_CUSDC,
   Pyth: read("MockPyth")?.address ?? SEPOLIA_PYTH,
   tokens: Object.fromEntries(
@@ -49,6 +50,7 @@ const abi = {
   ClimbLadder: art("", "ClimbLadder"),
   ClimbFaucet: art("", "ClimbFaucet"),
   SiroccoReserve: art("", "SiroccoReserve"),
+  SiroccoDesk: art("", "SiroccoDesk"),
   ERC7984: art("tokens", "ConfidentialTokenWrapper").filter((x: { name?: string }) => x.name && ERC7984_USED.includes(x.name)),
 };
 writeFileSync(join(__dirname, "..", "..", "js", "chain", "abi.json"), JSON.stringify(abi) + "\n");
