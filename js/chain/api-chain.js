@@ -58,7 +58,15 @@ const setBalState = (st, err = null) => { balState = st; balError = err; emitBal
 // every local change (stake out, payout in) bumps the epoch: a decryption that read the balance
 // before it is stale and must not overwrite it (it is read again instead)
 let balEpoch = 0;
-const moveBal = d => { balEpoch++; if (bal != null) setBal(bal + d); };
+// local moves the chain has not shown yet: a decryption only counts if it was read at a block that
+// includes every known move (movesBlock) and no move is still in flight (movesPending), otherwise a
+// handle read on a node a block behind put back a stake that had just left (F62)
+let movesPending = 0, movesBlock = 0;
+const moveBal = (d, { pending = false, block = 0 } = {}) => {
+  balEpoch++; if (pending) movesPending++; if (block) movesBlock = Math.max(movesBlock, block);
+  if (bal != null) setBal(bal + d);
+};
+const moveLanded = (block, settled = true) => { if (settled) movesPending = Math.max(0, movesPending - 1); if (block) movesBlock = Math.max(movesBlock, block); balEpoch++; };
 export const balance = () => bal;
 export const balanceSealed = () => bal == null;
 /** { state: 'locked' | 'sealed' | 'decrypting' | 'ready' | 'error', value, error } */
@@ -91,9 +99,9 @@ export async function init() {
 
 // first visit: the server drip sends gas and claims the 1,000 cUSDC in one block (api/drip.js)
 let drip = null;
-async function askDrip(player) {
+export async function askDrip(player, keeper = W.currentKeeper()?.address) {
   try {
-    const r = await fetch('/api/drip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ player }), signal: AbortSignal.timeout(15000) });
+    const r = await fetch('/api/drip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ player, keeper }), signal: AbortSignal.timeout(15000) });
     const b = await r.json();
     return b.ok ? b : null;
   } catch { return null; }
@@ -161,12 +169,16 @@ export async function refreshBalance(expectChange = false) {
   const epoch = balEpoch;
   setBalState('decrypting');
   try {
-    let h = await (typeof expectChange === 'number' ? W.view(() => token.confidentialBalanceOf(a, { blockTag: expectChange })) : token.confidentialBalanceOf(a));
-    // after a transfer, a lagging RPC node can still serve the old balance handle: wait for the new one
-    for (let i = 0; expectChange === true && h === balHandle && i < 10; i++) { await sleep(2000); h = await token.confidentialBalanceOf(a); }
+    // read as of a block that includes every move this screen already counted
+    // the state as of the last block holding a move this screen counted is exact, whichever node answers
+    // (a "latest" read on a node one block behind put a stake back during its run)
+    const at = Math.max(typeof expectChange === 'number' ? expectChange : 0, movesBlock);
+    let h = await (at ? W.view(() => token.confidentialBalanceOf(a, { blockTag: at })) : token.confidentialBalanceOf(a));
+    // no known block: after a transfer, a lagging RPC node can still serve the old handle, wait for the new one
+    for (let i = 0; !at && expectChange === true && h === balHandle && i < 10; i++) { await sleep(2000); h = await token.confidentialBalanceOf(a); }
     if (expectChange === true && h === balHandle) { setBalState(bal == null ? 'sealed' : 'ready'); return bal; }
     const [v] = await userDecrypt(a, W.signTyped, [{ handle: h, contract: ADDR.StakeToken }]);
-    if (epoch !== balEpoch) { refreshSoon(true); return bal; }
+    if (epoch !== balEpoch || movesPending > 0) { if (bal != null) setBalState('ready'); refreshSoon(true); return bal; }
     balHandle = h;
     setBal(Number(v) / USDC);
     return bal;
@@ -189,7 +201,7 @@ export async function faucet() {
   status({ kind: 'chain', text: 'Minting and wrapping 1,000 cUSDC…' });
   let rc;
   try { rc = await claim(); } finally { status(null); }
-  moveBal(1000);
+  moveBal(1000, { block: rc.blockNumber });
   refreshSoon(rc.blockNumber);
   return bal;
 }
@@ -360,8 +372,9 @@ export async function startRun({ assetId, side = 'long', stake }) {
   const run = makeRun({ id: `tx:${sent.hash}`, assetId, side, stake, startedAt: Date.now(), entryPrice: pyth ? pyth.price : feed.last(m) });
   run.tx = sent.hash;
   status({ kind: 'chain', text: 'Locking your entry on Sepolia…' });
-  moveBal(-stake);
+  moveBal(-stake, { pending: true });
   sent.mined.then(rc => {
+    moveLanded(rc.blockNumber);
     const ev = parseEvent(rc, 'RunStarted');
     Object.assign(run, { cid: String(ev.runId), startedAt: Number(ev.startAt) * 1000, entryPrice: Number(ev.entryPrice) / 10 ** PRICE_DECIMALS, pending: false });
     status(null);
@@ -369,6 +382,7 @@ export async function startRun({ assetId, side = 'long', stake }) {
     autopilot.watchRun(run);
   }).catch(e => {
     status({ kind: 'error', text: `Start failed: ${friendly(e)}. Nothing was staked` });
+    moveLanded(0);
     moveBal(stake);
     run.failed = true;
     endLocal(run, 'failed');
@@ -411,7 +425,8 @@ async function sendCashOut(run, frozenPyth, after = null) {
   const s = await session();
   // a checkpoint this browser is writing on the market lands first: in the same block it would take
   // the cash out's place as the exit price and the paid value would differ from the frozen one
-  const landed = after ? await after : null;
+  // ...but never for long: a checkpoint stuck in this browser's keeper queue once held a cash out for 15 min (F63)
+  const landed = after ? await Promise.race([after, sleep(8000).then(() => null)]) : null;
   let pyth = frozenPyth === undefined ? await pythFor(run.market) : frozenPyth;
   if (after && run.local && !run.chain && run.pull) {
     // re-check the value against the exact path the contract will read, with a signed price fresh
@@ -463,7 +478,7 @@ async function settleOnce(run) {
       if (!run.local) { run.status = run.chain.status; run.local = run.chain; run.waiters.splice(0).forEach(f => f(run.chain)); }
       run.unsub?.();
       run.settleWaiters.splice(0).forEach(f => f(run.chain));
-      moveBal(value);
+      moveBal(value, { block: run.txBlock || (await rpc.getBlockNumber().catch(() => 0)) });
       refreshSoon(run.txBlock ?? true); record(run);
       return run.chain;
     }
@@ -552,7 +567,7 @@ export async function reserveDeposit(amount) {
     const [enc] = await Promise.all([encryptAmount(ADDR.SiroccoReserve, s.address, units), W.ensureOperatorFor(ADDR.SiroccoReserve, s)]);
     status({ kind: 'chain', text: 'Depositing into the Sirocco Reserve…' });
     const rc = await s.send(reserve, 'deposit', [enc.handle, enc.proof], 0n, 'deposit');
-    moveBal(-amount);                                  // known move; the decryption at the block confirms it
+    moveBal(-amount, { block: rc.blockNumber });       // known move; the decryption at the block confirms it
     refreshSoon(rc.blockNumber);
     return { tx: rc.hash, block: rc.blockNumber };
   } catch (e) { throw new Error(friendly(e)); }
@@ -574,7 +589,7 @@ export async function reserveWithdraw(amount) {
     const ev = rc.logs.map(l => { try { return reserve.interface.parseLog(l); } catch { return null; } }).find(e => e?.name === 'WithdrawRequested');
     let out = null;
     if (ev) { const [v] = await userDecrypt(s.address, W.signTyped, [{ handle: ev.args.assetsHandle, contract: ADDR.SiroccoReserve }]).catch(() => [null]); out = v == null ? null : Number(v) / USDC; }
-    if (out != null) moveBal(out);
+    if (out != null) moveBal(out, { block: rc.blockNumber });
     refreshSoon(rc.blockNumber);
     return { tx: rc.hash, block: rc.blockNumber, out };
   } catch (e) { throw new Error(friendly(e)); }
@@ -605,4 +620,4 @@ export const _debug = { runs, feed, autopilot };
 function checkpointed(m) {
   for (const run of runs.values()) if (run.market === m && run.status === 'live' && run.pull) { run.pull(); setTimeout(() => run.pull?.(), 2500); }
 }
-const api = { runs, liveRuns, settleFromChain, focused, status, checkpointed, reserveStats };
+const api = { runs, liveRuns, settleFromChain, focused, status, checkpointed, reserveStats, askDrip };
