@@ -74,11 +74,12 @@ async function gasOk(k) {
   if (Date.now() - gasCheck.at < 30000) return gasCheck.ok;
   gasCheck.at = Date.now();
   let eth = await k.eth().catch(() => 0);
-  if (eth < 0.002) {
+  // checkpoints and settlements cost ~0.2M gas each (~0.00004 ETH at 0.2 gwei): a small float is plenty
+  if (eth < 0.0004) {
     const s = W.currentSession();
-    if (s && (await s.eth().catch(() => 0)) > 0.012) { await s.sendEth(k.address, 0.008).catch(() => {}); eth = await k.eth().catch(() => 0); }
+    if (s && (await s.eth().catch(() => 0)) > 0.003) { await s.sendEth(k.address, 0.0012).catch(() => {}); eth = await k.eth().catch(() => 0); }
   }
-  gasCheck.ok = eth > 0.0005;
+  gasCheck.ok = eth > 0.0001;
   return gasCheck.ok;
 }
 
