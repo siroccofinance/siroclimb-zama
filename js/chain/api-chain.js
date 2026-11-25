@@ -11,7 +11,7 @@
 //  - this browser is also the keeper (autopilot.js): price checkpoints, expired runs, reserve syncs.
 import { ADDR, LADDER, MARKETS, MAX_STAKE, MOVE_SCALE, PRICE_DECIMALS, RUN_SECONDS, SCALE, STEP_SECONDS, USDC, indexOf, txUrl } from './config.js';
 import * as feed from './feed.js';
-import { encryptAmount, encryptRun, hasGrant, publicDecrypt, userDecrypt, warmUp } from './fhe.js';
+import { encryptAmount, encryptRun, ensureGrant, hasGrant, publicDecrypt, userDecrypt, warmUp } from './fhe.js';
 import * as W from './wallet.js';
 import { fallbackFor, pythFor, pythNow } from './prices.js';
 import { multipliers, pythToFixed10 } from './ladder.js';
@@ -46,16 +46,31 @@ let lastTx = null;
 export const lastTransaction = () => (lastTx ? { ...lastTx, url: txUrl(lastTx.hash) } : null);
 
 // ───────────────────────────── wallet, session, balance
+// The balance is an ERC-7984 handle: the screen shows one state at a time, in the balance pill itself.
+//   locked: no game account yet · sealed: encrypted, not decrypted yet · decrypting (value = last known, or null)
+//   ready: value decrypted · error: the decryption failed (the pill offers a retry)
 let bal = null;               // decrypted balance in cUSDC, null = still encrypted
+let balState = 'locked', balError = null;
 const balSubs = new Set();
-const setBal = v => { bal = v == null ? null : Math.round(v * 100) / 100; balSubs.forEach(cb => cb(bal)); };
+const emitBal = () => balSubs.forEach(cb => cb(bal));
+const setBal = v => { bal = v == null ? null : Math.round(v * 100) / 100; if (v != null) { balState = 'ready'; balError = null; } emitBal(); };
+const setBalState = (st, err = null) => { balState = st; balError = err; emitBal(); };
 // every local change (stake out, payout in) bumps the epoch: a decryption that read the balance
 // before it is stale and must not overwrite it (it is read again instead)
 let balEpoch = 0;
 const moveBal = d => { balEpoch++; if (bal != null) setBal(bal + d); };
 export const balance = () => bal;
 export const balanceSealed = () => bal == null;
+/** { state: 'locked' | 'sealed' | 'decrypting' | 'ready' | 'error', value, error } */
+export const balanceInfo = () => ({ state: W.player() ? balState : 'locked', value: bal, error: balError });
 export function onBalance(cb) { balSubs.add(cb); return () => balSubs.delete(cb); }
+
+// first-visit setup, shown next to the balance: { step, steps, text } or null; { done: true } once ready
+let setupNow = null;
+const setupSubs = new Set();
+const setSetup = v => { setupNow = v; setupSubs.forEach(cb => cb(v)); };
+export function onSetup(cb) { setupSubs.add(cb); cb(setupNow); return () => setupSubs.delete(cb); }
+
 let names = new Map();
 /** The player's game account (where the cUSDC lives), or the wallet before the first signature. */
 export const account = () => W.player() || W.account();
@@ -67,72 +82,119 @@ export async function init() {
   if (W.wasConnected() && W.hasWallet()) {
     try {
       const a = await W.connectWallet(true);
-      if (a) { ready = (await W.setupNeeds()).length === 0; if (ready) afterConnect(); }
+      if (a) { if (W.player()) setBalState('sealed'); ready = (await W.setupNeeds()).length === 0; if (ready) afterConnect(); }
     } catch {}
   }
   await feed.ready(4000);
   return { user: { name: (W.player() && names.get(W.player().toLowerCase())) || 'You' }, balance: bal };
 }
 
+// first visit: the server drip sends gas and claims the 1,000 cUSDC in one block (api/drip.js)
+let drip = null;
+async function askDrip(player) {
+  try {
+    const r = await fetch('/api/drip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ player }), signal: AbortSignal.timeout(15000) });
+    const b = await r.json();
+    return b.ok ? b : null;
+  } catch { return null; }
+}
+
 export async function connect() {
-  if (!W.account()) { status({ kind: 'wallet', text: 'Connect your wallet…' }); await W.connectWallet(false); }
+  if (!W.account()) { status({ kind: 'wallet', text: 'Connect your wallet…' }); await W.connectWallet(false); status(null); }
   const needs = await W.setupNeeds();
   if (needs.length) {
-    try { await W.setup(t => status({ kind: 'wallet', text: t })); }
-    catch (e) { status(null); throw new Error(friendly(e)); }
+    const first = needs.includes('key');
+    const steps = first ? 3 : 2;
+    let n = 0;
+    try {
+      await W.setup(t => setSetup({ step: Math.min(++n, steps), steps, text: t }), {
+        // as soon as the game account exists: gas + the first 1,000 cUSDC from the server, and the
+        // decryption grant signed (locally) meanwhile
+        onAccount: async a => {
+          setBalState('sealed');
+          drip = askDrip(a);
+          ensureGrant(a, W.signTyped).catch(() => {});   // local signature, ready before the balance is
+          const d = await drip;
+          if (d) setSetup({ step: steps - 1, steps, text: 'Getting your 1,000 test cUSDC…' });
+          return !!d;
+        },
+      });
+    } catch (e) { setSetup(null); throw new Error(friendly(e)); }
   }
   ready = true;
-  status(null);
-  // first visit: 1,000 test cUSDC straight away (minted and wrapped by the faucet, through the session key)
-  afterConnect();
+  afterConnect(true);
   return { address: W.player() };
 }
 
-function afterConnect() {
+async function afterConnect(fresh = false) {
   const a = W.player(); if (!a) return;
   autopilot.start(api);
   W.ensureOperator().catch(() => {});
-  // first visit: 1,000 test cUSDC straight away (minted and wrapped by the faucet, from the game account)
-  faucetC.lastClaim(a).then(t => (Number(t) === 0 ? faucet() : null)).catch(() => {}).finally(() => refreshBalance().catch(() => {}));
   game.nameOf(a).then(n => n && names.set(a.toLowerCase(), n)).catch(() => {});
+  try {
+    const d = drip && (await drip);
+    if (d && d.claim) {
+      // the claim from the server: decrypt as of its block, as soon as it lands
+      if (fresh) setSetup({ step: 2, steps: 3, text: 'Getting your 1,000 test cUSDC…' });
+      const rc = await W.receipt(d.claim, 120_000);
+      if (fresh) setSetup({ step: 3, steps: 3, text: 'Decrypting your balance…' });
+      await refreshBalance(rc?.blockNumber ?? true);
+    } else if (Number(await faucetC.lastClaim(a)) === 0) {
+      // no server drip: the game account claims for itself
+      if (fresh) setSetup({ step: 2, steps: 3, text: 'Getting your 1,000 test cUSDC…' });
+      const rc = await claim();
+      if (fresh) setSetup({ step: 3, steps: 3, text: 'Decrypting your balance…' });
+      await refreshBalance(rc.blockNumber);
+    } else await refreshBalance();
+    if (fresh && setupNow) { setSetup({ done: true, text: 'Ready' }); setTimeout(() => setSetup(null), 2500); }
+  } catch { if (setupNow) setSetup(null); }
 }
 
-export function disconnect() { W.disconnectWallet(); ready = false; setBal(null); autopilot.stop(); }
+export function disconnect() { W.disconnectWallet(); ready = false; bal = null; setBalState('locked'); autopilot.stop(); }
 
-/** Decrypts the player's encrypted cUSDC balance (asks the wallet for the daily grant once). */
+/** Decrypts the player's encrypted cUSDC balance (asks the wallet for the daily grant once).
+ *  expectChange: true = after a transfer (wait for the new handle), a number = as of that block. */
 let balHandle = null;
 export async function refreshBalance(expectChange = false) {
   const a = W.player(); if (!a) return null;
   const epoch = balEpoch;
-  let h = await (typeof expectChange === 'number' ? W.view(() => token.confidentialBalanceOf(a, { blockTag: expectChange })) : token.confidentialBalanceOf(a));
-  // after a transfer, a lagging RPC node can still serve the old balance handle: wait for the new one
-  for (let i = 0; expectChange === true && h === balHandle && i < 10; i++) { await sleep(2000); h = await token.confidentialBalanceOf(a); }
-  if (expectChange === true && h === balHandle) return bal;
-  status({ kind: 'decrypt', text: 'Decrypting your balance…' });
+  setBalState('decrypting');
   try {
+    let h = await (typeof expectChange === 'number' ? W.view(() => token.confidentialBalanceOf(a, { blockTag: expectChange })) : token.confidentialBalanceOf(a));
+    // after a transfer, a lagging RPC node can still serve the old balance handle: wait for the new one
+    for (let i = 0; expectChange === true && h === balHandle && i < 10; i++) { await sleep(2000); h = await token.confidentialBalanceOf(a); }
+    if (expectChange === true && h === balHandle) { setBalState(bal == null ? 'sealed' : 'ready'); return bal; }
     const [v] = await userDecrypt(a, W.signTyped, [{ handle: h, contract: ADDR.StakeToken }]);
     if (epoch !== balEpoch) { refreshSoon(true); return bal; }
     balHandle = h;
     setBal(Number(v) / USDC);
     return bal;
-  } finally { status(null); }
+  } catch (e) {
+    setBalState('error', friendly(e));
+    throw e;
+  }
 }
 export const decryptBalance = refreshBalance;
 /** Re-decrypts the balance; `atBlock`: as of the block of a known transfer (exact even on a lagging node). */
 const refreshSoon = (atBlock = true) => { if (W.player()) setTimeout(() => refreshBalance(atBlock).catch(() => {}), 1500); };
 
-export async function faucet() {
+/** The game account claims 1,000 cUSDC from the faucet (minted and wrapped). */
+async function claim() {
   const s = await session();
-  status({ kind: 'chain', text: 'Minting and wrapping 1,000 cUSDC…' });
-  try { await s.send(faucetC, 'claimFor', [W.player()], 0n, 'faucet'); }
+  try { return await s.send(faucetC, 'claimFor', [W.player()], 0n, 'faucet'); }
   catch (e) { throw new Error(friendly(e)); }
-  finally { status(null); }
+}
+export async function faucet() {
+  status({ kind: 'chain', text: 'Minting and wrapping 1,000 cUSDC…' });
+  let rc;
+  try { rc = await claim(); } finally { status(null); }
   moveBal(1000);
-  refreshSoon();
+  refreshSoon(rc.blockNumber);
   return bal;
 }
 
 async function session() {
+  await W.gasReady;
   if (!W.player() || !ready) await connect();
   return W.currentSession();
 }
@@ -273,6 +335,7 @@ export async function startRun({ assetId, side = 'long', stake }) {
   const pyth = await pythFor(m);
   const fallback = pyth ? 0n : await fallbackFor(m);
   let sent;
+  status({ kind: 'chain', text: 'Sending your encrypted start…' });
   try { sent = await s.send(game, 'startRun', [m, enc.handles[0], enc.handles[1], enc.proof, false, pyth ? pyth.updateData : [], fallback], pyth ? pyth.fee : 0n, 'startRun', { fast: true }); }
   catch (e) { status(null); throw new Error(friendly(e)); }
   // the climb starts now; the chain's start time and entry price snap in when the block lands
@@ -351,7 +414,9 @@ async function sendCashOut(run, frozenPyth, after = null) {
     run.tx = rc.hash;
     run.txBlock = rc.blockNumber;
   } catch (e) {
-    if (!/WrongRunStatus/.test(W.errText(e))) throw e;      // already settled (expiry)
+    // already settled (the 60th-second settlement won the race): not an error, the result stands
+    const settledAlready = /WrongRunStatus/.test(W.errText(e)) || Number((await game.getRun(BigInt(run.cid)).catch(() => ({ status: 0 }))).status) === 2;
+    if (!settledAlready) throw e;
   } finally { status(null); }
   await settleFromChain(run);
 }
@@ -459,6 +524,7 @@ export async function reserveDeposit(amount) {
     const [enc] = await Promise.all([encryptAmount(ADDR.SiroccoReserve, s.address, units), W.ensureOperatorFor(ADDR.SiroccoReserve, s)]);
     status({ kind: 'chain', text: 'Depositing into the Sirocco Reserve…' });
     const rc = await s.send(reserve, 'deposit', [enc.handle, enc.proof], 0n, 'deposit');
+    moveBal(-amount);                                  // known move; the decryption at the block confirms it
     refreshSoon(rc.blockNumber);
     return { tx: rc.hash, block: rc.blockNumber };
   } catch (e) { throw new Error(friendly(e)); }
@@ -480,6 +546,7 @@ export async function reserveWithdraw(amount) {
     const ev = rc.logs.map(l => { try { return reserve.interface.parseLog(l); } catch { return null; } }).find(e => e?.name === 'WithdrawRequested');
     let out = null;
     if (ev) { const [v] = await userDecrypt(s.address, W.signTyped, [{ handle: ev.args.assetsHandle, contract: ADDR.SiroccoReserve }]).catch(() => [null]); out = v == null ? null : Number(v) / USDC; }
+    if (out != null) moveBal(out);
     refreshSoon(rc.blockNumber);
     return { tx: rc.hash, block: rc.blockNumber, out };
   } catch (e) { throw new Error(friendly(e)); }

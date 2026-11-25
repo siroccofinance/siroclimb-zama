@@ -21,6 +21,7 @@
 //   balance()                                → number | null      null while the encrypted balance is not decrypted
 //   onBalance(cb)                            → unsubscribe()
 //   decryptBalance()                         → Promise<number>    user decryption (one wallet signature per day)
+//   balanceInfo() / onSetup(cb)              → the balance pill's state, the first-visit setup progress
 //   faucet()                                 → Promise<number>    mints and wraps 1,000 test cUSDC
 //   openPack()                               → Promise<{ tier, maxLeverage, proof }>   leverage packs (encrypted PRNG), UI off for now
 //   onStatus(cb)                             → unsubscribe()      cb({ kind: 'wallet' | 'fhe' | 'chain' | 'decrypt' | 'keeper' | 'error', text } | null)
@@ -64,6 +65,10 @@ export const whenSettled = id => (impl.whenSettled ? impl.whenSettled(id) : impl
 export const leaderboard = s => impl.leaderboard(s);
 export const balance = () => impl.balance();
 export const onBalance = cb => impl.onBalance(cb);
+/** { state: 'locked' | 'sealed' | 'decrypting' | 'ready' | 'error', value, error }: one balance state, shown in the pill. */
+export const balanceInfo = () => (impl.balanceInfo ? impl.balanceInfo() : { state: 'ready', value: impl.balance() });
+/** cb({ step, steps, text } | { done, text } | null): first-visit setup progress, shown next to the balance. */
+export const onSetup = cb => (impl.onSetup ? impl.onSetup(cb) : noop());
 export const decryptBalance = () => (impl.decryptBalance ? impl.decryptBalance() : Promise.resolve(impl.balance()));
 export const faucet = () => impl.faucet();
 export const openPack = () => impl.openPack();
