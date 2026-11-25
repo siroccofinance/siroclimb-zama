@@ -1,8 +1,8 @@
 // Live prices for the screen. The game is settled on chain on oracle checkpoints (a few per
 // minute, Sepolia blocks are 12 s); the screen moves smoothly on the live market in between:
 //  - Pyth (through our server route, signed update + parsed price) for every entitled feed;
-//  - our /api/prices route for the others: the stocks' 24/7 xStock book (Kraken), XAUt (Kraken),
-//    GBP (Yahoo), with their hours;
+//  - our /api/prices route for the others: the stocks' 24/7 xStock book, XAUt and GBP spot, all on
+//    Kraken, all 24/7;
 //  - the oracle's latest checkpoints when the routes never answered (static hosting).
 // One source per market: a market priced by Pyth keeps Pyth through a missed poll (no switch to the
 // reference and back, which drew spikes), and a failed poll after a working one just waits.

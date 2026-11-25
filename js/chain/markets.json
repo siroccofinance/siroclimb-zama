@@ -1,5 +1,5 @@
 {
-  "_doc": "Siroclimb markets, in on-chain order (index = market id in ClimbPriceOracle). Stocks and real world assets only. token: the ERC-7984 confidential token the market tracks (zama = Zama's own Sepolia mock from the Wrappers Registry, mirror = Sirocco mirror deployed by this repo, see DEPLOYMENTS.md). hours: 'always' = 24/7. The four stock markets are priced by their xStock (the token cTSLAx etc. wrap), which trades 24/7: Kraken's xStock spot mid (krakenClass tokenized_asset) through the bounded public checkpoints; pythLive false = the on-chain Pyth feed id (Equity.US, regular session only, frozen outside it) is not used. token.symbol is the clean ticker shown in the game; token.contract the exact Zama contract name when it differs.",
+  "_doc": "Siroclimb markets, in on-chain order (index = market id in ClimbPriceOracle). Stocks and real world assets only. token: the ERC-7984 confidential token the market tracks (zama = Zama's own Sepolia mock from the Wrappers Registry, mirror = Sirocco mirror deployed by this repo, see DEPLOYMENTS.md). hours: 'always' = 24/7, every market. The four stock markets are priced by their xStock (the token cTSLAx etc. wrap), which trades 24/7: Kraken's xStock spot mid (krakenClass tokenized_asset) through the bounded public checkpoints; XAUt (XAUTUSD) and GBP (GBPUSD) follow Kraken spot, also 24/7. krakenMid: the mid of the best bid and ask (the last trade can sit still for minutes). pythLive false = the on-chain Pyth feed id is not posted (Equity.US only moves in the regular session; XAUT and GBP are not entitled on our key): one source per market. token.symbol is the clean ticker shown in the game; token.contract the exact Zama contract name when it differs.",
   "markets": [
     {
       "id": "TSLAx",
@@ -104,23 +104,26 @@
         "contract": "cXAUtMock"
       },
       "kraken": "XAUTUSD",
-      "yahooFallback": "XAUT-USD"
+      "krakenMid": true,
+      "pythLive": false
     },
     {
       "id": "tGBP",
       "name": "British pound",
       "ticker": "GBP",
       "kind": "fx",
-      "hours": "fx",
+      "hours": "always",
       "pyth": "0x84c2dde9633d93d1bcad84e7dc41c9d56578b7ec52fabedc1f335d673df0a7c1",
       "pythSymbol": "FX.GBP/USD",
-      "yahoo": "GBPUSD=X",
       "token": {
         "symbol": "ctGBP",
         "origin": "zama",
         "sepolia": "0xfCE5c7069c5525eF6c8C2b2E35A745bA20a2F7CC",
         "contract": "ctGBPMock"
-      }
+      },
+      "kraken": "GBPUSD",
+      "krakenMid": true,
+      "pythLive": false
     }
   ]
 }

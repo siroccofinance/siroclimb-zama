@@ -271,7 +271,7 @@ function renderGo() {
   const open = api.marketOpen(C.asset);
   go.disabled = busy || !open;
   go.textContent = busy ? 'Starting…' : !open ? 'Market closed' : !canPay(C.stake) ? 'Get test cUSDC' : 'Start climbing';
-  meta.textContent = open ? `${C.stake} cUSDC on ${label(byId[C.asset])} ${C.side}, up to 4x, encrypted on chain` : `${label(byId[C.asset])} (${byId[C.asset].name}) ${byId[C.asset].kind === 'fx' ? 'trades 24/5 and is closed for the weekend' : 'has no live price right now'}. Pick another market`;
+  meta.textContent = open ? `${C.stake} cUSDC on ${label(byId[C.asset])} ${C.side}, up to 4x, encrypted on chain` : `${label(byId[C.asset])} (${byId[C.asset].name}) has no live price right now. Pick another market`;
 }
 
 $('#go').onclick = async () => {
