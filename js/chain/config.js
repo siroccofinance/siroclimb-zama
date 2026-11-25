@@ -27,12 +27,12 @@ export const STEP_SECONDS = 6;
 export const RUN_SECONDS = 60;
 export const MOVE_SCALE = 25;
 export const MAX_STAKE = 100;
-/** Gas for the game account (it pays every game transaction): the server drip sends SESSION_FUND_ETH
- *  and again when the account falls below SESSION_MIN_ETH (one 6M-gas transaction at 0.4 gwei, F60). */
-export const SESSION_FUND_ETH = '0.006';
-export const SESSION_MIN_ETH = 0.0025;
-/** What one 6M-gas transaction reserves at the 0.2 gwei tip floor: below it the account cannot send at all. */
-export const SESSION_TX_ETH = 0.0013;
+/** Gas for the game account (it pays every game transaction): the server drip sends SESSION_FUND_ETH and
+ *  again below SESSION_MIN_ETH. A start or a cash out (real positions) uses ~8M gas and reserves 12M:
+ *  SESSION_TX_ETH at the 0.2 gwei tip floor (F67). */
+export const SESSION_FUND_ETH = '0.015';
+export const SESSION_MIN_ETH = 0.005;
+export const SESSION_TX_ETH = 0.0025;
 
 export const txUrl = h => `${EXPLORER}/tx/${h}`;
 export const addressUrl = a => `${EXPLORER}/address/${a}`;
