@@ -75,7 +75,8 @@ registration is owner-only. The first mirrors (until this change) used the plain
 | Parameter | Value |
 | --- | --- |
 | Markets (oracle order) | 0 cTSLAx, 1 cNVDAx, 2 cAAPLx, 3 cAMZNx, 4 cXAUt, 5 ctGBP (shown by their confidential token) |
-| Pyth feeds | Equity.US.TSLA/USD, Equity.US.NVDA/USD, Equity.US.AAPL/USD, Equity.US.AMZN/USD, Crypto.XAUT/USD, FX.GBP/USD |
+| Pyth feeds (oracle) | Equity.US.TSLA/USD, Equity.US.NVDA/USD, Equity.US.AAPL/USD, Equity.US.AMZN/USD, Crypto.XAUT/USD, FX.GBP/USD. The four Equity feeds only move 9:30 to 16:00 New York and are not posted (F56) |
+| Live prices | Stocks: their 24/7 xStock (Kraken `tokenized_asset` book, mid); XAUt: Kraken; GBP: Yahoo. Posted as bounded public checkpoints |
 | Ladder | 1x, 1.5x, 2x, 2.5x, 3x, 3.5x, 4x, one step every 6 s, 60 s runs |
 | Game scale | 25x: a 0.1 % move counts 2.5 % at 1x, 10 % at 4x |
 | Stake | Encrypted, clamped to 100 cUSDC on ciphertexts |
@@ -87,3 +88,10 @@ registration is owner-only. The first mirrors (until this change) used the plain
 | Packs | One per 10 min, Bronze 45 % / Silver 28 % / Gold 18 % / Diamond 9 % (1.5x / 2x / 3x / 4x cap) |
 | Entry | At most 60 s old; a Pyth update or a bounded public price can ride along with `startRun` |
 | Oracle | Pyth max age 25 s; fallback at most every 10 s, +/-0.5 % per checkpoint, +/-3 % from the last Pyth price |
+
+### Server keys (Vercel functions, never in the repo)
+
+| Key | Address | Used by |
+| --- | --- | --- |
+| Drip | [`0xc4F684B2F465C828fF947f679Af6B77b60d84e9A`](https://sepolia.etherscan.io/address/0xc4F684B2F465C828fF947f679Af6B77b60d84e9A) | `api/drip.js` (`DRIP_KEY`): 0.006 Sepolia ETH of gas per new game account (again below 0.0025, at most every 45 s per address), 0.0015 ETH for the browser keeper key, and the account's first `ClimbFaucet.claimFor`. Logs its balance, warns below 0.05 ETH |
+| Share secret | n/a | `api/share.js` (`SHARE_SECRET`): HMAC of share links, which name runs verified on chain |

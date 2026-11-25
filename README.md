@@ -20,26 +20,27 @@ Confidential Gaming.
 - **Contracts**: Solidity 0.8.27, `@fhevm/solidity` 0.11, OpenZeppelin confidential contracts 0.5,
   Pyth
 - **Front**: static site (Three.js scene, ES modules), ethers 6, Zama relayer SDK 0.4.1 from Zama's
-  CDN, two small server routes (Pyth, reference prices)
+  CDN, small server routes on Vercel (prices, Pyth, first-visit drip, share links verified on chain)
 
 **Play it:** https://climb.sirocco.finance (Sepolia)
 
 Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain and their fixes in
-[FINDINGS.md](FINDINGS.md), and the 3-minute video script in [DEMO.md](DEMO.md).
+[FINDINGS.md](FINDINGS.md), and the submission draft (description, FHEVM use, 3-minute video script, tweet) in [SUBMISSION.md](SUBMISSION.md).
 
 ## How to play (judges)
 
 1. Open https://climb.sirocco.finance, click **Start playing**, then **Connect wallet**. Use MetaMask or Rabby on
-   Sepolia with about 0.05 Sepolia ETH.
-2. On the first visit your wallet signs one message and sends one transaction:
+   Sepolia. The wallet needs no Sepolia ETH.
+2. On the first visit your wallet signs one message, and that is all it is asked:
    - the signature creates your **game account**, a key derived from it and kept in your browser;
-   - the game account gets its gas (0.005 Sepolia ETH, topped up again when it runs low) and its first
-     1,000 cUSDC from the server drip (`api/drip.js`), in one block; the wallet sends nothing (it only
-     sends the gas itself if the drip is down).
+   - the game account gets its gas (0.006 Sepolia ETH, topped up again when it runs low) and its first
+     1,000 cUSDC from the server drip (`api/drip.js`), in one block. The wallet sends nothing (it only
+     sends the gas itself if the drip is down). About 10 s after the click, the 1,000 cUSDC show as a
+     decrypted balance; a line under the balance says each step.
 
    From then on the game account sends every game transaction, with no pop-ups. It approves the
-   game as ERC-7984 operator of its cUSDC and claims 1,000 test cUSDC from the faucet in the
-   background. Any browser where you connect the same wallet finds the same game account.
+   game as ERC-7984 operator of its cUSDC in the background, one nonce before your first start. Any
+   browser where you connect the same wallet finds the same game account.
 3. Your balance is encrypted on chain. The game account signs a 7-day decryption grant locally, so
    the balance is decrypted in your browser automatically, and again after every payout.
 4. **Play**: pick a confidential token (cTSLAx, cNVDAx, cAAPLx, cAMZNx, cXAUt or ctGBP), long or
@@ -50,7 +51,9 @@ Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain 
    signed price the transaction carries and shown at once, and it is the value the contract pays.
    The contract computes your payout on ciphertexts and sends it as an encrypted transfer in the
    same transaction; the result screen then adds the transaction link. You can
-   post your return to the leaderboard: the return becomes public, your stake stays private.
+   post your return to the leaderboard or **Share on X**: the return becomes public with a KMS proof
+   (and with it the side, since both sides' results are public), your stake stays private. The share
+   card is built by the server from the chain, never from the browser.
    While you climb, the HUD shows what you borrow: at 3x on a 50 cUSDC stake, 100 cUSDC comes from
    the Sirocco Reserve. The result screen shows the interest you paid on it.
 5. The trophy icon shows the leaderboards (today, all time). They list public results only: the
@@ -76,7 +79,8 @@ An optional ops keeper (`ops/keeper.mjs`) does the same duties.
 
 ## Every transaction and signature
 
-The wallet signs once and sends one transaction, on the first visit only. Everything after that is
+The wallet signs once, on the first visit only (and sends the game gas itself only if the server
+drip is down). Everything after that is
 sent by the **game account**: a key derived from that one signature, kept in the browser, holding
 the test cUSDC and a little gas. It signs locally, so there are no pop-ups. "Waits" means the player
 waits for it on screen.
@@ -86,9 +90,8 @@ waits for it on screen.
 | Step | Who signs | Kind | Waits | Gas |
 | --- | --- | --- | --- | --- |
 | Create the game account (`personal_sign` of a fixed message) | wallet | signature | yes | none |
-| Gas (0.005 ETH) and the first 1,000 cUSDC for the game account | server drip | 2 transactions, parallel | yes (one block) | 21k + 1M |
-| `setOperator(Siroclimb)` on cUSDC, 365 days | game account | transaction | no, background | 136k |
-| `ClimbFaucet.claimFor`: mint and wrap 1,000 cUSDC | game account | transaction | no, background | 856k |
+| Gas (0.006 ETH) and the first 1,000 cUSDC for the game account | server drip | 2 transactions, parallel | yes (one block) | 21k + 1M |
+| `setOperator(Siroclimb)` on cUSDC, 365 days | game account | transaction | no, background (before the first start) | 136k |
 | User-decryption grant (EIP-712, 7 days), then the balance is decrypted | game account | signature | no, automatic | none |
 
 **Run**
@@ -103,7 +106,7 @@ waits for it on screen.
 | Balance decryption after the payout | game account | off chain | no, automatic | none |
 | `publishRun` then `recordRun` with the KMS proof | game account | 2 transactions | only when the player clicks **Post** | small |
 
-So a player waits for two things only: the first visit's gas transfer, and the start (`startRun`).
+So a player waits for two things only: the first visit's drip (one block), and the start (`startRun`).
 A run costs two transactions (start and cash out); posting it adds two more, on demand. Borrowing
 adds no transaction: the loan rides along with the start and is repaid by the cash out.
 
@@ -141,7 +144,7 @@ What becomes public, and when:
 | --- | --- |
 | Market, start time, exit time of a run | Public (transactions) |
 | Long and short multipliers of a finished run | Public: both are computed from public prices, and the encrypted side picks one |
-| Side, stake, value of a run | Player only, forever. If the player posts the run, the multiplier becomes public with a KMS proof, and the stake stays private |
+| Side, stake, value of a run | Player only, forever. If the player posts or shares the run, the multiplier becomes public with a KMS proof: it equals the long or the short multiplier, so the side becomes public too; the stake and the amount paid stay private |
 | Borrowed amount and interest of a run | Player only (encrypted handles the player can decrypt; the screen computes them from the stake the player chose) |
 | Liquidity committed to live runs | Public: 1,000 cUSDC per live run (`lockedAssets`), whatever the stake. That is the price of a private stake: the reserve commits the worst case of every run |
 | Reserve totals: assets, shares, interest earned | Encrypted between reveals; public at each reveal, at most every 10 minutes, with a KMS proof. Share price, value locked, utilization and APY come from them |
@@ -196,7 +199,7 @@ Honest limits:
 - **No rounds.** Rounds (player against player pots) would not borrow; they were removed when the
   game became solo only (F49), so the reserve has a single path.
 
-## Prices: Pyth, with a bounded fallback
+## Prices: 24/7 xStocks, Pyth where it is live, bounded checkpoints
 
 Every run is settled on `ClimbPriceOracle` checkpoints. Each checkpoint is tagged with its source,
 and the result never depends on when settlement is called. Sepolia blocks come every ~12 s, so the
@@ -232,7 +235,7 @@ and at -100 % the coin falls and the run is worth 0 for good.
 ```
  browser (static site)                                    Sepolia
  ┌─────────────────────────────────────┐   tx   ┌──────────────────────────────────────────┐
- │ wallet: 1 signature, 1 gas transfer ├───────►│ Siroclimb ── FHE ops (Zama coprocessor)  │
+ │ wallet: 1 signature                 ├───────►│ Siroclimb ── FHE ops (Zama coprocessor)  │
  │ game account: every game tx         │        │   ├─ SiroccoReserve (lends the leverage, │
  │                                     │        │   │    rcUSDC shares, KMS-synced totals)  │
  │                                     │        │   ├─ cUSDCMock (Zama, ERC-7984)          │
@@ -242,8 +245,9 @@ and at -100 % the coin falls and the run is worth 0 for good.
  │   reserve reveals                    │        └──────────────────────────────────────────┘
  └───────────────┬─────────────────────┘
                  │ /api/pyth (signed Hermes update, key server-side)
-                 │ /api/prices (reference prices, market hours)
-                 │ /api/share, /api/og, /s/<id> (signed share links, result card PNG)
+                 │ /api/prices (24/7 xStock book on Kraken, XAUt, GBP)
+                 │ /api/drip (first visit: gas + 1,000 cUSDC, drip key server-side)
+                 │ /api/share, /api/og, /s/<id> (share links verified on chain, card PNG)
            server routes (Vercel functions, or dev.mjs locally)
 ```
 
@@ -258,7 +262,7 @@ and at -100 % the coin falls and the run is worth 0 for good.
 | `contracts/test/` | FHEVM mock tests, HCU budget |
 | `js/api.js` | The front/back contract; Sepolia by default, `?mock` for the simulation |
 | `js/chain/` | Sepolia implementation: config, FHE client, wallet and game account, feed, prices, autopilot |
-| `api/` | Server routes: `pyth.js` (Hermes proxy), `prices.js` (reference prices, market hours), `share.js` + `og.js` + `s.js` (share links and the result card) |
+| `api/` | Server routes: `pyth.js` (Hermes proxy), `prices.js` (reference prices), `drip.js` (first-visit gas and cUSDC), `_run.js` + `share.js` + `og.js` + `s.js` (share links verified on chain, the result card) |
 | `ops/` | On-chain battery, optional keeper |
 | `tests/chain/` | Puppeteer end to end tests of the real front on Sepolia (injected test wallet) |
 
@@ -284,8 +288,9 @@ npm i && npm run dev                      # http://127.0.0.1:3043 (site + /api r
 open "http://127.0.0.1:3043/?mock#play"   # the in-browser simulation, no wallet
 ```
 
-Locally, the Pyth route reads the key from `PYTH_API_KEY` or `~/.config/zama/pyth.key`. Without a
-key, every market uses the bounded fallback.
+Locally, the Pyth route reads the key from `PYTH_API_KEY`, the drip route from `DRIP_KEY` (or
+`~/.config/siroclimb/sepolia/drip.key`), the share routes sign with a dev secret. Without a Pyth
+key, every market uses the bounded checkpoints.
 
 ### Contracts
 
@@ -310,6 +315,12 @@ repo root and set `PYTH_API_KEY`, `SHARE_SECRET` and `DRIP_KEY` as server-side e
 `js/chain/deployments.json`, and the relayer SDK loads from Zama's CDN.
 
 ### Tests on Sepolia
+
+```bash
+node tests/chain/battery-prod.mjs https://climb.sirocco.finance out/battery 1440   # fresh wallet, every market long and short, reserve
+node tests/chain/battery-prod.mjs https://climb.sirocco.finance out/battery-390 390 # the same on a phone viewport
+node tests/chain/firstvisit.mjs https://climb.sirocco.finance out/firstvisit       # a first visit, timed step by step
+```
 
 ```bash
 node tests/chain/solo.mjs     # connect, faucet, decrypt, encrypted run, cash out, settlement
