@@ -15,6 +15,7 @@ import { encryptAmount, encryptRun, ensureGrant, hasGrant, publicDecrypt, userDe
 import * as W from './wallet.js';
 import { fallbackFor, pythFor, pythNow } from './prices.js';
 import { multipliers, pythToFixed10 } from './ladder.js';
+import { POSITION_LEVERAGE, closePosition, openPosition } from '../position.js';
 import * as autopilot from './autopilot.js';
 
 const { game, faucet: faucetC, token, reserve, rpc, store, friendly, sleep } = W;
@@ -237,15 +238,12 @@ let APR_BPS = 2000n;
 const INTEREST_DIVISOR = 10_000n * 10n * 365n * 86_400n;
 game.borrowAprBps().then(v => { APR_BPS = BigInt(v); }).catch(() => {});
 export const borrowAprPct = () => Number(APR_BPS) / 100;
-function borrowedTenthSeconds(elapsed, cap = LADDER.length - 1) {
-  let total = 0;
-  for (let i = 0; i < LADDER.length; i++) {
-    const from = i * STEP_SECONDS;
-    if (elapsed <= from) break;
-    const to = Math.min(i === LADDER.length - 1 ? elapsed : (i + 1) * STEP_SECONDS, elapsed);
-    total += 5 * Math.min(i, cap) * (to - from);
-  }
-  return BigInt(total);
+// the real position borrows (POSITION_LEVERAGE - 1) x the stake for the whole run (Siroclimb.borrowedTenthSeconds)
+function borrowedTenthSeconds(elapsed) { return 10n * BigInt(POSITION_LEVERAGE - 1) * BigInt(Math.max(0, elapsed)); }
+/** The run's real position at the end (cUSDC), and the game boost: what the ladder pays beyond it. */
+function realPosition(run, exit, elapsed, value) {
+  const p = closePosition(run.stake, run.side === 'long', run.entryPrice, exit, elapsed);
+  return { borrowed: p.borrowed, qty: p.qty, token: MARKETS[run.market].token.symbol, position: p.value, boost: value - p.value };
 }
 /** What the contract pays for `stake` (cUSDC) at multiplier `mult` (6 decimals) after `elapsed` s: stake x mult minus interest. */
 function net(stake, mult, elapsed) {
@@ -310,7 +308,8 @@ function update(run, ts) {
   const t = run.pending ? 0 : Math.max(0, (Math.min(ts, run.endedAt || ts) - run.startedAt) / 1000), step = stepAt(t);
   const { value, interest } = net(run.stake, multOf(run.acc), t);
   return { t, price: run.last, step, leverage: LADDER[step], value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, risk: Math.min(1, Math.max(0, -run.acc)),
-    borrowed: run.stake * (LADDER[step] - 1), interest, status: run.status, pending: !!run.pending };
+    borrowed: openPosition(run.stake, run.side === 'long', run.entryPrice).borrowed, qty: openPosition(run.stake, run.side === 'long', run.entryPrice).qty,
+    interest, status: run.status, pending: !!run.pending };
 }
 /** The run is over on screen; the chain settles it (cash out or expiry tx) and `whenSettled` follows. */
 const refineSubs = new Set();
@@ -322,7 +321,7 @@ function endLocal(run, st, ts = Date.now(), frozen = null) {
   clearInterval(run.cpTimer);
   if (frozen) run.acc = frozen.mult - 1;
   const duration = Math.min(run.duration, (ts - run.startedAt) / 1000), { value, interest } = net(run.stake, multOf(run.acc), duration);
-  run.local = { status: st, value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, maxLeverage: run.maxLev, duration, interest, borrowed: run.stake * (run.maxLev - 1),
+  run.local = { status: st, value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, maxLeverage: run.maxLev, duration, interest, ...realPosition(run, frozen?.exit ?? run.last, duration, value),
     entryPrice: run.entryPrice, exitPrice: frozen?.exit ?? run.last, pending: true, runId: run.cid ?? run.id };
   run.waiters.splice(0).forEach(r => r(run.local));
   if (st === 'expired') autopilot.kick();            // anyone may settle at the 60th second; this browser does it now
@@ -472,7 +471,7 @@ async function settleOnce(run) {
       const step = Number(r.topStep);
       run.chain = { status: mult === 0 ? 'busted' : run.local?.status === 'busted' ? 'cashed' : run.local?.status || (Number(r.endAt) >= Number(r.startAt) + RUN_SECONDS ? 'expired' : 'cashed'),
         value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, maxLeverage: LADDER[step], duration: Number(r.endAt - r.startAt),
-        interest, borrowed: run.stake * (LADDER[step] - 1),
+        interest, ...realPosition(run, Number(r.exitPrice) / 10 ** PRICE_DECIMALS, Number(r.endAt - r.startAt), value),
         entryPrice: Number(r.entryPrice) / 10 ** PRICE_DECIMALS, exitPrice: Number(r.exitPrice) / 10 ** PRICE_DECIMALS,
         multLong: Number(r.multLong) / SCALE, multShort: Number(r.multShort) / SCALE, chain: true, runId: run.cid, tx: run.tx };
       if (!run.local) { run.status = run.chain.status; run.local = run.chain; run.waiters.splice(0).forEach(f => f(run.chain)); }

@@ -30,7 +30,8 @@ const TX_GAS_CAP = 16_000_000n;
 // a run borrows from the Sirocco Reserve on start and repays it at the end (one encrypted transfer each)
 // deposit and withdraw too: estimated right after the reserve's operator approval, the estimate landed on a
 // node that had not seen it yet (ERC7984UnauthorizedSpender); with a fixed limit they queue behind it (F64)
-const FIXED_GAS = { startRun: 6_000_000n, cashOut: 6_000_000n, settleRun: 6_000_000n, deposit: 4_500_000n, withdraw: 4_500_000n };
+// a run's start and end now also trade real tokens with the desk (4 to 6 more encrypted transfers)
+const FIXED_GAS = { startRun: 12_000_000n, cashOut: 12_000_000n, settleRun: 12_000_000n, deposit: 4_500_000n, withdraw: 4_500_000n };
 // 'unknown custom error': right after the operator approval, a lagging node can still refuse the
 // token transfer (the error comes from the token contract); a few seconds later it goes through
 const RETRY = /nonce|underpriced|already known|replacement|timeout|failed to fetch|network|ECONNRESET|503|502|429|insufficient funds|unknown custom error|Panic\(50\)/i;
