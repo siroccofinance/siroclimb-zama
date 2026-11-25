@@ -43,9 +43,10 @@
         <svg viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10z"/><path class="on" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="off" d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
       </button>
       <div class="balance" title="Your confidential cUSDC balance">
-        <button class="balance__v" id="bal" aria-label="Decrypt your balance">0.00</button><span class="balance__u">cUSDC</span>
+        <i class="balance__spin" aria-hidden="true"></i><button class="balance__v" id="bal" aria-label="Your encrypted cUSDC balance">••••</button><span class="balance__u">cUSDC</span>
         <button class="balance__add" id="faucet" aria-label="Get test tokens" title="Get test tokens">+</button>
       </div>
+      <div class="setup" id="setup" role="status" aria-live="polite" hidden><i aria-hidden="true"></i><span id="setupT"></span><b id="setupN"></b></div>
       <div class="wallet">
         <button class="wallet__btn" id="wallet" aria-haspopup="menu" aria-expanded="false">Connect wallet</button>
         <div class="wallet__menu" id="walletMenu" role="menu" hidden>
@@ -235,6 +236,6 @@
   </script>
 
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
-  <script type="module" src="js/game.js?v=19"></script>
+  <script type="module" src="js/game.js?v=20"></script>
 </body>
 </html>

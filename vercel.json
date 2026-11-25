@@ -4,6 +4,10 @@
       "includeFiles": "js/chain/markets.json",
       "maxDuration": 10
     },
+    "api/drip.js": {
+      "includeFiles": "js/chain/{markets,deployments}.json",
+      "maxDuration": 20
+    },
     "api/og.js": {
       "includeFiles": "{js/chain/markets.json,assets/share/**,assets/brand/sirocco-mark-safran.svg}",
       "maxDuration": 10

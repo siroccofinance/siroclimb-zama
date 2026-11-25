@@ -563,3 +563,26 @@ body[data-side="short"] .sideglow { --g: var(--short); }
   .wallet__btn.is-on { padding: 0 8px; font-size: 12.5px; letter-spacing: -.01em; }
   .balance { padding-left: 8px; }
 }
+
+/* balance pill states: one place says whether the balance is known (see renderBalance) */
+.balance__spin { display: none; width: 12px; height: 12px; margin-right: 2px; flex: none; border-radius: 50%; border: 2px solid rgba(255, 230, 166, .3); border-top-color: #ffe6a6; animation: spin .8s linear infinite; }
+.balance[data-state="decrypting"] .balance__spin { display: block; }
+.balance[data-state="decrypting"] .balance__v.is-sealed { color: var(--ink-soft); }
+.balance[data-state="decrypting"] .balance__v:not(.is-sealed) { opacity: .7; }
+.balance[data-state="locked"] .balance__u, .balance[data-state="sealed"] .balance__u, .balance[data-state="error"] .balance__u { display: none; }
+.balance[data-state="decrypting"] .balance__v.is-sealed + .balance__u { display: none; }
+.balance[data-state="error"] .balance__v { color: #ffd0c4; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.balance__v:disabled { cursor: default; }
+/* first-visit setup: a compact line right under the balance pill */
+.top__actions { position: relative; }
+.setup { position: absolute; right: 0; top: calc(100% + 10px); display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 10px; white-space: nowrap;
+  background: rgba(43, 20, 10, .62); border: 1px solid rgba(255, 255, 255, .12); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  font-size: 13px; font-weight: 500; color: var(--ink); opacity: 0; transform: translateY(-4px); transition: opacity .25s var(--ease), transform .25s var(--ease); }
+.setup.is-on { opacity: 1; transform: none; }
+.setup[hidden] { display: none; }
+.setup i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(255, 230, 166, .3); border-top-color: #ffe6a6; animation: spin .8s linear infinite; }
+.setup b { font-weight: 600; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
+.setup.is-done i { animation: none; border: 0; width: 14px; height: 14px; background: #22c55e; -webkit-mask: none; position: relative; }
+.setup.is-done i::after { content: ""; position: absolute; left: 4px; top: 2px; width: 4px; height: 7px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+@media (max-width: 767px) { .setup { font-size: 12px; } }
+.mini-spin { display: inline-block; vertical-align: -1px; width: 11px; height: 11px; margin-right: 7px; border-radius: 50%; border: 2px solid rgba(43, 33, 26, .2); border-top-color: #c2552d; animation: spin .8s linear infinite; }

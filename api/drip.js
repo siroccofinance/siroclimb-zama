@@ -1,0 +1,57 @@
+// POST /api/drip { player }: first visit, server side. The moment a wallet has derived its game account,
+// a dedicated drip key (DRIP_KEY, server only) sends that account a little Sepolia gas AND claims its
+// 1,000 test cUSDC from ClimbFaucet (claimFor is permissionless), both in parallel: one block instead
+// of a wallet transfer, its confirmation, then the account's own claim. The wallet needs no Sepolia ETH.
+// Only what is missing is sent (gas below the floor, a claim the faucet allows); rate-limited per client.
+import { readFileSync, existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { Contract, JsonRpcProvider, Wallet, getAddress, parseEther, formatEther } from 'ethers';
+import { limited, send } from './_markets.js';
+import { readJson } from './_body.js';
+
+const RPC = process.env.DRIP_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
+const root = join(new URL('.', import.meta.url).pathname, '..');
+const ADDR = JSON.parse(readFileSync(join(root, 'js/chain/deployments.json'), 'utf8'))['11155111'];
+const GAS_ETH = '0.025', MIN_ETH = 0.006;            // SESSION_MIN_ETH in js/chain/config.js
+const FAUCET_ABI = ['function claimFor(address account)', 'function waitOf(address account) view returns (uint256)'];
+
+function key() {
+  if (process.env.DRIP_KEY) return process.env.DRIP_KEY.trim();
+  const f = join(homedir(), '.config', 'siroclimb', 'sepolia', 'drip.key');   // local dev only
+  return process.env.VERCEL_ENV !== 'production' && existsSync(f) ? readFileSync(f, 'utf8').trim() : '';
+}
+const seen = new Map();                              // player -> last drip (this instance): no double send on a retry
+let nonceLock = Promise.resolve();
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return send(res, 405, { ok: false, error: 'POST only' });
+  if (limited(req, 6)) return send(res, 429, { ok: false, error: 'Too many requests, try again in a minute' });
+  const k = key(); if (!k) return send(res, 503, { ok: false, error: 'Drip not configured' });
+  let player;
+  try { player = getAddress(String((await readJson(req)).player || '')); } catch { return send(res, 400, { ok: false, error: 'Bad address' }); }
+  if (Date.now() - (seen.get(player) || 0) < 120_000) return send(res, 200, { ok: true, gas: null, claim: null, note: 'already on its way' });
+  seen.set(player, Date.now());
+  const provider = new JsonRpcProvider(RPC, 11155111, { staticNetwork: true, batchMaxCount: 1 });
+  const w = new Wallet(k, provider), faucet = new Contract(ADDR.ClimbFaucet, FAUCET_ABI, w);
+  try {
+    const [eth, wait] = await Promise.all([provider.getBalance(player), faucet.waitOf(player)]);
+    const needGas = Number(formatEther(eth)) < MIN_ETH, needClaim = wait === 0n;
+    if (!needGas && !needClaim) return send(res, 200, { ok: true, gas: null, claim: null });
+    // both transactions leave together from one key: consecutive nonces, taken under a lock
+    const out = await (nonceLock = nonceLock.catch(() => {}).then(async () => {
+      let n = await provider.getTransactionCount(w.address, 'pending');
+      const fee = await provider.getFeeData();
+      const opts = { maxFeePerGas: fee.maxFeePerGas * 2n, maxPriorityFeePerGas: fee.maxPriorityFeePerGas * 2n };
+      const sent = await Promise.all([
+        needGas ? w.sendTransaction({ to: player, value: parseEther(GAS_ETH), nonce: n++, ...opts }) : null,
+        needClaim ? faucet.claimFor(player, { nonce: n++, gasLimit: 1_600_000n, ...opts }) : null,
+      ]);
+      return sent;
+    }));
+    send(res, 200, { ok: true, gas: out[0]?.hash ?? null, claim: out[1]?.hash ?? null });
+  } catch (e) {
+    seen.delete(player);
+    send(res, 502, { ok: false, error: e.shortMessage || e.message });
+  }
+}

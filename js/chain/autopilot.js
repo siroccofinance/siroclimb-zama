@@ -90,7 +90,7 @@ async function reserveSync(s) {
   lastSyncCheck = now;
   const [requested, synced, interval] = await Promise.all([W.reserve.syncRequestedAt(), W.reserve.syncedAt(), W.reserve.SYNC_INTERVAL()]);
   if (Number(requested) > 0) {
-    await duty('KMS revealing the Sirocco Reserve totals…', async () => {
+    await duty(null, async () => {                 // background upkeep: nothing for the player to watch
       const [a, sh, i] = await W.reserve.pendingSync();
       const { values, proof } = await publicDecrypt([a, sh, i]);
       await s.send(W.reserve, 'finalizeSync', [values[0], values[1], values[2], proof], 0n, 'finalizeSync');
