@@ -594,3 +594,12 @@ body[data-side="short"] .sideglow { --g: var(--short); }
 .share__veil .cta { height: 48px; min-width: 0; font-size: 15px; padding: 0 22px; }
 .share__veil .cta[hidden] { display: none; }
 .share__card img:not([src]) { visibility: hidden; }
+
+/* the market row scrolls sideways, and a scroller clips whatever is drawn
+   outside it: the picked card's rim is drawn inside the card, and the row
+   keeps room around the cards for the hover lift and the drop shadow */
+.market[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--safran), 0 14px 30px -12px rgba(43, 20, 10, .6); }
+.markets { padding: 6px 6px 22px; margin: -6px -6px -22px; }
+@media (max-width: 767px) {
+  .markets { padding: 6px var(--x) 22px; margin: -6px calc(-1 * var(--x)) -22px; }
+}
