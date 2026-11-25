@@ -145,7 +145,7 @@ function renderWallet() {
 async function connect(quiet) {
   if (api.account()) return true;
   walletBtn.classList.add('is-busy'); walletBtn.textContent = 'Connecting…';
-  try { await api.connect(); renderWallet(); if (quiet !== true) toast('Wallet connected, game session ready'); return true; }
+  try { await api.connect(); renderWallet(); renderBalance(); api.prepare({ side: C.side, stake: C.stake }); return true; }   // the setup line next to the balance says the rest
   catch (e) { renderWallet(); toast(e.message || 'Could not connect'); return false; }
   finally { walletBtn.classList.remove('is-busy'); }
 }
@@ -157,36 +157,57 @@ walletBtn.onclick = e => {
 walletMenu.onclick = async e => {
   const act = e.target.dataset.act; walletMenu.hidden = true; walletBtn.setAttribute('aria-expanded', false);
   if (act === 'copy') { try { await navigator.clipboard.writeText(api.account()); toast('Address copied'); } catch { toast(api.account()); } }
-  if (act === 'out') { api.disconnect(); renderWallet(); renderBalance(api.balance()); toast('Wallet disconnected'); }
+  if (act === 'out') { api.disconnect(); renderWallet(); renderBalance(); toast('Wallet disconnected'); }
   if (act === 'decrypt') decrypt();
   if (act === 'explorer') window.open(`https://sepolia.etherscan.io/address/${api.account()}`, '_blank', 'noopener');
   if (act === 'name') { const n = prompt('Your name on the leaderboard (24 characters max)'); if (n) { try { await api.setName(n.trim()); toast('Name saved on chain'); } catch (e) { toast(e.message); } } }
 };
 addEventListener('click', () => { if (!walletMenu.hidden) { walletMenu.hidden = true; walletBtn.setAttribute('aria-expanded', false); } });
 
-const balEl = $('#bal'), faucetBtn = $('#faucet');
-// the balance is an encrypted ERC-7984 handle: shown sealed until the player decrypts it (one signature a day)
+// enough to play: a sealed balance is not a reason to block (the contract moves 0 when short)
+const canPay = amount => { const b = api.balance(); return b == null || b >= amount; };
+const balEl = $('#bal'), faucetBtn = $('#faucet'), balBox = balEl.parentElement;
+// the balance is an encrypted ERC-7984 handle: one state at a time, in the pill itself (no separate toast).
+// Never a number that was not decrypted: locked ••••, sealed "Decrypt", decrypting (spinner, the last
+// decrypted value if any), ready, error "Retry".
+let setupOn = false;
 function renderBalance(v, bump) {
-  const sealed = v == null && api.mode === 'chain';
-  balEl.textContent = sealed ? (api.account() ? 'Decrypt' : '••••') : money(v ?? 0);
-  balEl.classList.toggle('is-sealed', sealed);
-  balEl.title = sealed ? 'Encrypted on chain. Click to decrypt it in your browser' : '';
-  faucetBtn.hidden = !sealed && v >= 1000;
-  if (bump) { const b = balEl.parentElement; b.classList.remove('is-bump'); void b.offsetWidth; b.classList.add('is-bump'); }
+  const info = api.mode === 'chain' ? api.balanceInfo() : { state: 'ready', value: api.balance() ?? 0 };
+  const st = !api.account() && api.mode === 'chain' ? 'locked' : info.state, val = info.value;
+  balBox.dataset.state = st;
+  const known = val != null && st !== 'locked';
+  balEl.textContent = known ? money(val) : st === 'decrypting' ? 'Decrypting…' : st === 'error' ? 'Retry' : st === 'sealed' ? 'Decrypt' : '••••';
+  balEl.classList.toggle('is-sealed', !known);
+  balEl.disabled = st === 'decrypting';
+  balEl.title = st === 'locked' ? 'Connect your wallet to see your encrypted balance'
+    : st === 'sealed' ? 'Encrypted on chain. Click to decrypt it in your browser'
+    : st === 'decrypting' ? (known ? 'Updating: decrypting your new balance' : 'Decrypting your balance in your browser')
+    : st === 'error' ? `Could not decrypt${info.error ? `: ${info.error}` : ''}. Click to retry` : 'Your cUSDC, decrypted in your browser';
+  // the faucet "+" only when it can be used: not during the first-visit setup, not while decrypting
+  faucetBtn.hidden = setupOn || st === 'decrypting' || st === 'locked' || (known && val >= 1000);
+  if (bump && known) { balBox.classList.remove('is-bump'); void balBox.offsetWidth; balBox.classList.add('is-bump'); }
   renderGo();
 }
 api.onBalance(v => renderBalance(v, true));
+// first visit: one compact line under the balance, step by step, then "Ready"
+const setupEl = $('#setup');
+api.onSetup(st => {
+  setupOn = !!st && !st.done;
+  if (!st) { if (setupEl.hidden) return; setupEl.classList.remove('is-on'); clearTimeout(setupEl._t); setupEl._t = setTimeout(() => { setupEl.hidden = true; }, 250); renderBalance(); return; }
+  clearTimeout(setupEl._t); setupEl.hidden = false; setupEl.classList.toggle('is-done', !!st.done);
+  $('#setupT').textContent = st.text; $('#setupN').textContent = st.done ? '' : `${st.step}/${st.steps}`;
+  requestAnimationFrame(() => setupEl.classList.add('is-on'));
+  renderBalance();
+});
 faucetBtn.onclick = async () => {
   if (!(await connect(true))) return;
   try { await api.faucet(); toast('+1,000 test cUSDC, minted and wrapped for you'); } catch (e) { toast(e.message); }
 };
 async function decrypt() {
   if (!(await connect(true))) return;
-  try { await api.decryptBalance(); } catch (e) { toast(e.message || 'Could not decrypt'); }
+  try { await api.decryptBalance(); } catch { /* the pill shows Retry */ }
 }
-balEl.onclick = () => { if (api.mode === 'chain') decrypt(); };
-// enough to play: a sealed balance is not a reason to block (the contract moves 0 when short)
-const canPay = amount => { const b = api.balance(); return b == null || b >= amount; };
+balEl.onclick = () => { if (api.mode === 'chain' && !balEl.disabled) decrypt(); };
 const KIND = { stock: 'Stock', gold: 'Gold', fx: 'FX', crypto: 'Crypto' };
 /** A market is named by the confidential token it trades (cTSLAx, cXAUt, ctGBP), the plain name in small. */
 const label = a => a.token || a.ticker;
@@ -590,7 +611,7 @@ async function loadBoard(scope) {
 const ago = ms => { const m = Math.round((Date.now() - ms) / 60000); return !ms ? 'never' : m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
 async function loadReserve(atBlock = null) {
   const stats = $('#rvStats'), me = $('#rvMe');
-  if (api.account()) me.textContent = 'Decrypting…';
+  if (api.account()) me.innerHTML = '<i class="mini-spin" aria-hidden="true"></i>Decrypting your position…';
   try {
     const r = await api.reserveStats();
     stats.innerHTML = [['Total value locked, cUSDC', money(r.tvl)], ['Utilization', `${(r.utilization * 100).toFixed(1)}%`], ['Share price, cUSDC', r.sharePrice.toFixed(6)],
@@ -600,7 +621,7 @@ async function loadReserve(atBlock = null) {
   } catch (e) { stats.innerHTML = `<div><dt>Reserve</dt><dd>unavailable</dd></div>`; }
   if (!api.account()) { me.textContent = 'Connect to see it'; return; }
   try { const p = await api.reservePosition(atBlock); me.textContent = p ? `${money(p.value)} cUSDC (${money(p.shares)} shares)` : '—'; }
-  catch { me.textContent = 'Could not decrypt'; }
+  catch { me.innerHTML = 'Could not decrypt. <button class="share__copy" id="rvRetry">Retry</button>'; $('#rvRetry').onclick = () => loadReserve(atBlock); }
 }
 async function reserveAction(kind) {
   const amt = Number($('#rvAmt').value);
@@ -624,7 +645,7 @@ document.addEventListener('visibilitychange', () => { last = performance.now(); 
 
 (async function boot() {
   await api.init();
-  renderWallet(); renderBalance(api.balance()); renderLobby();
+  renderWallet(); renderBalance(); renderLobby();
   const start = () => { if (sc || reduce) return; initScene(); if (!sc) $('#wash').classList.remove('is-on'); };
   if (reduce) $('#wash').classList.remove('is-on');
   if (screen !== 'intro' || film.readyState >= 2) start(); else film.addEventListener('loadeddata', start, { once: true });
