@@ -197,6 +197,9 @@ body[data-screen="intro"] .stage::before { opacity: 0; }
 .mk__n { font-size: 13px; color: var(--ink-soft); }
 .market .p { font-size: 13px; color: var(--ink-soft); }
 .market .c { justify-self: end; font-size: 12px; }
+.market .c i { display: none; }                    /* the "24h" hint sits on the row's label, room for names */
+.label .hint { opacity: .65; font-weight: 400; }
+.label .hint[hidden] { display: none; }
 .market .c.is-up { color: #ffe6a6; }
 .market .c.is-down { color: rgba(255, 255, 255, .62); }
 .market[aria-pressed="true"] { background: #fff; color: var(--ink-d); border-color: #fff; }

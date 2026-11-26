@@ -223,15 +223,34 @@ for (const a of assets) {
   b.onclick = () => { C.asset = a.id; store.set('asset', a.id); renderLobby(); };
   marketsEl.appendChild(b);
   chip[a.id] = { b, p: b.querySelector('.p'), c: b.querySelector('.c') };
-  api.subscribePrice(a.id, ({ price: p }) => {
-    if (screen !== 'lobby') return;
-    const h = api.history(a.id, 60), ch = h.length ? (p / h[0].price - 1) * 100 : 0;
-    chip[a.id].p.textContent = price(p);
-    const open = api.marketOpen(a.id);
-    chip[a.id].b.classList.toggle('is-closed', !open);
-    chip[a.id].c.textContent = open ? sgn(ch) + Math.abs(ch).toFixed(2) + '%' : 'Closed'; chip[a.id].c.className = 'c ' + (!open ? 'is-closed' : ch >= 0 ? 'is-up' : 'is-down');
-  });
+  api.subscribePrice(a.id, ({ price: p }) => { if (screen === 'lobby') chipChange(a.id, p); });
 }
+// the 24 h change on each card: the price 24 h ago from Kraken's hourly candles (api/change.js), against
+// the live price. No reference (no server, no data): no figure, never a made-up 0.00 %.
+const day = { ref: {}, at: 0 };
+function chipChange(id, p = api.quote(id)) {
+  const c = chip[id]; if (!c) return;
+  if (p > 0) c.p.textContent = price(p);
+  const open = api.marketOpen(id), ref = day.ref[id];
+  c.b.classList.toggle('is-closed', !open);
+  if (!open) { c.c.textContent = 'Closed'; c.c.className = 'c is-closed'; return; }
+  if (!(ref > 0) || !(p > 0)) { c.c.textContent = ''; c.c.className = 'c'; return; }
+  const ch = (p / ref - 1) * 100;
+  c.c.innerHTML = `${sgn(ch)}${Math.abs(ch).toFixed(2)}%<i>24h</i>`; c.c.className = 'c ' + (ch >= 0 ? 'is-up' : 'is-down');
+  c.c.title = `${sgn(ch)}${Math.abs(ch).toFixed(2)}% over 24 hours (Kraken)`;
+}
+async function loadDay() {
+  if (Date.now() - day.at < 55_000) return;
+  day.at = Date.now();
+  try {
+    const r = await fetch('/api/change', { signal: AbortSignal.timeout(8000) }); if (!r.ok) return;
+    const d = await r.json();
+    for (const m of d.markets || []) if (m.pct != null && m.ref > 0) day.ref[m.id] = m.ref; else delete day.ref[m.id];
+  } catch { /* static hosting or Kraken down: the cards show no change */ }
+  for (const id of Object.keys(chip)) chipChange(id);
+  $('#l-day').hidden = !Object.keys(day.ref).length;
+}
+loadDay(); setInterval(() => { if (screen === 'lobby' && !document.hidden) loadDay(); }, 60_000);
 function bindSeg(el, key, parse = v => v) {
   el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
     if (b.disabled) return;
