@@ -26,7 +26,8 @@ async function pushIfStale(s, m, maxAge) {
 import * as W from './wallet.js';
 
 const TICK_MS = 3000;
-const IGNORE = /WrongRunStatus|RunNotOver|SyncTooSoon|NoSyncPending|TooSoon|PythIsFresh|not allowed|not ready|404|NoCheckpoint/i;
+const IGNORE = /WrongRunStatus|RunNotOver|SyncTooSoon|NoSyncPending|TooSoon|PythIsFresh|not allowed|not ready|404|NoCheckpoint|not mined in|duty timed out/i;
+const DUTY_MS = 45_000, KEEPER_WAIT = 40_000;
 let timer = null, api = null, busy = false, watched = new Set();
 let lastFocusPush = 0;
 
@@ -37,10 +38,12 @@ export function watchRun(run) { watched.add(run.id); kick(); }
 
 const say = t => api?.status(t ? { kind: 'keeper', text: t } : null);
 
+// a duty never holds the autopilot (or its status line) longer than 45 s, whatever its transaction does
 async function duty(label, fn) {
-  try { say(label); await fn(); }
+  let t;
+  try { say(label); await Promise.race([fn(), new Promise((_, no) => { t = setTimeout(() => no(new Error('duty timed out')), DUTY_MS); })]); }
   catch (e) { const t = W.errText(e); if (!IGNORE.test(t)) console.warn('autopilot', label, t); }
-  finally { say(null); }
+  finally { clearTimeout(t); say(null); }
 }
 
 async function tick() {
@@ -54,7 +57,9 @@ async function tick() {
       const m = indexOf(run.assetId);
       if (now >= run.startedAt + RUN_SECONDS * 1000 + 1500 && !run.settling) {
         run.settling = true;
-        await duty('Settling your run at the 60th second…', () => s.send(W.game, 'settleRun', [BigInt(run.cid)], 0n, 'settleRun'));
+        // already settled (the cash out, another browser or the ops keeper): nothing to send
+        const st = Number((await W.view(() => W.game.getRun(BigInt(run.cid))).catch(() => ({ status: 1 }))).status);
+        if (st === 1) await duty('Settling your run at the 60th second…', () => s.send(W.game, 'settleRun', [BigInt(run.cid)], 0n, 'settleRun', { wait: KEEPER_WAIT }));
         api.settleFromChain(run).catch(() => { run.settling = false; });
       } else if (run.status === 'live') await duty(null, () => pushIfStale(s, m, 11));
     }
@@ -98,11 +103,11 @@ async function reserveSync(s) {
     await duty(null, async () => {                 // background upkeep: nothing for the player to watch
       const [a, sh, i] = await W.reserve.pendingSync();
       const { values, proof } = await publicDecrypt([a, sh, i]);
-      await s.send(W.reserve, 'finalizeSync', [values[0], values[1], values[2], proof], 0n, 'finalizeSync');
+      await s.send(W.reserve, 'finalizeSync', [values[0], values[1], values[2], proof], 0n, 'finalizeSync', { wait: KEEPER_WAIT });
       api?.reserveStats?.(true).catch(() => {});
     });
   } else if (now >= Number(synced) + Number(interval)) {
-    await duty(null, () => s.send(W.reserve, 'requestSync', [], 0n, 'requestSync'));
+    await duty(null, () => s.send(W.reserve, 'requestSync', [], 0n, 'requestSync', { wait: KEEPER_WAIT }));
   }
 }
 

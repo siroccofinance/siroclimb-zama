@@ -43,7 +43,9 @@ export class Sender {
    * `fast`: resolves as soon as the transaction is broadcast, with { hash, mined } (mined = the
    * receipt promise), so the screen can move on while Sepolia includes it.
    */
-  send(contract, method, args = [], value = 0n, label = method, { fast = false } = {}) {
+  // `wait`: how long to wait for the receipt (ms). A transaction not mined by then is left behind: the next
+  // one takes its nonce again (from the mined count) with a higher fee, so it replaces it rather than queue behind it
+  send(contract, method, args = [], value = 0n, label = method, { fast = false, wait = 180_000 } = {}) {
     const run = async () => {
       for (let attempt = 0; ; attempt++) {
         try {
@@ -55,13 +57,17 @@ export class Sender {
             const est = await c[method].estimateGas(...args, { value });
             gas = est * 2n > TX_GAS_CAP ? TX_GAS_CAP : est * 2n;     // the FHE cost depends on the state it lands on
           }
-          const nonce = this.nonce ?? (await rpc.getTransactionCount(this.address, 'pending'));
-          const tx = await c[method](...args, { value, gasLimit: gas, nonce, ...(await fees()) });
+          const nonce = this.nonce ?? (await rpc.getTransactionCount(this.address, this.stuck ? 'latest' : 'pending'));
+          const f = await fees();
+          if (this.stuck) { f.maxPriorityFeePerGas *= 2n; f.maxFeePerGas *= 2n; }
+          const tx = await c[method](...args, { value, gasLimit: gas, nonce, ...f });
+          this.stuck = false;
           this.nonce = nonce + 1;
           emitTx({ label, hash: tx.hash, from: this.address, state: 'sent' });
           const check = async () => {
-            const rc = await receipt(tx.hash);
-            if (!rc || rc.status !== 1) { this.nonce = null; throw new Error(`${label} reverted`); }
+            const rc = await receipt(tx.hash, wait);
+            if (!rc) { this.nonce = null; this.stuck = true; throw new Error(`${label} not mined in ${Math.round(wait / 1000)} s`); }
+            if (rc.status !== 1) { this.nonce = null; throw new Error(`${label} reverted`); }
             emitTx({ label, hash: tx.hash, from: this.address, state: 'mined' });
             return rc;
           };
