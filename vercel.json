@@ -11,12 +11,22 @@
     "api/og.js": {
       "includeFiles": "{js/chain/markets.json,js/chain/deployments.json,js/chain/abi.json,assets/share/**,assets/brand/sirocco-mark-safran.svg}",
       "maxDuration": 10
+    },
+    "api/keep.js": {
+      "includeFiles": "js/chain/{markets,deployments}.json",
+      "maxDuration": 30
     }
   },
   "rewrites": [
     {
       "source": "/s/:id",
       "destination": "/api/s?id=:id"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/keep",
+      "schedule": "* * * * *"
     }
   ]
 }
