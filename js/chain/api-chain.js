@@ -562,7 +562,7 @@ export async function publishRun(id) {
     multH = (await W.view(() => game.runHandles(BigInt(id))))[3];
   }
   for (let i = 0; i < 10; i++) {
-    try { const { values, proof } = await publicDecrypt([multH]); await s.send(game, 'recordRun', [BigInt(id), values[0], proof], 0n, 'recordRun'); return true; }
+    try { const { values, proof } = await publicDecrypt([multH]); const rc = await s.send(game, 'recordRun', [BigInt(id), values[0], proof], 0n, 'recordRun'); return { block: rc.blockNumber }; }
     catch (e) { if (i === 9) throw e; await sleep(4000); }
   }
 }
