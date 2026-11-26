@@ -93,7 +93,13 @@ export async function init() {
   if (W.wasConnected() && W.hasWallet()) {
     try {
       const a = await W.connectWallet(true);
-      if (a) { if (W.player()) setBalState('sealed'); ready = (await W.setupNeeds()).length === 0; if (ready) afterConnect(); }
+      if (a) {
+        if (W.player()) setBalState('sealed');
+        ready = (await W.setupNeeds()).length === 0;
+        if (ready) afterConnect();
+        // low on gas: the top-up waits for the next action, but decrypting the balance needs none
+        else if (W.player() && hasGrant(W.player())) refreshBalance().catch(() => {});
+      }
     } catch {}
   }
   await feed.ready(4000);
@@ -376,6 +382,8 @@ export async function startRun({ assetId, side = 'long', stake }) {
   // the climb starts now; the chain's start time and entry price snap in when the block lands
   const run = makeRun({ id: `tx:${sent.hash}`, assetId, side, stake, startedAt: Date.now(), entryPrice: pyth ? pyth.price : feed.last(m) });
   run.tx = sent.hash;
+  // remembered at once (a reload before the start is mined finds it through its transaction)
+  store.set(liveKey(), { tx: sent.hash, assetId, side, stake, startedAt: run.startedAt, entryPrice: run.entryPrice, game: ADDR.Siroclimb });
   status({ kind: 'chain', text: 'Locking your entry on Sepolia…' });
   moveBal(-stake, { pending: true });
   sent.mined.then(rc => {
@@ -383,12 +391,13 @@ export async function startRun({ assetId, side = 'long', stake }) {
     const ev = parseEvent(rc, 'RunStarted');
     Object.assign(run, { cid: String(ev.runId), startedAt: Number(ev.startAt) * 1000, entryPrice: Number(ev.entryPrice) / 10 ** PRICE_DECIMALS, pending: false });
     // remembered on this device: a reload during the run finds it again (side and stake stay off chain in clear)
-    store.set(liveKey(), { cid: run.cid, assetId, side, stake, startedAt: run.startedAt, entryPrice: run.entryPrice, game: ADDR.Siroclimb });
+    store.set(liveKey(), { tx: sent.hash, cid: run.cid, assetId, side, stake, startedAt: run.startedAt, entryPrice: run.entryPrice, game: ADDR.Siroclimb });
     status(null);
     trackCheckpoints(run);
     autopilot.watchRun(run);
   }).catch(e => {
     status({ kind: 'error', text: `Start failed: ${friendly(e)}. Nothing was staked` });
+    if (store.get(liveKey(), null)?.tx === sent.hash) store.del(liveKey());
     moveLanded(0);
     moveBal(stake);
     run.failed = true;
@@ -488,7 +497,8 @@ async function settleOnce(run) {
       moveBal(value, { block: run.txBlock || 0 });
       run.settleWaiters.splice(0).forEach(f => f(run.chain));
       if (!run.txBlock) rpc.getBlockNumber().then(b => { movesBlock = Math.max(movesBlock, b); }).catch(() => {});
-      if (store.get(liveKey(), null)?.cid === run.cid) store.del(liveKey());
+      const rec = store.get(liveKey(), null);
+      if (rec && (rec.cid === run.cid || rec.tx === run.tx)) store.del(liveKey());
       refreshSoon(run.txBlock ?? true); record(run);
       return run.chain;
     }
@@ -513,6 +523,13 @@ const liveKey = () => `liveRun:${(W.player() || '').toLowerCase()}`;
 export async function resumeRun() {
   const rec = W.player() && store.get(liveKey(), null);
   if (!rec || rec.game !== ADDR.Siroclimb) return null;
+  if (rec.cid == null) {
+    // the start was still on its way at the reload: its receipt names the run
+    const rc = rec.tx ? await W.receipt(rec.tx, 90_000).catch(() => null) : null;
+    if (!rc || rc.status !== 1) { store.del(liveKey()); return null; }
+    try { rec.cid = String(parseEvent(rc, 'RunStarted').runId); } catch { store.del(liveKey()); return null; }
+    store.set(liveKey(), rec);
+  }
   let r;
   try { r = await W.view(() => game.getRun(BigInt(rec.cid))); } catch { return null; }
   const status = Number(r.status);
