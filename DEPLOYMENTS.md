@@ -102,4 +102,5 @@ registration is owner-only. The first mirrors (until this change) used the plain
 | Key | Address | Used by |
 | --- | --- | --- |
 | Drip | [`0xc4F684B2F465C828fF947f679Af6B77b60d84e9A`](https://sepolia.etherscan.io/address/0xc4F684B2F465C828fF947f679Af6B77b60d84e9A) | `api/drip.js` (`DRIP_KEY`): 0.006 Sepolia ETH of gas per new game account (again below 0.0025, at most every 45 s per address), 0.0015 ETH for the browser keeper key, and the account's first `ClimbFaucet.claimFor`. Logs its balance, warns below 0.05 ETH |
+| Keeper | [`0x924BB8eA5eD286a2aCF9655A1db294b48bF83c65`](https://sepolia.etherscan.io/address/0x924BB8eA5eD286a2aCF9655A1db294b48bF83c65) | `api/keep.js` (`KEEPER_KEY`, cron every minute, `CRON_SECRET`): bounded public price checkpoints when a market moved or went quiet for 20 min. Logs its balance, warns below 0.05 ETH |
 | Share secret | n/a | `api/share.js` (`SHARE_SECRET`): HMAC of share links, which name runs verified on chain |

@@ -80,7 +80,13 @@ browser does each one itself (autopilot):
 - revealing the Sirocco Reserve's totals every 10 minutes (`requestSync`, then the KMS decrypts them
   and `finalizeSync` checks the proof).
 
-An optional ops keeper (`ops/keeper.mjs`) does the same duties.
+With nobody on the site, a Vercel cron (`/api/keep`, every minute) keeps every market's on-chain price
+fresh: one bounded `pushPublic` (the same call anyone can make) for each market that moved more than
+0.05 % or whose checkpoint is older than 20 minutes, so the first run after a quiet night starts on
+the real price (F72). An optional ops keeper (`ops/keeper.mjs`) does the browsers' duties too.
+
+A reload during a run does not lose it: the device remembers the run once its start is mined, and the
+climb comes back on the same run (or its result, if it ended meanwhile).
 
 ## Every transaction and signature
 
@@ -305,7 +311,7 @@ and at -100 % the coin falls and the run is worth 0 for good.
 | `contracts/test/` | FHEVM mock tests, HCU budget |
 | `js/api.js` | The front/back contract; Sepolia by default, `?mock` for the simulation |
 | `js/chain/` | Sepolia implementation: config, FHE client, wallet and game account, feed, prices, autopilot |
-| `api/` | Server routes: `pyth.js` (Hermes proxy), `prices.js` (reference prices), `drip.js` (first-visit gas and cUSDC), `_run.js` + `share.js` + `og.js` + `s.js` (share links verified on chain, the result card) |
+| `api/` | Server routes: `pyth.js` (Hermes proxy), `prices.js` (reference prices), `drip.js` (first-visit gas and cUSDC), `keep.js` (cron: fresh prices with no visitor), `_run.js` + `share.js` + `og.js` + `s.js` (share links verified on chain, the result card) |
 | `ops/` | On-chain battery, optional keeper |
 | `tests/chain/` | Puppeteer end to end tests of the real front on Sepolia (injected test wallet) |
 
@@ -356,7 +362,7 @@ publish it first. Publishing makes the return public, and since a run's long and
 public, it also tells the side; the stake stays encrypted. `/s/<id>` serves the `summary_large_image`
 page X unfolds, `/api/og?id=` renders the 1200×630 card (satori + resvg, the 3D coin still from
 `3d/coin-still.mjs`). Older self-reported links still open the game, with a generic card. Deploy the
-repo root and set `PYTH_API_KEY`, `SHARE_SECRET` and `DRIP_KEY` as server-side environment variables. No secret ever reaches the bundle. Contract addresses come from
+repo root and set `PYTH_API_KEY`, `SHARE_SECRET`, `DRIP_KEY`, `KEEPER_KEY` and `CRON_SECRET` as server-side environment variables. No secret ever reaches the bundle. Contract addresses come from
 `js/chain/deployments.json`, and the relayer SDK loads from Zama's CDN.
 
 ### Tests on Sepolia
