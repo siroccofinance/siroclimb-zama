@@ -1,5 +1,5 @@
 {
-  "_doc": "Siroclimb markets, in on-chain order (index = market id in ClimbPriceOracle). Stocks and real world assets only. token: the ERC-7984 confidential token the market tracks (zama = Zama's own Sepolia mock from the Wrappers Registry, mirror = Sirocco mirror deployed by this repo, see DEPLOYMENTS.md). hours: 'always' = 24/7, every market. The four stock markets are priced by their xStock (the token cTSLAx etc. wrap), which trades 24/7: Kraken's xStock spot mid (krakenClass tokenized_asset) through the bounded public checkpoints; XAUt (XAUTUSD) and GBP (GBPUSD) follow Kraken spot, also 24/7. krakenMid: the mid of the best bid and ask (the last trade can sit still for minutes). pythLive false = the on-chain Pyth feed id is not posted (Equity.US only moves in the regular session; XAUT and GBP are not entitled on our key): one source per market. token.symbol is the clean ticker shown in the game; token.contract the exact Zama contract name when it differs.",
+  "_doc": "Siroclimb markets, in on-chain order (index = market id in ClimbPriceOracle). Stocks and real world assets only. token: the ERC-7984 confidential token the market tracks (zama = Zama's own Sepolia mock from the Wrappers Registry, mirror = Sirocco mirror deployed by this repo, see DEPLOYMENTS.md). hours: 'always' = 24/7, every market. Live prices: Hyperliquid's trade.xyz perps (hyperliquid: xyz:TSLA, NVDA, AAPL, AMZN, GOLD, GBP; allMids, dex xyz), 24/7, through the bounded public checkpoints; kraken / krakenClass: the fallback (Kraken's xStock books, XAUTUSD, GBPUSD). krakenMid: the mid of the best bid and ask (the last trade can sit still for minutes). pythLive false = the on-chain Pyth feed id is not posted (Equity.US only moves in the regular session; XAUT and GBP are not entitled on our key): one source per market. token.symbol is the clean ticker shown in the game; token.contract the exact Zama contract name when it differs.",
   "markets": [
     {
       "id": "TSLAx",
@@ -20,6 +20,7 @@
         }
       },
       "kraken": "TSLAxUSD",
+      "hyperliquid": "xyz:TSLA",
       "krakenClass": "tokenized_asset",
       "pythLive": false
     },
@@ -42,6 +43,7 @@
         }
       },
       "kraken": "NVDAxUSD",
+      "hyperliquid": "xyz:NVDA",
       "krakenClass": "tokenized_asset",
       "pythLive": false
     },
@@ -64,6 +66,7 @@
         }
       },
       "kraken": "AAPLxUSD",
+      "hyperliquid": "xyz:AAPL",
       "krakenClass": "tokenized_asset",
       "pythLive": false
     },
@@ -86,6 +89,7 @@
         }
       },
       "kraken": "AMZNxUSD",
+      "hyperliquid": "xyz:AMZN",
       "krakenClass": "tokenized_asset",
       "pythLive": false
     },
@@ -104,6 +108,7 @@
         "contract": "cXAUtMock"
       },
       "kraken": "XAUTUSD",
+      "hyperliquid": "xyz:GOLD",
       "krakenMid": true,
       "pythLive": false
     },
@@ -122,6 +127,7 @@
         "contract": "ctGBPMock"
       },
       "kraken": "GBPUSD",
+      "hyperliquid": "xyz:GBP",
       "krakenMid": true,
       "pythLive": false
     }

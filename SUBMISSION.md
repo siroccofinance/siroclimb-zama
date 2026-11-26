@@ -32,8 +32,8 @@ keeps its amplification on top, shown as such: every move counts ×25 on the sta
 the payout beyond the real position, the "game boost", is settled with the reserve, encrypted. The
 result screen splits the payout into the two.
 
-Prices: every market is open 24/7. The stocks follow the xStock itself (Kraken's tokenized-asset
-book), gold and the pound follow Kraken spot (XAUTUSD, GBPUSD), weekends included. Every run settles on an on-chain oracle path with bounded checkpoints, and the
+Prices: every market is open 24/7. Prices come from Hyperliquid's trade.xyz perps (TSLA, NVDA, AAPL,
+AMZN, GOLD, GBP), which tick around the clock, weekends and US holidays included; Kraken is the fallback. Every run settles on an on-chain oracle path with bounded checkpoints, and the
 contract computes the outcome from it.
 
 A player's first visit is one wallet signature: a game account (a key derived from that signature,

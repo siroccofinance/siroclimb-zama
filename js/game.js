@@ -239,7 +239,7 @@ function chipChange(id, p = api.quote(id)) {
   if (!(ref > 0) || !(p > 0)) { c.c.textContent = ''; c.c.className = 'c'; return; }
   const ch = (p / ref - 1) * 100;
   c.c.innerHTML = `${sgn(ch)}${Math.abs(ch).toFixed(2)}%<i>24h</i>`; c.c.className = 'c ' + (ch >= 0 ? 'is-up' : 'is-down');
-  c.c.title = `${sgn(ch)}${Math.abs(ch).toFixed(2)}% over 24 hours (Kraken)`;
+  c.c.title = `${sgn(ch)}${Math.abs(ch).toFixed(2)}% over 24 hours (Hyperliquid)`;
 }
 async function loadDay() {
   if (api.mode !== 'chain' || Date.now() - day.at < 55_000) return;   // the simulation's prices are not Kraken's

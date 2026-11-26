@@ -83,7 +83,7 @@ registration is owner-only. The first mirrors (until this change) used the plain
 | --- | --- |
 | Markets (oracle order) | 0 cTSLAx, 1 cNVDAx, 2 cAAPLx, 3 cAMZNx, 4 cXAUt, 5 ctGBP (shown by their confidential token) |
 | Pyth feeds (oracle) | Equity.US.TSLA/USD, Equity.US.NVDA/USD, Equity.US.AAPL/USD, Equity.US.AMZN/USD, Crypto.XAUT/USD, FX.GBP/USD. The four Equity feeds only move 9:30 to 16:00 New York and are not posted (F56) |
-| Live prices | Every market 24/7 on Kraken, mid of the book: the stocks' xStock (`tokenized_asset`: TSLAxUSD, NVDAxUSD, AAPLxUSD, AMZNxUSD), XAUTUSD, GBPUSD. Posted as bounded public checkpoints; no Pyth feed is posted (`pythLive: false`) |
+| Live prices | Every market 24/7 on Hyperliquid's trade.xyz perps (`allMids`, dex `xyz`: xyz:TSLA, NVDA, AAPL, AMZN, GOLD, GBP), mid. Fallback: Kraken mid (xStock `tokenized_asset` books, XAUTUSD, GBPUSD). Posted as bounded public checkpoints; no Pyth feed is posted (`pythLive: false`) |
 | Ladder | 1x, 1.5x, 2x, 2.5x, 3x, 3.5x, 4x, one step every 6 s, 60 s runs |
 | Game scale | 25x: a 0.1 % move counts 2.5 % at 1x, 10 % at 4x |
 | Stake | Encrypted, clamped to 100 cUSDC on ciphertexts |
