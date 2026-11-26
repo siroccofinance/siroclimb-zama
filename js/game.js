@@ -25,7 +25,8 @@ const signed = v => sgn(v) + nf.format(Math.abs(v));
 /** Small amounts (interest on a minute of borrowing) keep their 6 decimals. */
 const tiny = v => (v > 0 && v < 0.0000005 ? '<0.000001' : v > 0 && v < 0.01 ? v.toFixed(6) : money(v));
 const pct = v => sgn(v) + Math.abs(v).toFixed(2) + '%';
-const price = p => (p >= 1000 ? nf.format(p) : p >= 10 ? p.toFixed(2) : p.toFixed(5));   // the pound moves on the 5th decimal
+// enough decimals for the microprice's moves: 3 for the stocks, 5 for the pound (gold: a cent is 0.0003 %)
+const price = p => (p >= 1000 ? nf.format(p) : p >= 10 ? p.toFixed(3) : p.toFixed(5));
 const levTxt = x => (x % 1 ? x.toFixed(1) : String(x)) + 'x';
 const mmss = s => { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 const shortAddr = a => a.slice(0, 4) + '…' + a.slice(-4);

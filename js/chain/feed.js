@@ -10,7 +10,7 @@
 import { MARKETS, PRICE_DECIMALS } from './config.js';
 import { oracle } from './wallet.js';
 
-const TICK_MS = 250, POLL_MS = 2000, KEEP_MS = 15 * 60_000;
+const TICK_MS = 250, POLL_MS = 1000, KEEP_MS = 15 * 60_000;
 const feeds = MARKETS.map(m => ({ id: m.id, price: null, from: null, to: null, t0: 0, hist: [], subs: new Set(), open: true, source: null, pyth: false, quoteAt: 0 }));
 const metaSubs = new Set();
 export const pythPayload = { at: 0, body: null };
