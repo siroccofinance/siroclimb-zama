@@ -685,7 +685,24 @@ document.addEventListener('visibilitychange', () => { last = performance.now(); 
   if (screen !== 'intro') { film.pause(); syncing = false; maybeRules(1200); }
   requestAnimationFrame(frame);
   setInterval(() => { if (screen === 'lobby') renderGo(); }, 250);
+  resume();
 })();
+
+// a reload during a run: the climb goes on where it is (or its result shows, if it ended meanwhile)
+async function resume() {
+  const got = await api.resumeRun().catch(() => null);
+  if (!got) return;
+  for (let i = 0; i < 40 && !sc && !reduce; i++) await new Promise(r => setTimeout(r, 100));   // the scene first
+  if (screen === 'intro') { history.replaceState(null, '', '#play'); toLobby(); }
+  if (got.result) {
+    enterGame(got.run);                                // its end is already known: the result follows at once
+    setTimeout(() => { if (run && ended) settled(got.result); }, 600);
+    toast('Your last run ended while you were away: here is its result');
+  } else {
+    enterGame(got.run);
+    toast('Your run is back: the climb goes on');
+  }
+}
 
 // ── landing → lobby: one page, one scene. The copy steps aside, the belt brakes, the coin settles on its box
 //    and hops once (one full turn), then the bar and the lobby rise over the very same shot.

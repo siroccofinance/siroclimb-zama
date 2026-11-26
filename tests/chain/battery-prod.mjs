@@ -25,7 +25,11 @@ const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.
 const pg = await b.newPage();
 const errs = [];
 pg.on('pageerror', e => { errs.push(e.message); console.log('PAGEERROR', e.message); });
-pg.on('console', c => { if (c.type() === 'warn' || c.type() === 'error') if (!/Failed to load|THREE|threads/.test(c.text())) console.log('CONSOLE', c.type(), c.text().slice(0, 160)); });
+const consoleErrors = [];
+pg.on('console', c => {
+  if (c.type() === 'error') consoleErrors.push(c.text().slice(0, 200));
+  if (c.type() === 'warn' || c.type() === 'error') if (!/THREE|threads/.test(c.text())) console.log('CONSOLE', c.type(), c.text().slice(0, 160));
+});
 await injectWallet(pg, fresh.privateKey);
 await pg.evaluateOnNewDocument(() => localStorage.setItem('siroclimb:ui:seenRules', 'true'));
 await pg.setViewport({ width: W, height: mob ? 844 : 900, isMobile: mob, hasTouch: mob, deviceScaleFactor: mob ? 2 : 1 });
@@ -69,6 +73,20 @@ const num = s => parseFloat(String(s).replace(/[^\d.−-]/g, '').replace('−', 
 
 await pg.goto(`${base}/#play`, { waitUntil: 'networkidle2', timeout: 60000 });
 await watch(() => false, 2000, 'load', true); await shot('lobby');
+// the lobby: every market open with a price, one row, the picked card's ring not clipped
+const lobby = await pg.evaluate(() => {
+  const row = document.querySelector('#markets'), r = row.getBoundingClientRect(), cards = [...row.children];
+  const sel = cards.find(c => c.getAttribute('aria-pressed') === 'true'), sr = sel.getBoundingClientRect();
+  const clipY = getComputedStyle(row).overflowY !== 'visible';
+  return { open: cards.filter(c => !c.classList.contains('is-closed')).length, priced: cards.filter(c => /\d/.test(c.querySelector('.p').textContent)).length,
+    oneLine: new Set(cards.map(c => Math.round(c.getBoundingClientRect().top))).size === 1,
+    ringClipped: clipY && (sr.top - 2 < r.top || sr.bottom + 2 > r.bottom), scrolls: row.scrollWidth > row.clientWidth };
+});
+const p0 = await pg.evaluate(() => [...document.querySelectorAll('#markets .p')].map(e => e.textContent));
+await wait(8000);
+const p1 = await pg.evaluate(() => [...document.querySelectorAll('#markets .p')].map(e => e.textContent));
+lobby.moved = p0.filter((v, i) => v !== p1[i]).length;
+console.log('lobby', JSON.stringify(lobby));
 const tc = Date.now();
 await pg.click('#wallet');
 await watch(u => u.state === 'ready' && num(u.bal) >= 1000, 120_000, 'first-visit');
@@ -76,8 +94,11 @@ const firstVisit = ((Date.now() - tc) / 1000).toFixed(1);
 await shot('ready');
 console.log('first visit', firstVisit, 's');
 
+const PLANS = (process.env.PLANS || 'early,mid,late,expire').split(',');
+let runIndex = 0;
 for (const m of MARKETS) for (const side of SIDES) {
-  const tag = `${m}-${side}`;
+  const plan = PLANS[runIndex++ % PLANS.length];
+  const tag = `${m}-${side}-${plan}`;
   await pg.click(`.market[data-v="${m}"]`).catch(() => {});
   await pg.click(`#side button[data-v="${side}"]`); await pg.click('#stake button[data-v="10"]');
   const open = await pg.$eval('#go', e => !e.disabled);
@@ -88,16 +109,23 @@ for (const m of MARKETS) for (const side of SIDES) {
   const g = await watch(u => u.screen === 'game', 60_000, `${tag} start`);
   if (!g) { results.push({ tag, error: 'no start' }); await pg.reload(); await wait(4000); continue; }
   const startS = ((Date.now() - ts) / 1000).toFixed(1);
-  await watch(() => false, 15000, `${tag} climb`, true);   // past 1x: the HUD shows what is borrowed
+  const climb = { early: 5000, mid: 20000, late: 45000, expire: 0 }[plan];
+  const st0 = await pg.evaluate(() => ({ ...window.__stairs }));
+  if (plan === 'expire') await watch(u => u.screen !== 'game', 90_000, `${tag} climb`, true);    // nobody cashes out: the 60th second does
+  else await watch(() => false, climb, `${tag} climb`, true);
+  const st1 = await pg.evaluate(() => ({ ...window.__stairs }));
+  const holding = await pg.$eval('#borrow', e => e.textContent.replace(/\s+/g, ' ').trim());
   const borrowed = (await ui()).borrowed; await shot(`${tag}-game`);
   const tcash = Date.now();
   liveCap = null;
-  await pg.click('#cash');
+  if (plan !== 'expire') await pg.click('#cash');
   const r = await watch(u => u.screen === 'result' && (/Settled on chain/.test(u.rr) || /did not go through/.test(u.rr)), 120_000, `${tag} cashout`);
   const settleS = ((Date.now() - tcash) / 1000).toFixed(1);
   await watch(u => u.state === 'ready', 30_000, `${tag} balance`);
   const after = num((await ui()).bal), u = await ui();
-  results.push({ tag, start_s: startS, settle_s: settleS, borrowed, value: u.value, balance: `${before} -> ${after}`, settled: !!r && /Settled/.test(r.rr) });
+  const split = await pg.$eval('#rS', e => e.innerText.replace(/\s+/g, ' '));
+  results.push({ tag, start_s: startS, settle_s: settleS, borrowed, holding, steps: st1.steps - st0.steps, quotes: st1.quotes - st0.quotes,
+    split: /Real position/.test(split) && /Game boost/.test(split), value: u.value, balance: `${before} -> ${after}`, settled: !!r && /Settled/.test(r.rr) });
   await shot(`${tag}-result`);
   await pg.click('#again'); await watch(x => x.screen === 'lobby', 10_000, `${tag} again`); await wait(1200);   // the wash lifts
 }
@@ -119,7 +147,7 @@ await pg.click('#rvAmt', { clickCount: 3 }); await pg.type('#rvAmt', '10'); awai
 await watch(u => /Withdrew|Not withdrawn/.test(u.toast), 120_000, 'withdraw');
 await watch(() => false, 12000, 'withdraw-after', true); await shot('reserve');
 const pos2 = await pg.$eval('#rvMe', e => e.textContent);
-const report = { base, width: W, wallet: fresh.address, firstVisit_s: firstVisit, results, reserve: { before: pos0, afterDeposit: pos1, afterWithdraw: pos2 }, issues, pageErrors: errs };
+const report = { base, width: W, wallet: fresh.address, firstVisit_s: firstVisit, lobby, consoleErrors, results, reserve: { before: pos0, afterDeposit: pos1, afterWithdraw: pos2 }, issues, pageErrors: errs };
 writeFileSync(`${out}/report.json`, JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));
 await b.close();
