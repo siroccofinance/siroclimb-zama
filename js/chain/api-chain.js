@@ -30,6 +30,8 @@ export const history = (id, seconds = 60) => feed.history(indexOf(id), seconds);
 export const marketOpen = id => feed.isOpen(indexOf(id));
 /** Where the chain gets this market's checkpoints from now: 'Pyth' (verified) or 'bounded' (public fallback). */
 const SOURCE = { pyth: 'Pyth verified', 'kraken-xstock': 'xStock 24/7, Kraken', kraken: 'Kraken spot 24/7', oracle: 'on-chain checkpoints' };
+/** The market's latest quote (a new value = a real move), not the eased price the screen animates. */
+export const quote = id => feed.quoteOf(indexOf(id));
 export const priceSource = id => { const i = indexOf(id); return feed.isPyth(i) ? SOURCE.pyth : SOURCE[feed.sourceOf(i)] || 'bounded checkpoints'; };
 export const onMarkets = cb => feed.onMarkets(cb);
 let focusId = null;

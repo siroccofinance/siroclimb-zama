@@ -39,6 +39,11 @@ function tick() {
 }
 for (let i = 0; i < 300; i++) { const ts = Date.now() - (300 - i) * TICK_MS; for (const f of feeds.values()) { f.price *= Math.exp(f.vol * Math.sqrt(TICK_MS / 1000) * gauss()); f.hist.push({ price: f.price, ts }); } }
 setInterval(tick, TICK_MS);
+// the simulated market "prints" a quote every 1.2 s, like a real book (the screen eases between ticks)
+const quotes = new Map();
+const printQuotes = () => { for (const [id, f] of feeds) quotes.set(id, f.price); };
+printQuotes(); setInterval(printQuotes, 1200);
+export const quote = id => quotes.get(id);
 
 export const listAssets = () => ASSETS.map(({ id, name, ticker, kind, token }) => ({ id, name, ticker, kind, token, open: true }));
 export function subscribePrice(id, cb) { const f = feeds.get(id); f.subs.add(cb); cb(f.hist[f.hist.length - 1]); return () => f.subs.delete(cb); }

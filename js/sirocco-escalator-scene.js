@@ -407,9 +407,15 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
     T.airDur = v0 / TR.G + Math.sqrt(2 * Math.max(0.01, apex - targetY) / TR.G);
     T.flipDir = big ? (n > 0 ? -1 : 1) : 0;
   }
+  // a step the coin takes: logged, announced, and the camera gives a little with it (up or down)
+  function stepped(T, n, big) {
+    T.events.push({ t: T.t, n, big }); T.onStep?.(n, big);
+    T.kick = Math.sign(n) * (0.07 + 0.035 * Math.min(2, Math.abs(n) - 1));
+  }
   // level: integer steps (favourable move). dt in s.
   function trackStep(T, dt, level) {
     T.t += dt;
+    T.kick = (T.kick || 0) * Math.exp(-dt * 5);
     if (T.events.length > 12) T.events.splice(0, T.events.length - 12);
     const e = T.end;
     if (e && e.type === 'bust') { T.v = Math.max(0, T.v - dt * 7); T.dist += T.v * dt; return T; }
@@ -434,11 +440,11 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
       const A = big ? 0.5 + 0.05 * Math.min(5, Math.abs(n)) : 0.12, v0 = Math.sqrt(2 * TR.G * (dy + A));
       const tc = (v0 - Math.sqrt(Math.max(0, v0 * v0 - 2 * TR.G * (dy + 0.04)))) / TR.G;
       if (xb - (uc + RC * 0.7) <= Math.max(T.v, 0.15) * tc || uc + RC >= xb) {
-        launch(T, v0, big, n, H(T, g1)); T.handled = g1; T.events.push({ t: T.t, n, big }); T.onStep?.(n, big);
+        launch(T, v0, big, n, H(T, g1)); T.handled = g1; stepped(T, n, big);
       }
-    } else if (dy < -0.02) {                                     // edge ahead: roll off it (a big drop: hop and turn)
-      if (big && uc >= xb - 0.1) { launch(T, Math.sqrt(2 * TR.G * 0.4), true, n, H(T, g1)); T.handled = g1; T.events.push({ t: T.t, n, big }); T.onStep?.(n, big); }
-      else if (!big && uc >= xb) { T.handled = g1; T.events.push({ t: T.t, n, big }); T.onStep?.(n, big); }
+    } else if (dy < -0.02) {                                     // edge ahead: a little hop down (a big drop: hop and turn)
+      if (big && uc >= xb - 0.1) { launch(T, Math.sqrt(2 * TR.G * 0.4), true, n, H(T, g1)); T.handled = g1; stepped(T, n, big); }
+      else if (!big && uc >= xb - 0.05) { launch(T, Math.sqrt(2 * TR.G * 0.14), false, n, H(T, g1)); T.handled = g1; stepped(T, n, big); }
     } else if (uc >= xb) T.handled = g1;
     // gravity, then the treads push back
     T.vy -= TR.G * dt; T.y += T.vy * dt;
@@ -461,7 +467,7 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
     const s = loopState(T.dist, T.t), ramp = ease.sm(clamp01(T.t / 0.9));
     const calm = e && e.type === 'cash' ? 1 - ease.sm(clamp01(k / e.TB)) : 1;
     const o = { dist: T.dist, zig: s.zig * ramp * calm, yaw: s.yaw * ramp * calm, lean: s.lean * ramp * calm,
-      cx: T.cx, cy: T.y, flip: T.flip, spin: 0, pop: 0, bloomUp: 0, camY: T.camY + TR.UP * ramp, follow: 0, lift: 0, liftX: T.cx };
+      cx: T.cx, cy: T.y, flip: T.flip, spin: 0, pop: 0, bloomUp: 0, camY: T.camY + TR.UP * ramp + (e ? 0 : T.kick || 0), follow: 0, lift: 0, liftX: T.cx };
     // light where the coin lands
     o.pop += (T.landBig ? 6 : Math.min(2, 0.4 * (T.landV || 0))) * Math.exp(-Math.pow((T.t - T.landT) / (T.landBig ? 0.09 : 0.07), 2));
     if (!e) { o.lean += danger * 0.16 * Math.sin(clock * 15) + danger * danger * 0.05 * Math.sin(clock * 31); o.zig += danger * 0.05 * Math.sin(clock * 9); }
