@@ -285,7 +285,12 @@ async function trackCheckpoints(run) {
   const pull = run.pull = async (force = false, atBlock = null) => {
     if ((!force && run.status !== 'live') || !run.cid) return;
     try {
-      if (run.entryIndex == null) run.entryIndex = Number((await W.view(() => game.getRun(BigInt(run.cid)))).entryIndex);
+      if (run.entryIndex == null) {
+        // a node that has not seen the start yet answers an empty run (entry index 0): ask again next time
+        const r = await W.view(() => game.getRun(BigInt(run.cid)));
+        if (Number(r.startAt) === 0) return;
+        run.entryIndex = Number(r.entryIndex);
+      }
       const [ts, px] = atBlock
         ? await W.view(() => W.oracle.path(run.market, run.entryIndex, 2n ** 256n - 1n, 64, { blockTag: atBlock }))
         : await W.oracle.path(run.market, run.entryIndex, 2n ** 256n - 1n, 64);
