@@ -410,7 +410,7 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
   // a step the coin takes: logged, announced, and the camera gives a little with it (up or down)
   function stepped(T, n, big) {
     T.events.push({ t: T.t, n, big }); T.onStep?.(n, big);
-    T.kick = Math.sign(n) * (0.07 + 0.035 * Math.min(2, Math.abs(n) - 1));
+    T.kick = Math.sign(n) * (0.07 + 0.03 * Math.min(9, Math.abs(n) - 1));
   }
   // level: integer steps (favourable move). dt in s.
   function trackStep(T, dt, level) {
@@ -437,13 +437,14 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
     const big = Math.abs(n) >= TR.BIG;
     if (T.air) { if (uc >= xb + 0.2) T.handled = g1; }
     else if (dy > 0.02) {                                        // riser ahead: leave the tread just in time to clear it
-      const A = big ? 0.5 + 0.05 * Math.min(5, Math.abs(n)) : 0.12, v0 = Math.sqrt(2 * TR.G * (dy + A));
+      // the hop grows with the step: a one-level riser is a skip, a ten-level jump a high leap
+      const A = big ? 0.35 + 0.08 * Math.min(10, Math.abs(n)) : 0.12, v0 = Math.sqrt(2 * TR.G * (dy + A));
       const tc = (v0 - Math.sqrt(Math.max(0, v0 * v0 - 2 * TR.G * (dy + 0.04)))) / TR.G;
       if (xb - (uc + RC * 0.7) <= Math.max(T.v, 0.15) * tc || uc + RC >= xb) {
         launch(T, v0, big, n, H(T, g1)); T.handled = g1; stepped(T, n, big);
       }
     } else if (dy < -0.02) {                                     // edge ahead: a little hop down (a big drop: hop and turn)
-      if (big && uc >= xb - 0.1) { launch(T, Math.sqrt(2 * TR.G * 0.4), true, n, H(T, g1)); T.handled = g1; stepped(T, n, big); }
+      if (big && uc >= xb - 0.1) { launch(T, Math.sqrt(2 * TR.G * (0.25 + 0.06 * Math.min(10, Math.abs(n)))), true, n, H(T, g1)); T.handled = g1; stepped(T, n, big); }
       else if (!big && uc >= xb - 0.05) { launch(T, Math.sqrt(2 * TR.G * 0.14), false, n, H(T, g1)); T.handled = g1; stepped(T, n, big); }
     } else if (uc >= xb) T.handled = g1;
     // gravity, then the treads push back
