@@ -567,6 +567,7 @@ body[data-side="short"] .sideglow { --g: var(--short); }
   .top__actions .icon svg { width: 20px; height: 20px; }
   .wallet__btn.is-on { padding: 0 8px; font-size: 12.5px; letter-spacing: -.01em; }
   .balance { padding-left: 8px; }
+  .wallet__btn { padding: 0 8px; }
 }
 
 /* balance pill states: one place says whether the balance is known (see renderBalance) */
@@ -605,4 +606,20 @@ body[data-side="short"] .sideglow { --g: var(--short); }
 .markets { padding: 6px 6px 22px; margin: -6px -6px -22px; }
 @media (max-width: 767px) {
   .markets { padding: 6px var(--x) 22px; margin: -6px calc(-1 * var(--x)) -22px; }
+}
+
+/* phone header: the actions take the room left by the mark and shrink
+   instead of pushing the wallet off the screen, whatever the label is */
+@media (max-width: 767px) {
+  .top { gap: 8px; }
+  .top__actions { flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
+  .wallet { min-width: 0; flex: 0 1 auto; }
+  .wallet__btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .balance { flex: none; }
+}
+@media (max-width: 400px) {
+  .top__actions .icon { width: 30px; }
+  .top__actions .icon svg { width: 20px; height: 20px; }
+  .balance { padding-left: 8px; }
+  .wallet__btn { padding: 0 8px; }
 }

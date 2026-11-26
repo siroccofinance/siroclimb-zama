@@ -137,6 +137,8 @@ function frame(now) {
 
 // ── wallet + balance
 const walletBtn = $('#wallet'), walletMenu = $('#walletMenu');
+// the label depends on the width: redraw it when the window crosses the phone breakpoint
+addEventListener('resize', () => renderWallet());
 function renderWallet() {
   const a = api.account();
   walletBtn.classList.toggle('is-on', !!a);
