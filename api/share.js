@@ -14,7 +14,9 @@ export default async function handler(req, res) {
   const runId = Number(b.runId);
   if (!Number.isInteger(runId) || runId < 0) return send(res, 400, { error: 'Not a run' });
   let run;
-  try { run = await verifiedRun(runId); } catch { return send(res, 502, { error: 'Sepolia did not answer, try again' }); }
+  // atBlock: the block of the player's record (a node behind it would still see the run unpublished)
+  const atBlock = Number.isInteger(Number(b.atBlock)) && Number(b.atBlock) > 0 ? Number(b.atBlock) : null;
+  try { run = await verifiedRun(runId, undefined, atBlock); } catch { return send(res, 502, { error: 'Sepolia did not answer, try again' }); }
   if (!run) return send(res, 404, { error: 'This run is not over on chain yet' });
   if (!run.published) return send(res, 409, { error: 'not-published', runId });
   let id;
