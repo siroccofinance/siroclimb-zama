@@ -502,7 +502,7 @@ const sh = { seq: 0, link: null };
 const shEl = { card: $('#shCard'), img: $('#shImg'), side: $('#shSide'), dl: $('#shDl'), x: $('#shX'), copy: $('#shCopy'), veil: $('#shVeil'), veilT: $('#shVeilT'), pub: $('#shPub') };
 shEl.side.checked = store.get('shareSide', true);
 const shareable = () => ended && run && ended.status !== 'failed';
-const chainRunId = () => (api.mode !== 'chain' ? null : ended?.chain ? ended.runId : api.runInfo(run.id)?.chainId ?? null);
+const chainRunId = () => (api.mode !== 'chain' ? null : ended?.chain ? ended.runId : (run && api.runInfo(run.id)?.chainId) ?? sh.runId ?? null);
 function veil(text, button = false) {
   shEl.veil.hidden = !text; shEl.veilT.textContent = text || ''; shEl.pub.hidden = !button;
   [shEl.dl, shEl.x].forEach(a => a.setAttribute('aria-disabled', 'true'));
@@ -540,7 +540,7 @@ async function refreshShare() {
   }
 }
 shEl.pub.onclick = async () => {
-  const id = chainRunId(); if (id == null) return;
+  const id = sh.runId ?? chainRunId(); if (id == null) return;
   shEl.pub.disabled = true; veil('Publishing your return: one transaction, then the KMS proof…');
   try {
     const pub = await api.publishRun(id);
@@ -572,7 +572,8 @@ $('#tipClose').onclick = hideTip;
 $('#share').onclick = () => {
   if (!shareable()) return;
   sound.tick();
-  sh.link = null; sh.retries = 0; shEl.img.removeAttribute('src');
+  sh.link = null; sh.retries = 0; sh.runId = null; shEl.img.removeAttribute('src');
+  sh.runId = chainRunId();                           // the sheet keeps its run, whatever the screen does meanwhile
   openSheet('shareSheet'); refreshShare();
 };
 // fallback: the post is written, the picture drawn in the browser goes to the clipboard (desktop) or the share sheet (phones)
