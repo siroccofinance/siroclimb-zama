@@ -9,7 +9,7 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3043);
 const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json',
   '.webp': 'image/webp', '.svg': 'image/svg+xml', '.png': 'image/png', '.mp4': 'video/mp4', '.webm': 'video/webm', '.ico': 'image/x-icon', '.woff': 'font/woff' };
-const routes = { '/api/pyth': () => import('./api/pyth.js'), '/api/prices': () => import('./api/prices.js'),
+const routes = { '/api/pyth': () => import('./api/pyth.js'), '/api/prices': () => import('./api/prices.js'), '/api/change': () => import('./api/change.js'),
   '/api/share': () => import('./api/share.js'), '/api/og': () => import('./api/og.js'), '/api/s': () => import('./api/s.js'),
   '/api/drip': () => import('./api/drip.js'), '/api/keep': () => import('./api/keep.js') };
 
