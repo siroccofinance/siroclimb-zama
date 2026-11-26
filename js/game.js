@@ -2,7 +2,7 @@
 // The 3D scene is the hero's: in the lobby the belt loops; on start it brakes, the coin's box climbs one level
 // per leverage step; cash out tosses the coin (camera follows), a bust drops it.
 import * as api from './api.js';
-import { createEscalatorScene } from './sirocco-escalator-scene.js?v=9';
+import { createEscalatorScene } from './sirocco-escalator-scene.js?v=10';
 import { CARD, drawCard, loadLogo, toBlob } from './share-card.js?v=1';
 
 const $ = s => document.querySelector(s);
@@ -747,14 +747,33 @@ function stepSize(assetId) {
   const m = r.reduce((a, b) => a + b, 0) / r.length, sd = Math.sqrt(r.reduce((a, b) => a + (b - m) ** 2, 0) / r.length);
   return Math.max(1e-5, sd * 1.4);
 }
+// the typical size of one quote change of this market, before any arrives: the drawn history is smoothed,
+// so it is read over 3 s windows (about one quote apart), scaled to a quote change (measured: ×2 to ×3)
+function typicalChange(assetId) {
+  const h = api.history(assetId, 60), w = []; let j = 0;
+  for (let i = 1; i < h.length; i++) {
+    if (h[i].ts - h[j].ts < 3000) continue;
+    const m = Math.abs(Math.log(h[i].price / h[j].price)); if (m > 1e-7) w.push(m); j = i;
+  }
+  if (w.length < 4) return 0;
+  w.sort((x, y) => x - y); return 2.5 * w[w.length >> 1];
+}
 // counters for the stairs check (tests/chain/stairs.mjs): visible steps, and real quote changes
-const stairs = window.__stairs = { steps: 0, quotes: 0, last: null };
+const stairs = window.__stairs = { steps: 0, quotes: 0, last: null, sizes: {}, moves: [] };
 function countQuote() {
   const q = run && api.quote(run.assetId);
   if (q != null && q !== stairs.last) { if (stairs.last != null) stairs.quotes++; stairs.last = q; }
 }
-// every real move gives a step: a new quote that favours the player climbs, one against it drops; bigger
-// moves (against the market's typical move) climb or drop up to 3 steps. Visual only: payouts follow the chain.
+// every real move gives at least one step, and the size follows the move: one level = a small unit of this
+// market's typical quote change, so a small tick is one step and a big move jumps several levels (soft cap
+// near 10). The stairs keep the sparkline's shape: a spike up then back down is a big climb then a big drop.
+// Visual only: payouts follow the chain.
+const LV = { PER_TYPICAL: 2.5, KNEE: 6, CAP: 10 };
+function levelsFor(mv, unit) {
+  const raw = Math.abs(mv) / unit;
+  const soft = raw <= LV.KNEE ? raw : LV.KNEE + (LV.CAP - LV.KNEE) * (1 - Math.exp(-(raw - LV.KNEE) / (LV.CAP - LV.KNEE)));
+  return Math.sign(mv) * Math.max(1, Math.min(LV.CAP, Math.round(soft)));
+}
 function levelFrom() {
   countQuote();
   const q = api.quote(run.assetId); if (!(q > 0)) return;
@@ -762,17 +781,20 @@ function levelFrom() {
   if (q === lvl.lastQ) return;                                   // unchanged: the stairs stay flat
   const mv = lvl.sign * Math.log(q / lvl.lastQ); lvl.lastQ = q;
   if (!mv) return;
+  // the typical quote change: seeded from the market's recent ticks, then a slow average (a spike barely moves it)
   const typical = lvl.typical || Math.abs(mv);
-  lvl.typical = typical * 0.8 + Math.abs(mv) * 0.2;
-  lvl.level += Math.sign(mv) * (1 + Math.min(2, Math.floor(Math.abs(mv) / (2 * typical))));
+  const n = levelsFor(mv, typical / LV.PER_TYPICAL);
+  lvl.typical = typical * 0.85 + Math.min(Math.abs(mv), 3 * typical) * 0.15;
+  lvl.level += n;
+  stairs.moves.push({ t: Date.now(), mv, n, level: lvl.level, r: +(Math.abs(mv) / typical).toFixed(2) }); if (stairs.moves.length > 400) stairs.moves.shift();
 }
 function startTrack(r) {
   if (!sc || !G) return;
-  lvl.level = 0; lvl.entry = r.entryPrice; lvl.sign = r.side === 'short' ? -1 : 1; lvl.q = stepSize(r.assetId); lvl.lastQ = api.quote(r.assetId) ?? null; lvl.typical = 0;
+  lvl.level = 0; lvl.entry = r.entryPrice; lvl.sign = r.side === 'short' ? -1 : 1; lvl.q = stepSize(r.assetId); lvl.lastQ = api.quote(r.assetId) ?? null; lvl.typical = typicalChange(r.assetId);
   TK = sc.createTrack(G.plan); TK.dangerTo = 0;
   G = null;
   TK.onStep = (n, big) => {
-    stairs.steps++;
+    stairs.steps++; stairs.sizes[n] = (stairs.sizes[n] || 0) + 1;
     bubble(n, big);
     if (big) { (n > 0 ? sound.cash : sound.drop)(); haptic(n > 0 ? [10, 20, 10] : 26); }
     else { (n > 0 ? sound.up : sound.down)(lvl.level); haptic(8); }
