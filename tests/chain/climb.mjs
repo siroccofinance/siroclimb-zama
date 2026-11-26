@@ -14,7 +14,17 @@ const pg = await b.newPage();
 pg.on('pageerror', e => console.log('PAGEERROR', e.message));
 await injectWallet(pg, key);
 await pg.evaluateOnNewDocument(m => { localStorage.setItem('siroclimb:ui:seenRules', 'true'); localStorage.setItem('siroclimb:ui:asset', JSON.stringify(m)); }, market);
-await pg.setViewport({ width: 1440, height: 900 });
+// PHONE=1: a 390 px touch screen whose share sheet takes files (stubbed: records what would be shared)
+if (process.env.PHONE) {
+  await pg.emulateMediaFeatures([{ name: 'pointer', value: 'coarse' }]).catch(() => {});
+  await pg.evaluateOnNewDocument(() => {
+    const mm = window.matchMedia.bind(window);
+    window.matchMedia = q => (/pointer:\s*coarse/.test(q) ? { matches: true, media: q, addEventListener() {}, removeEventListener() {} } : mm(q));
+    navigator.canShare = d => !!(d && d.files && d.files.length);
+    navigator.share = async d => { window.__shared = { files: (d.files || []).map(f => ({ name: f.name, type: f.type, size: f.size })), text: d.text, url: d.url }; };
+  });
+}
+await pg.setViewport(process.env.PHONE ? { width: 390, height: 844, isMobile: true, hasTouch: true } : { width: 1440, height: 900 });
 const wait = ms => new Promise(r => setTimeout(r, ms)), t0 = Date.now(), T = () => ((Date.now() - t0) / 1000).toFixed(1).padStart(5) + 's';
 await pg.goto(`${base}/#play`, { waitUntil: 'networkidle2', timeout: 60000 });
 await wait(3000);
@@ -46,5 +56,6 @@ if (process.env.SHARE) {                       // verified share: publish the re
   for (let i = 0; i < 90; i++) { const src = await pg.$eval('#shImg', e => e.getAttribute('src') || ''); const v = await pg.$eval('#shVeilT', e => e.textContent); if (i % 5 === 0) console.log(T(), 'share:', v || src.slice(-40)); if (/api\/og\?id=[xyr]/.test(src) && !v) break; await wait(2000); }
   await wait(1500); await pg.screenshot({ path: 'out/share-1card.png' });
   console.log(T(), 'post:', decodeURIComponent(await pg.$eval('#shX', e => e.href)));
+  if (process.env.PHONE) { await wait(2000); await pg.$eval('#shX', e => e.click()); await wait(1500); console.log(T(), 'native share:', JSON.stringify(await pg.evaluate(() => window.__shared || null))); }
 }
 await b.close();
