@@ -484,8 +484,10 @@ async function settleOnce(run) {
         multLong: Number(r.multLong) / SCALE, multShort: Number(r.multShort) / SCALE, chain: true, runId: run.cid, tx: run.tx };
       if (!run.local) { run.status = run.chain.status; run.local = run.chain; run.waiters.splice(0).forEach(f => f(run.chain)); }
       run.unsub?.();
+      // the payout counts in the balance before the screen says "Settled" (no await in between)
+      moveBal(value, { block: run.txBlock || 0 });
       run.settleWaiters.splice(0).forEach(f => f(run.chain));
-      moveBal(value, { block: run.txBlock || (await rpc.getBlockNumber().catch(() => 0)) });
+      if (!run.txBlock) rpc.getBlockNumber().then(b => { movesBlock = Math.max(movesBlock, b); }).catch(() => {});
       if (store.get(liveKey(), null)?.cid === run.cid) store.del(liveKey());
       refreshSoon(run.txBlock ?? true); record(run);
       return run.chain;
