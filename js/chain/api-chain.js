@@ -382,6 +382,8 @@ export async function startRun({ assetId, side = 'long', stake }) {
     moveLanded(rc.blockNumber);
     const ev = parseEvent(rc, 'RunStarted');
     Object.assign(run, { cid: String(ev.runId), startedAt: Number(ev.startAt) * 1000, entryPrice: Number(ev.entryPrice) / 10 ** PRICE_DECIMALS, pending: false });
+    // remembered on this device: a reload during the run finds it again (side and stake stay off chain in clear)
+    store.set(liveKey(), { cid: run.cid, assetId, side, stake, startedAt: run.startedAt, entryPrice: run.entryPrice, game: ADDR.Siroclimb });
     status(null);
     trackCheckpoints(run);
     autopilot.watchRun(run);
@@ -484,6 +486,7 @@ async function settleOnce(run) {
       run.unsub?.();
       run.settleWaiters.splice(0).forEach(f => f(run.chain));
       moveBal(value, { block: run.txBlock || (await rpc.getBlockNumber().catch(() => 0)) });
+      if (store.get(liveKey(), null)?.cid === run.cid) store.del(liveKey());
       refreshSoon(run.txBlock ?? true); record(run);
       return run.chain;
     }
@@ -497,6 +500,30 @@ function record(run) {
   const h = store.get('history', []);
   h.unshift({ ts: Date.now(), assetId: run.assetId, side: run.side, stake: run.stake, ...run.chain });
   store.set('history', h.slice(0, 100));
+}
+
+// ── a run in progress survives a reload: this device remembers it, the chain says if it is still live
+const liveKey = () => `liveRun:${(W.player() || '').toLowerCase()}`;
+/**
+ * The player's run from before a reload: { run } if it is still live (the climb goes on), { result } if it
+ * ended meanwhile (settled by its cash out or at its 60th second), or null.
+ */
+export async function resumeRun() {
+  const rec = W.player() && store.get(liveKey(), null);
+  if (!rec || rec.game !== ADDR.Siroclimb) return null;
+  let r;
+  try { r = await W.view(() => game.getRun(BigInt(rec.cid))); } catch { return null; }
+  const status = Number(r.status);
+  const run = runs.get(`chain:${rec.cid}`) || makeRun({ id: `chain:${rec.cid}`, cid: rec.cid, assetId: rec.assetId, side: rec.side, stake: rec.stake,
+    startedAt: Number(r.startAt) * 1000, entryPrice: Number(r.entryPrice) / 10 ** PRICE_DECIMALS });
+  run.pending = false;
+  if (status === 1 && Date.now() < run.startedAt + RUN_SECONDS * 1000) {
+    trackCheckpoints(run); autopilot.watchRun(run);
+    return { run: publicRun(run) };
+  }
+  // over: its 60 seconds ran out (the autopilot settles it now), or it was settled already
+  if (status === 1) { run.status = 'expired'; run.endedAt = run.startedAt + RUN_SECONDS * 1000; autopilot.kick(); }
+  try { return { result: await settleFromChain(run), run: publicRun(run) }; } catch { return null; }
 }
 
 /** Reveals a finished solo run on the leaderboard (multiplier public, stake stays private). */
