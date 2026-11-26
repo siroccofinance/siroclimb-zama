@@ -27,6 +27,9 @@ const tiny = v => (v > 0 && v < 0.0000005 ? '<0.000001' : v > 0 && v < 0.01 ? v.
 const pct = v => sgn(v) + Math.abs(v).toFixed(2) + '%';
 // enough decimals for the microprice's moves: 3 for the stocks, 5 for the pound (gold: a cent is 0.0003 %)
 const price = p => (p >= 1000 ? nf.format(p) : p >= 10 ? p.toFixed(3) : p.toFixed(5));
+// in the climb, three decimals for gold too (the lobby cards keep two to fit): the microprice's small moves show
+const nf3 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+const livePrice = p => (p >= 1000 ? nf3.format(p) : price(p));
 const levTxt = x => (x % 1 ? x.toFixed(1) : String(x)) + 'x';
 const mmss = s => { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 const shortAddr = a => a.slice(0, 4) + '…' + a.slice(-4);
@@ -284,7 +287,7 @@ function renderLobby() {
   for (const [id, c] of Object.entries(chip)) c.b.setAttribute('aria-pressed', String(id === C.asset));
   api.focus(C.asset);
   api.prepare({ side: C.side, stake: C.stake });     // encrypt the pick now, so the click only sends it
-  $('#lobbyHint').textContent = STAIRS ? 'You hold real tokens, 4x your stake. The coin rolls on the live price, moves count ×25, the game leverage grows every 6 seconds. Side and stake stay encrypted.' : 'Climb at your own pace. The coin steps up every 6 seconds.';
+  $('#lobbyHint').textContent = STAIRS ? 'You hold real tokens, 4x your stake. The coin rolls on the live price, moves count ×' + (byId[C.asset].boost || 25) + ' on this market, the game leverage grows every 6 seconds. Side and stake stay encrypted.' : 'Climb at your own pace. The coin steps up every 6 seconds.';
   renderGo();
 }
 function renderGo() {
@@ -332,6 +335,7 @@ function gaugeFrame(tr) {
 function enterGame(r) {
   if (!r || run) return;
   run = r; upd = null; shownStep = 0; ended = null;
+  $('#gBoost').textContent = `×${byId[r.assetId]?.boost || 25}`;
   Object.assign(D, { value: r.stake, pnl: 0, pct: 0, danger: 0 });
   if (sc && (!G || G.end)) park();                    // normally the coin is already parked from the lobby
   if (G) { G.steps = []; G.dangerTo = 0; G.end = null; G.go = (performance.now() - G.t0) / 1000; }
@@ -394,7 +398,7 @@ function hudFrame(dt) {
     if (!next) rungs.forEach(li => li.style.setProperty('--p', 0));
     gaugeFrame(tr);
     const p = u ? u.price : run.entryPrice, ch = (p / run.entryPrice - 1) * 100;
-    $('#hP').textContent = price(p); const src = api.priceSource(run.assetId); $('#hC').textContent = pct(ch) + ' since entry' + (src ? ` · ${src}` : '');
+    $('#hP').textContent = livePrice(p); const bst = byId[run.assetId]?.boost; $('#hC').textContent = pct(ch) + ' since entry' + (bst ? ` · moves ×${bst}` : '');
   }
 }
 
@@ -454,9 +458,9 @@ function showResult(res) {
   const a = byId[run.assetId];
   const stats = [['Return', pct(res.pnlPct)], ['Top leverage', levTxt(res.maxLeverage)], ['Time', `${Math.max(1, Math.round(res.duration))}s`],
     [`${label(a)} entry → exit`, `${price(res.entryPrice)} → ${price(res.exitPrice)}`]];
-  // the payout = the real position (tokens bought or borrowed at the real price) + the game boost (moves x25)
+  // the payout = the real position (tokens bought or borrowed at the real price) + the game boost (moves x the market's boost)
   if (res.position != null) stats.push([`Real position (${res.qty != null ? `${res.qty.toFixed(res.qty < 1 ? 4 : 2)} ` : ''}${res.token || label(a)})`, `${money(res.position)} cUSDC`],
-    ['Game boost (moves ×25)', `${signed(res.boost)} cUSDC`]);
+    [`Game boost (moves ×${byId[run.assetId]?.boost || 25})`, `${signed(res.boost)} cUSDC`]);
   if (res.interest != null) stats.push(['Borrowed', `${money(res.borrowed || 0)} cUSDC`], ['Interest paid', `${tiny(res.interest)} cUSDC`]);
   $('#rS').innerHTML = stats.map(([k, v], i) => `<div${i ? '' : ` class="is-key${res.pnlPct > 0.005 ? ' is-up' : ''}"`}><dt>${k}</dt><dd>${v}</dd></div>`).join('');
   const rr = $('#rR'); rr.hidden = !res.pending;
@@ -793,16 +797,13 @@ function stepSize(assetId) {
   const m = r.reduce((a, b) => a + b, 0) / r.length, sd = Math.sqrt(r.reduce((a, b) => a + (b - m) ** 2, 0) / r.length);
   return Math.max(1e-5, sd * 1.4);
 }
-// the typical size of one quote change of this market, before any arrives: the drawn history is smoothed,
-// so it is read over 3 s windows (about one quote apart), scaled to a quote change (measured: ×2 to ×3)
-function typicalChange(assetId) {
-  const h = api.history(assetId, 60), w = []; let j = 0;
-  for (let i = 1; i < h.length; i++) {
-    if (h[i].ts - h[j].ts < 3000) continue;
-    const m = Math.abs(Math.log(h[i].price / h[j].price)); if (m > 1e-7) w.push(m); j = i;
-  }
-  if (w.length < 4) return 0;
-  w.sort((x, y) => x - y); return 2.5 * w[w.length >> 1];
+/// The typical size of one price change of this market (median of its recent non-zero quote changes).
+function typicalMove(assetId) {
+  const h = api.quotes(assetId, 90), r = [];
+  for (let i = 1; i < h.length; i++) if (h[i].price !== h[i - 1].price) r.push(Math.abs(Math.log(h[i].price / h[i - 1].price)));
+  if (r.length < 5) return 0;
+  r.sort((a, b) => a - b);
+  return r[Math.floor(r.length / 2)];
 }
 // counters for the stairs check (tests/chain/stairs.mjs): visible steps, and real quote changes
 const stairs = window.__stairs = { steps: 0, quotes: 0, last: null, sizes: {}, moves: [] };
@@ -810,15 +811,12 @@ function countQuote() {
   const q = run && api.quote(run.assetId);
   if (q != null && q !== stairs.last) { if (stairs.last != null) stairs.quotes++; stairs.last = q; }
 }
-// every real move gives at least one step, and the size follows the move on a log scale against this
-// market's typical quote change: an ordinary tick one step, twice it three, four times five, eight times
-// seven (the most: taller walls hid the coin). The stairs keep the sparkline's shape: a spike up then back
-// down is a big climb then a big drop. Visual only: payouts follow the chain.
+// Every price change is a step in its own direction (up when it goes the player's way), sized by the move in
+// this market's typical tick, on a log scale: an ordinary tick is one step, twice that three, four times five,
+// eight times or more seven (taller walls hid the coin).
+// Purely visual: the climb's value, the bust and the payout come from the chain.
 const MAX_STEP = 7;
-function levelsFor(mv, typical) {
-  const size = Math.abs(mv) / typical;
-  return Math.sign(mv) * Math.max(1, Math.min(MAX_STEP, 1 + Math.round(2 * Math.log2(Math.max(1, size)))));
-}
+const stepsFor = size => Math.max(1, Math.min(MAX_STEP, 1 + Math.round(2 * Math.log2(Math.max(1, size)))));
 function levelFrom() {
   countQuote();
   const q = api.quote(run.assetId); if (!(q > 0)) return;
@@ -826,16 +824,14 @@ function levelFrom() {
   if (q === lvl.lastQ) return;                                   // unchanged: the stairs stay flat
   const mv = lvl.sign * Math.log(q / lvl.lastQ); lvl.lastQ = q;
   if (!mv) return;
-  // the typical quote change: seeded from the market's recent ticks, then a slow average (a spike barely moves it)
-  const typical = lvl.typical || Math.abs(mv);
-  const n = levelsFor(mv, typical);
-  lvl.typical = typical * 0.85 + Math.min(Math.abs(mv), 3 * typical) * 0.15;
+  if (!lvl.tick) lvl.tick = Math.abs(mv);                        // no history yet: the first change is the unit
+  const n = Math.sign(mv) * stepsFor(Math.abs(mv) / lvl.tick);
   lvl.level += n;
-  stairs.moves.push({ t: Date.now(), mv, n, level: lvl.level, r: +(Math.abs(mv) / typical).toFixed(2) }); if (stairs.moves.length > 400) stairs.moves.shift();
+  stairs.moves.push({ t: Date.now(), mv, n, level: lvl.level, r: +(Math.abs(mv) / lvl.tick).toFixed(2) }); if (stairs.moves.length > 400) stairs.moves.shift();
 }
 function startTrack(r) {
   if (!sc || !G) return;
-  lvl.level = 0; lvl.entry = r.entryPrice; lvl.sign = r.side === 'short' ? -1 : 1; lvl.q = stepSize(r.assetId); lvl.lastQ = api.quote(r.assetId) ?? null; lvl.typical = typicalChange(r.assetId);
+  lvl.level = 0; lvl.entry = r.entryPrice; lvl.sign = r.side === 'short' ? -1 : 1; lvl.q = stepSize(r.assetId); lvl.lastQ = api.quote(r.assetId) ?? null; lvl.tick = typicalMove(r.assetId);
   TK = sc.createTrack(G.plan); TK.dangerTo = 0;
   G = null;
   TK.onStep = (n, big) => {

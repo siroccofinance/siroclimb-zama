@@ -9,7 +9,7 @@
 //  - the leverage of every run is borrowed from the Sirocco Reserve (SiroccoReserve), a confidential
 //    cUSDC lending pool: S x (L - 1) is borrowed, interest is charged on it, the PnL goes to lenders;
 //  - this browser is also the keeper (autopilot.js): price checkpoints, expired runs, reserve syncs.
-import { ADDR, LADDER, MARKETS, MAX_STAKE, MOVE_SCALE, PRICE_DECIMALS, RUN_SECONDS, SCALE, SESSION_MIN_ETH, SESSION_TX_ETH, STEP_SECONDS, USDC, indexOf, txUrl } from './config.js';
+import { ADDR, BOOST, LADDER, MARKETS, MAX_STAKE, PRICE_DECIMALS, RUN_SECONDS, SCALE, SESSION_MIN_ETH, SESSION_TX_ETH, STEP_SECONDS, USDC, indexOf, txUrl } from './config.js';
 import * as feed from './feed.js';
 import { encryptAmount, encryptRun, ensureGrant, hasGrant, publicDecrypt, userDecrypt, warmUp } from './fhe.js';
 import * as W from './wallet.js';
@@ -20,13 +20,14 @@ import * as autopilot from './autopilot.js';
 
 const { game, faucet: faucetC, token, reserve, rpc, store, friendly, sleep } = W;
 
-export const rules = { ladder: LADDER, stepEvery: STEP_SECONDS, duration: RUN_SECONDS, moveScale: MOVE_SCALE, maxStake: MAX_STAKE };
+export const rules = { ladder: LADDER, stepEvery: STEP_SECONDS, duration: RUN_SECONDS, boost: BOOST, maxStake: MAX_STAKE };
 export const chain = true;
 
 // ───────────────────────────── markets and prices
-export const listAssets = () => MARKETS.map(m => ({ id: m.id, name: m.name, ticker: m.ticker, kind: m.kind, token: m.token.symbol, open: feed.isOpen(m.index) }));
+export const listAssets = () => MARKETS.map(m => ({ id: m.id, name: m.name, ticker: m.ticker, kind: m.kind, token: m.token.symbol, boost: m.boost, open: feed.isOpen(m.index) }));
 export const subscribePrice = (id, cb) => feed.subscribe(indexOf(id), cb);
 export const history = (id, seconds = 60) => feed.history(indexOf(id), seconds);
+export const quotes = (id, seconds = 90) => feed.quotes(indexOf(id), seconds);
 export const marketOpen = id => feed.isOpen(indexOf(id));
 /** Where the chain gets this market's checkpoints from now: 'Pyth' (verified) or 'bounded' (public fallback). */
 const SOURCE = { pyth: 'Pyth verified', 'kraken-xstock': 'xStock 24/7, Kraken', kraken: 'Kraken spot 24/7', hyperliquid: 'Hyperliquid 24/7', 'hyperliquid-ws': 'Hyperliquid live book', oracle: 'on-chain checkpoints' };
@@ -294,12 +295,24 @@ async function trackCheckpoints(run) {
   await pull();
   run.cpTimer = setInterval(pull, 2500);
 }
-function chainValue(run, nowMs, live = pythNow(run.market)) {
+// The live value: the checkpoints so far, plus the market's live price as the next checkpoint (bounded like a
+// public one, +/-0.49 % of the last), so the value moves with every price change on screen. A cash out writes
+// that very price as its checkpoint before it leaves (sendCashOut), so the payout is the value shown.
+// `provisional` false: the checkpoints alone (the exact path the contract reads, and the bust test).
+const PUBLIC_MAX_MOVE = 0.0049;
+function provisionalPrice(run, lastPrice) {
+  const q = feed.quoteOf(run.market), lp = Number(lastPrice) / 10 ** PRICE_DECIMALS;
+  if (!(q > 0) || !(lp > 0)) return null;
+  const c = Math.min(lp * (1 + PUBLIC_MAX_MOVE), Math.max(lp * (1 - PUBLIC_MAX_MOVE), q));
+  return BigInt(Math.round(c * 10 ** PRICE_DECIMALS));
+}
+function chainValue(run, nowMs, live = pythNow(run.market), provisional = true) {
   if (!run.cps || !run.cps.length) return null;
   const pts = run.cps.slice();
   const nowS = Math.floor(nowMs / 1000), last = pts[pts.length - 1];
   if (live && live.mantissa != null && nowS > last.ts) pts.push({ ts: nowS, price: pythToFixed10(live.mantissa, live.expo) });
-  const m = multipliers(pts, Math.floor(run.startedAt / 1000), MOVE_SCALE);
+  else if (!live && provisional) { const pp = provisionalPrice(run, last.price); if (pp != null && pp !== last.price) pts.push({ ts: Math.max(nowS, last.ts + 1), price: pp }); }
+  const m = multipliers(pts, Math.floor(run.startedAt / 1000), BOOST[run.market]);
   const mult = Number(run.side === 'long' ? m.long : m.short) / SCALE;
   return { mult, exit: Number(pts[pts.length - 1].price) / 10 ** PRICE_DECIMALS };
 }
@@ -310,9 +323,9 @@ function advance(run, price, ts) {
   if (run.pending || t < 0) { const u = update(run, ts); run.subs.forEach(cb => cb(u)); return; }
   const lev = LADDER[stepAt(t)];
   run.maxLev = Math.max(run.maxLev, lev);
-  const cv = chainValue(run, ts);
+  const cv = chainValue(run, ts), exact = chainValue(run, ts, undefined, false);
   if (cv) run.acc = cv.mult - 1;
-  if (cv && cv.mult === 0) { run.acc = -1; endLocal(run, 'busted', ts); }
+  if (exact && exact.mult === 0) { run.acc = -1; endLocal(run, 'busted', ts); }   // a fall the checkpoints confirm
   else if (t >= run.duration) endLocal(run, 'expired', ts);
   const u = update(run, ts); run.subs.forEach(cb => cb(u));
 }
@@ -337,7 +350,7 @@ function endLocal(run, st, ts = Date.now(), frozen = null) {
     entryPrice: run.entryPrice, exitPrice: frozen?.exit ?? run.last, pending: true, runId: run.cid ?? run.id };
   run.waiters.splice(0).forEach(r => r(run.local));
   if (st === 'expired') autopilot.kick();            // anyone may settle at the 60th second; this browser does it now
-  else sendCashOut(run, frozen?.pyth, frozen?.after).catch(e => status({ kind: 'error', text: `Cash out: ${friendly(e)}` }));
+  else sendCashOut(run, frozen?.pyth, frozen?.after, frozen).catch(e => status({ kind: 'error', text: `Cash out: ${friendly(e)}` }));
 }
 
 // ── pre-encryption: side and stake are encrypted in the background as soon as they are picked in the
@@ -431,14 +444,34 @@ export async function cashOut(id) {
   const pyth = await pythFor(run.market).catch(() => null);
   const now = Date.now(), live = pyth ? { mantissa: pyth.mantissa, expo: pyth.expo } : null;
   const cv = chainValue(run, now, live);
+  // the price this cash out writes as its checkpoint (no signed Pyth price): the one its value was shown on
+  const lastCp = run.cps?.[run.cps.length - 1];
+  const pushPx = !pyth && lastCp ? provisionalPrice(run, lastCp.price) : null;
   // the result shows now; the transaction leaves now, or right after a checkpoint this browser is
   // still writing on the market; the value is then re-checked against the exact path the contract reads
   const after = autopilot.inflight(run.market);
-  endLocal(run, 'cashed', now, { ...(cv || { mult: 1 + run.acc, exit: run.last }), pyth, after });
+  endLocal(run, 'cashed', now, { ...(cv || { mult: 1 + run.acc, exit: run.last }), pyth, after, pushPx, lastCpTs: lastCp?.ts });
   return run.local;
 }
-async function sendCashOut(run, frozenPyth, after = null) {
+async function sendCashOut(run, frozenPyth, after = null, frozen = null) {
   const s = await session();
+  // the shown price becomes the exit checkpoint: once the public spacing allows it (at most ~10 s), pushed
+  // right before the cash out (next nonce, same block in general). If someone else wrote a checkpoint
+  // meanwhile, that one is the exit and the value is re-checked below.
+  if (frozen?.pushPx != null && !frozenPyth) {
+    try {
+      for (let i = 0; i < 24; i++) {
+        const [, ts] = await W.oracle.latest(run.market);
+        if (Number(ts) > (frozen.lastCpTs ?? 0)) { after = after || Promise.resolve({ block: null }); break; }   // a newer checkpoint landed
+        if (Date.now() / 1000 - Number(ts) >= 11) {
+          await s.send(W.oracle, 'pushPublic', [[run.market], [frozen.pushPx]], 0n, 'pushPublic', { fast: true });
+          after = null; break;
+        }
+        status({ kind: 'chain', text: 'Writing your exit price on Sepolia…' });
+        await sleep(500);
+      }
+    } catch {}
+  }
   // a checkpoint this browser is writing on the market lands first: in the same block it would take
   // the cash out's place as the exit price and the paid value would differ from the frozen one
   // ...but never for long: a checkpoint stuck in this browser's keeper queue once held a cash out for 15 min (F63)
@@ -450,7 +483,7 @@ async function sendCashOut(run, frozenPyth, after = null) {
     // the frozen signed price stays, unless it would be too old for the oracle when the block lands
     if (pyth && Date.now() / 1000 - pyth.publishTime > 15) pyth = (await pythFor(run.market).catch(() => null)) ?? pyth;
     await run.pull(true, landed?.block ?? null);
-    const exact = chainValue(run, Date.now(), pyth ? { mantissa: pyth.mantissa, expo: pyth.expo } : null);
+    const exact = chainValue(run, Date.now(), pyth ? { mantissa: pyth.mantissa, expo: pyth.expo } : null, false);
     if (exact) {
       const { value, interest } = net(run.stake, multOf(exact.mult - 1), run.local.duration);
       Object.assign(run.local, { value, interest, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, exitPrice: exact.exit });
@@ -496,6 +529,7 @@ async function settleOnce(run) {
       // the payout counts in the balance before the screen says "Settled" (no await in between)
       moveBal(value, { block: run.txBlock || 0 });
       run.settleWaiters.splice(0).forEach(f => f(run.chain));
+      if (statusNow?.kind === 'keeper' && !liveRuns().length) status(null);   // "Settled on chain": no keeper line left spinning
       if (!run.txBlock) rpc.getBlockNumber().then(b => { movesBlock = Math.max(movesBlock, b); }).catch(() => {});
       const rec = store.get(liveKey(), null);
       if (rec && (rec.cid === run.cid || rec.tx === run.tx)) store.del(liveKey());

@@ -19,6 +19,7 @@ import {
   price,
   quotes,
   startRun,
+  MOVE_SCALES,
 } from "./helpers";
 
 const STOCK = 1_000_000n * USDC;
@@ -77,7 +78,7 @@ describe("SiroccoDesk: every run holds real tokens", function () {
     await at(run.startAt, 20);
     await f.game.connect(f.alice).cashOut(id, []);
     const pos = position(stake, true, BASE[AAPL], p1, 20);
-    const mult = model([{ t: 0, p: BASE[AAPL] }, { t: 13, p: p1 }]).long;
+    const mult = model([{ t: 0, p: BASE[AAPL] }, { t: 13, p: p1 }], 6, MOVE_SCALES[AAPL]).long;
     // the payout keeps the game scale; the real position is reported next to it
     const paid = payout(stake, mult, 20);
     expect(await balance(f, f.alice)).to.eq(before - stake + paid);
@@ -108,7 +109,7 @@ describe("SiroccoDesk: every run holds real tokens", function () {
     await at(run.startAt, 15);
     await f.game.connect(f.alice).cashOut(id, []);
     const pos = position(stake, false, BASE[XAUT], p1, 15);
-    const mult = model([{ t: 0, p: BASE[XAUT] }, { t: 8, p: p1 }]).short;
+    const mult = model([{ t: 0, p: BASE[XAUT] }, { t: 8, p: p1 }], 6, MOVE_SCALES[XAUT]).short;
     expect(await balance(f, f.alice)).to.eq(before - stake + payout(stake, mult, 15));
     expect((await positionOf(f, id)).value).to.eq(pos.value);
     expect(pos.value).to.be.gt(stake);

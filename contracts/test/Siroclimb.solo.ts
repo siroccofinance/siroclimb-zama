@@ -20,6 +20,7 @@ import {
   encrypt,
   interest,
   model,
+  MOVE_SCALE,
   payout,
   price,
   startRun,
@@ -30,7 +31,8 @@ describe("Siroclimb: solo runs", function () {
 
   beforeEach(async function () {
     if (!fhevm.isMock) this.skip();
-    f = await deployFixture();
+    // the ladder arithmetic below is written for a x25 boost on every market (per-market boosts: Oracle.ts, Desk.ts)
+    f = await deployFixture({ scales: Array(6).fill(MOVE_SCALE) });
   });
 
   async function runAndPath(long: boolean, stake: bigint, moves: [number, bigint][], exit: number, market = AAPL) {

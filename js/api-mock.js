@@ -45,7 +45,8 @@ const printQuotes = () => { for (const [id, f] of feeds) quotes.set(id, f.price)
 printQuotes(); setInterval(printQuotes, 1200);
 export const quote = id => quotes.get(id);
 
-export const listAssets = () => ASSETS.map(({ id, name, ticker, kind, token }) => ({ id, name, ticker, kind, token, open: true }));
+const BOOST = { TSLAx: 90, NVDAx: 25, AAPLx: 90, AMZNx: 90, XAUt: 60, tGBP: 200 };
+export const listAssets = () => ASSETS.map(({ id, name, ticker, kind, token }) => ({ id, name, ticker, kind, token, boost: BOOST[id], open: true }));
 export function subscribePrice(id, cb) { const f = feeds.get(id); f.subs.add(cb); cb(f.hist[f.hist.length - 1]); return () => f.subs.delete(cb); }
 export function history(id, seconds = 60) { const f = feeds.get(id), from = Date.now() - seconds * 1000; return f.hist.filter(h => h.ts >= from); }
 

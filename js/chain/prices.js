@@ -62,13 +62,13 @@ export async function pushIfStale(sender, market, maxAge = 12) {
   if (age < maxAge) return null;
   const pyth = await pythFor(market);
   // returns the source and the block the checkpoint landed in
-  if (pyth) { const rc = await sender.send(oracle, 'pushPyth', [pyth.updateData], pyth.fee, 'pushPyth'); return { src: 'pyth', block: rc.blockNumber }; }
+  if (pyth) { const rc = await sender.send(oracle, 'pushPyth', [pyth.updateData], pyth.fee, 'pushPyth', { wait: 40_000 }); return { src: 'pyth', block: rc.blockNumber }; }
   if (age < 10.5) return null;                                   // public spacing
   const ref = feed.refPrice(market);
   if (!(ref > 0) || !feed.isOpen(market)) return null;
   const lastP = Number(last) / 10 ** PRICE_DECIMALS;
   const clamped = Math.min(lastP * (1 + MAX_MOVE), Math.max(lastP * (1 - MAX_MOVE), ref));
   const units = BigInt(Math.round(clamped * 10 ** PRICE_DECIMALS));
-  const rc = await sender.send(oracle, 'pushPublic', [[market], [units]], 0n, 'pushPublic');
+  const rc = await sender.send(oracle, 'pushPublic', [[market], [units]], 0n, 'pushPublic', { wait: 40_000 });
   return { src: 'public', block: rc.blockNumber };
 }

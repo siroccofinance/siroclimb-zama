@@ -1,7 +1,7 @@
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { fhevm } from "hardhat";
-import { BASE, AAPL, NVDA, type Fixture, GBP, TSLA, XAUT, deployFixture, model } from "./helpers";
+import { BASE, AAPL, NVDA, type Fixture, GBP, TSLA, XAUT, deployFixture, model, MOVE_SCALES } from "./helpers";
 
 describe("ClimbPriceOracle and ClimbLadder", function () {
   let f: Fixture;
@@ -15,6 +15,19 @@ describe("ClimbPriceOracle and ClimbLadder", function () {
     const feed = (await f.oracle.feedIds())[market];
     return f.pyth.createPriceFeedUpdateData(feed, price, 10n, -8, price, 10n, publishTime, publishTime - 1);
   }
+
+  it("the ladder keeps a game boost per market, applied to that market's moves", async function () {
+    expect(await f.ladder.moveScales()).to.deep.eq(MOVE_SCALES);
+    expect(await f.ladder.moveScale(GBP)).to.eq(200n);
+    const t0 = await time.latest();
+    const [i0, , p0] = await f.oracle.latest(AAPL);
+    const p1 = (p0 * 1001n) / 1000n;
+    await time.setNextBlockTimestamp(t0 + 4);
+    await f.oracle.pushPrices([AAPL], [p1]);
+    const [l] = await f.ladder.multipliers(AAPL, i0, i0 + 1n, t0, 6);
+    expect(l).to.eq(model([{ t: 0, p: p0 }, { t: 4, p: p1 }], 6, MOVE_SCALES[AAPL]).long);
+    expect(l).to.be.gt(1_080_000n); // +0.1 % at x90 at 1x: about +9 %
+  });
 
   it("only updaters push trusted checkpoints; one per market and block", async function () {
     await expect(f.oracle.connect(f.alice).pushPrices.staticCall([AAPL], [1n])).to.be.revertedWithCustomError(f.oracle, "NotUpdater");
@@ -111,7 +124,7 @@ describe("ClimbPriceOracle and ClimbLadder", function () {
         await f.oracle.pushPrices([NVDA], [p]);
         pts.push({ t, p });
       }
-      const exp = model(pts);
+      const exp = model(pts);   // NVDAx: boost x25
       const [l, s, exit] = await f.ladder.multipliers(NVDA, i0, i0 + 6n, t0, 6);
       expect([l, s]).to.deep.eq([exp.long, exp.short]);
       expect(exit).to.eq(p);

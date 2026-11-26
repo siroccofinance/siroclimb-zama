@@ -34,7 +34,7 @@ import {SiroccoDesk} from "./SiroccoDesk.sol";
 ///    desk and sells it. At the end the long sells, the short buys back and returns, the loan and its
 ///    interest go back to the reserve. Quantities and cash legs are encrypted, and both legs of every
 ///    trade move whatever the side (one with an encrypted 0);
-///  - the payout keeps the game's amplification: every move counts `moveScale` times on the ladder
+///  - the payout keeps the game's amplification: every move counts `moveScale(market)` times on the ladder
 ///    (`ClimbLadder`). The part of the payout beyond the real position ("game boost", positive or
 ///    negative) is settled with the reserve, encrypted; the player can decrypt both parts;
 ///  - leverage packs are drawn with the on-chain encrypted PRNG and stay private: a packed run's

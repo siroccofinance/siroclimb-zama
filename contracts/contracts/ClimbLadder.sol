@@ -7,7 +7,8 @@ import {ClimbPriceOracle} from "./ClimbPriceOracle.sol";
 /// @notice The rules of a Siroclimb run, in clear: given a market's oracle checkpoints between a
 ///         run's entry and its exit, what would a long and what would a short have made?
 ///
-/// Every move between two consecutive checkpoints counts `moveScale` times (the game scale) at
+/// Every move between two consecutive checkpoints counts `moveScale(market)` times (the game boost, set per
+/// market for its volatility: a quiet market gets a bigger boost so every market moves alike on screen) at
 /// the leverage of the ladder step the move began on: 1x, 1.5x, 2x ... 4x, one step every 6 seconds
 /// from the start. PnL adds up on the stake, like a position of constant notional; when
 /// it reaches -100 % the coin falls and the run is worth 0 for good.
@@ -26,12 +27,26 @@ contract ClimbLadder {
     uint256 public constant MAX_PATH = 64;
 
     ClimbPriceOracle public immutable oracle;
-    /// @notice Game scale: how many times a real price move counts, before leverage.
-    uint32 public immutable moveScale;
+    /// @notice Game boost per market: how many times a real price move counts, before leverage.
+    uint32[] private _moveScales;
 
-    constructor(ClimbPriceOracle oracle_, uint32 moveScale_) {
+    error BadScales();
+
+    constructor(ClimbPriceOracle oracle_, uint32[] memory moveScales_) {
+        if (moveScales_.length == 0) revert BadScales();
+        for (uint256 i; i < moveScales_.length; ++i) if (moveScales_[i] == 0 || moveScales_[i] > 1000) revert BadScales();
         oracle = oracle_;
-        moveScale = moveScale_;
+        _moveScales = moveScales_;
+    }
+
+    /// @notice The game boost of `market`.
+    function moveScale(uint256 market) public view returns (uint32) {
+        return _moveScales[market];
+    }
+
+    /// @notice Every market's game boost, in market order.
+    function moveScales() external view returns (uint32[] memory) {
+        return _moveScales;
     }
 
     /// @notice The ladder in tenths of x: 10, 15, 20 ... 40.
@@ -54,6 +69,7 @@ contract ClimbLadder {
         if (count > MAX_PATH) count = MAX_PATH;
         (uint64[] memory ts, uint64[] memory px) = oracle.path(market, entryIndex, type(uint256).max, count);
         int256 one = int256(uint256(SCALE));
+        int256 scale = int256(uint256(moveScale(market)));
         int256 accL;
         int256 accS;
         bool fellL;
@@ -66,7 +82,7 @@ contract ClimbLadder {
             // value at a cash out is known at the click: the last move runs at the current step
             uint64 step = (ts[j - 1] > start ? ts[j - 1] - start : 0) / STEP_SECONDS;
             if (step > capStep) step = capStep;
-            int256 d = (move * int256(uint256(moveScale)) * int256(uint256(10 + 5 * step))) / 10;
+            int256 d = (move * scale * int256(uint256(10 + 5 * step))) / 10;
             if (!fellL) {
                 accL += d;
                 if (accL <= -one) fellL = true;
