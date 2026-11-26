@@ -8,7 +8,11 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 export default async function handler(req, res) {
   const id = idOf(req), o = origin(req), r = await resolve(id, verifiedRun).catch(() => null);
   const play = `${o}/#play`;
-  if (!r) { res.statusCode = 302; res.setHeader('location', play); return res.end(); }
+  // an id that fails its signature (tampered, mistyped): 404, no card; a person still gets the game
+  if (!r) {
+    res.statusCode = 404; res.setHeader('content-type', 'text/html; charset=utf-8'); res.setHeader('cache-control', 'no-store');
+    return res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Siroclimb: unknown share link</title><meta name="robots" content="noindex"></head><body><p>This share link is not valid. <a href="${esc(play)}">Play Siroclimb</a></p><script>location.replace(${JSON.stringify(play)});</script></body></html>`);
+  }
   const s = r.run;
   const title = s ? `Siroclimb: ${headline(s)}` : 'Siroclimb: climb the live price, confidentially';
   const desc = s ? `${fmt.eyebrow(s)}. Verified on Sepolia (run #${s.runId}): the return was published with Zama's KMS proof; the stake stays encrypted with Zama's FHE. Can you climb higher?`
