@@ -84,6 +84,8 @@ export const prepare = o => impl.prepare?.(o);
 /** cb(runId, result) when the value shown at a cash out is re-checked before the chain answers. */
 export const onRefine = cb => (impl.onRefine ? impl.onRefine(cb) : noop());
 export const priceSource = id => impl.priceSource?.(id) ?? '';
+/** The latest quote of a market (changes only on a real move); the eased price where there is none. */
+export const quote = id => (impl.quote ? impl.quote(id) : impl.history(id, 1).slice(-1)[0]?.price);
 export const marketOpen = id => (impl.marketOpen ? impl.marketOpen(id) : true);
 export const onMarkets = cb => (impl.onMarkets ? impl.onMarkets(cb) : noop());
 export const lastTransaction = () => impl.lastTransaction?.() ?? null;

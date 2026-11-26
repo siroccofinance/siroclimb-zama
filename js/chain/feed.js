@@ -90,6 +90,8 @@ export const isOpen = i => feeds[i].open;
 export const refPrice = i => feeds[i].ref ?? feeds[i].price;
 export const isPyth = i => feeds[i].pyth;
 export const sourceOf = i => feeds[i].source;
+/** The latest quote itself (not the eased screen price): it changes only when the market does. */
+export const quoteOf = i => feeds[i].to ?? feeds[i].price;
 export const markets = () => feeds.map((f, i) => ({ index: i, id: f.id, open: f.open, source: f.source, pyth: f.pyth, price: f.price, session: f.session }));
 export function onMarkets(cb) { metaSubs.add(cb); return () => metaSubs.delete(cb); }
 export const routeAvailable = () => routeOk;
