@@ -32,6 +32,8 @@ export const BASE = [3_860_000_000_000n, 1_650_000_000_000n, 3_500_000_000_000n,
 export const USDC = 1_000_000n;
 export const SCALE = 1_000_000n;
 export const MOVE_SCALE = 25n;
+/** Game boost per market (TSLAx, NVDAx, AAPLx, AMZNx, XAUt, tGBP): bigger for quieter markets. */
+export const MOVE_SCALES = [90n, 25n, 90n, 90n, 60n, 200n];
 export const RUN_SECONDS = 60;
 export const FAUCET_AMOUNT = 1000n * USDC;
 /** Sirocco Reserve: borrow APR (basis points), the lenders' seed, the public bound lent per run. */
@@ -94,7 +96,7 @@ export interface Fixture {
   tokenAddress: string;
 }
 
-export async function deployFixture(opts: { fund?: number; seed?: bigint; desk?: boolean } = {}): Promise<Fixture> {
+export async function deployFixture(opts: { fund?: number; seed?: bigint; desk?: boolean; scales?: bigint[] } = {}): Promise<Fixture> {
   const [deployer, ...players] = await ethers.getSigners();
   const usdc = (await (await ethers.getContractFactory("MirrorToken")).deploy("Test USDC", "USDC", 6)) as MirrorToken;
   const token = (await (
@@ -107,7 +109,7 @@ export async function deployFixture(opts: { fund?: number; seed?: bigint; desk?:
     await pyth.getAddress(),
     PYTH_FEEDS,
   )) as ClimbPriceOracle;
-  const ladder = (await (await ethers.getContractFactory("ClimbLadder")).deploy(await oracle.getAddress(), MOVE_SCALE)) as ClimbLadder;
+  const ladder = (await (await ethers.getContractFactory("ClimbLadder")).deploy(await oracle.getAddress(), opts.scales ?? MOVE_SCALES)) as ClimbLadder;
   const reserve = (await (await ethers.getContractFactory("SiroccoReserve")).deploy(
     deployer.address,
     await token.getAddress(),
