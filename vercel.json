@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/{prices,pyth,share,s}.js": {
+    "api/{prices,pyth,share,s,change}.js": {
       "includeFiles": "js/chain/{markets,deployments,abi}.json",
       "maxDuration": 10
     },

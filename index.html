@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="play.css?v=11">
+  <link rel="stylesheet" href="play.css?v=12">
 </head>
 <body data-screen="intro">
   <div class="stage" id="stage" aria-hidden="true">
@@ -78,7 +78,7 @@
       <p class="hint" id="lobbyHint"></p>
 
       <div class="field">
-        <span class="label" id="l-market">Market</span>
+        <span class="label" id="l-market">Market <span class="hint" id="l-day" hidden>· change over 24h</span></span>
         <div class="markets" id="markets" role="group" aria-labelledby="l-market"></div>
       </div>
 
@@ -236,6 +236,6 @@
   </script>
 
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
-  <script type="module" src="js/game.js?v=39"></script>
+  <script type="module" src="js/game.js?v=40"></script>
 </body>
 </html>
