@@ -215,6 +215,7 @@ const label = a => a.token || a.ticker;
 // ── lobby
 const marketsEl = $('#markets');
 const chip = {};
+const day = { ref: {}, at: 0 };   // 24 h reference price per market (api/change.js), before any price arrives
 for (const a of assets) {
   const b = document.createElement('button');
   b.className = 'market'; b.dataset.v = a.id;
@@ -227,7 +228,6 @@ for (const a of assets) {
 }
 // the 24 h change on each card: the price 24 h ago from Kraken's hourly candles (api/change.js), against
 // the live price. No reference (no server, no data): no figure, never a made-up 0.00 %.
-const day = { ref: {}, at: 0 };
 function chipChange(id, p = api.quote(id)) {
   const c = chip[id]; if (!c) return;
   if (p > 0) c.p.textContent = price(p);
@@ -240,7 +240,7 @@ function chipChange(id, p = api.quote(id)) {
   c.c.title = `${sgn(ch)}${Math.abs(ch).toFixed(2)}% over 24 hours (Kraken)`;
 }
 async function loadDay() {
-  if (Date.now() - day.at < 55_000) return;
+  if (api.mode !== 'chain' || Date.now() - day.at < 55_000) return;   // the simulation's prices are not Kraken's
   day.at = Date.now();
   try {
     const r = await fetch('/api/change', { signal: AbortSignal.timeout(8000) }); if (!r.ok) return;
