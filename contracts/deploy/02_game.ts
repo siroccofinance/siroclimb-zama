@@ -9,7 +9,8 @@ export const SEPOLIA_USDC_MOCK = "0x9b5Cd13b8eFbB58Dc25A05CF411D8056058aDFfF";
 /** Pyth on Ethereum Sepolia (accepts Hermes updates, Wormhole-verified). */
 export const SEPOLIA_PYTH = "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21";
 
-export const MOVE_SCALE = Number(process.env.MOVE_SCALE ?? 25);
+/** Game boost per market (markets.json `boost`), as on Siroclimb MagicBlock: bigger for quieter markets. */
+export const MOVE_SCALES = MARKETS.map((m) => m.boost);
 const FAUCET_AMOUNT = 1_000_000_000; // 1000 cUSDC
 const FAUCET_COOLDOWN = 600;
 /** Sirocco Reserve: borrow APR in basis points, and the deployer's seed as first lender (cUSDC). */
@@ -60,7 +61,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const faucet = await deploy("ClimbFaucet", { from: deployer, args: [stake, FAUCET_AMOUNT, FAUCET_COOLDOWN], log: true });
   const pyth = sepolia ? SEPOLIA_PYTH : (await deploy("MockPyth", { from: deployer, args: [120, 1], log: true })).address;
   const oracle = await deploy("ClimbPriceOracle", { from: deployer, args: [deployer, pyth, MARKETS.map((m) => m.pyth)], log: true });
-  const ladder = await deploy("ClimbLadder", { from: deployer, args: [oracle.address, MOVE_SCALE], log: true });
+  const ladder = await deploy("ClimbLadder", { from: deployer, args: [oracle.address, MOVE_SCALES], log: true });
   const reserve = await deploy("SiroccoReserve", { from: deployer, args: [deployer, stake, BORROW_APR_BPS], log: true });
   const desk = await deploy("SiroccoDesk", { from: deployer, args: [deployer, stake, DESK_SPREAD_BPS], log: true });
   // the markets' confidential tokens: Zama's for XAUt and GBP, our mirrors for the stocks (01_mirrors)
@@ -138,5 +139,5 @@ async function deployLocalToken(hre: HardhatRuntimeEnvironment, deployer: string
 }
 
 export default func;
-func.id = "siroclimb_game_v9_desk";
+func.id = "siroclimb_game_v10_boosts";
 func.tags = ["Siroclimb"];

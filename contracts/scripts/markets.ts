@@ -15,6 +15,8 @@ export interface Market {
   yahoo?: string;
   binance?: string;
   kraken?: string;
+  /** game boost: how many times a price move counts on the ladder */
+  boost: number;
   token: { symbol: string; origin: "zama" | "mirror"; sepolia?: string; underlying?: { name: string; symbol: string; decimals: number; mainnet: string } };
 }
 
