@@ -16,7 +16,7 @@ export default async function handler(req, res) {
   const img = `${o}/api/og?id=${encodeURIComponent(s ? id : 'game')}`, url = `${o}/s/${id}`;
   res.statusCode = 200;
   res.setHeader('content-type', 'text/html; charset=utf-8');
-  res.setHeader('cache-control', 'public, max-age=300, s-maxage=86400');
+  res.setHeader('cache-control', r && r.pending ? 'no-store' : 'public, max-age=300, s-maxage=86400');
   res.end(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>

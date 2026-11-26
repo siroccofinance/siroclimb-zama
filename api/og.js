@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import satori from 'satori';
 import { Resvg } from '@resvg/resvg-js';
-import { fmt, idOf, resolve } from './_share.js';
+import { blockOf, fmt, idOf, resolve } from './_share.js';
 import { verifiedRun } from './_run.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -79,7 +79,7 @@ export function gameCard() {
 }
 
 export default async function handler(req, res) {
-  const r = await resolve(idOf(req), verifiedRun).catch(() => null);
+  const r = await resolve(idOf(req), verifiedRun, blockOf(req)).catch(() => null);
   if (!r) { res.statusCode = 404; res.setHeader('content-type', 'text/plain'); return res.end('Unknown share card'); }
   try {
     const svg = await satori(r.kind === 'run' ? card(r.run) : gameCard(), { width: 1200, height: 630, fonts: FONTS });
@@ -88,7 +88,7 @@ export default async function handler(req, res) {
     res.setHeader('content-type', 'image/png');
     res.setHeader('content-length', png.length);
     // a published run never changes; the generic card may become a run card once published
-    res.setHeader('cache-control', r.kind === 'run' ? 'public, max-age=86400, s-maxage=31536000, immutable' : 'public, max-age=300, s-maxage=3600');
+    res.setHeader('cache-control', r.kind === 'run' ? 'public, max-age=86400, s-maxage=31536000, immutable' : r.pending ? 'no-store' : 'public, max-age=300, s-maxage=3600');
     res.end(png);
   } catch (e) {
     console.error('og', e);
