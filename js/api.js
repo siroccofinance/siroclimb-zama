@@ -55,6 +55,7 @@ export const disconnect = () => impl.disconnect();
 export const listAssets = () => impl.listAssets();
 export const subscribePrice = (id, cb) => impl.subscribePrice(id, cb);
 export const history = (id, s) => impl.history(id, s);
+export const quotes = (id, s) => (impl.quotes ? impl.quotes(id, s) : impl.history(id, s));
 export const startRun = o => impl.startRun(o);
 export const onRun = (id, cb) => impl.onRun(id, cb);
 export const cashOut = id => impl.cashOut(id);

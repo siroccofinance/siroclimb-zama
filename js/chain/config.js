@@ -25,7 +25,8 @@ export const SCALE = 1e6;
 export const LADDER = [1, 1.5, 2, 2.5, 3, 3.5, 4];
 export const STEP_SECONDS = 6;
 export const RUN_SECONDS = 60;
-export const MOVE_SCALE = 25;
+/** Game boost per market (markets.json `boost`, ClimbLadder.moveScale(market)): how many times a move counts. */
+export const BOOST = MARKETS.map(m => m.boost);
 export const MAX_STAKE = 100;
 /** Gas for the game account (it pays every game transaction): the server drip sends SESSION_FUND_ETH and
  *  again below SESSION_MIN_ETH. A start or a cash out (real positions) uses ~8M gas and reserves 12M:

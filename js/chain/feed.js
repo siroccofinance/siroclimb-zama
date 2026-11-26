@@ -31,6 +31,7 @@ function quote(i, price, source, open) {
   const f = feeds[i];
   if (!(price > 0)) return;
   f.dur = Math.max(TICK_MS, Math.min(POLL_MS, Date.now() - (f.quoteAt || 0)));   // ease over the gap between quotes
+  if (price !== f.to) { (f.raw ||= []).push({ price, ts: Date.now() }); if (f.raw.length > 2000) f.raw.splice(0, 500); }   // the quotes themselves (not eased)
   f.from = f.price ?? price; f.to = price; f.t0 = Date.now(); f.source = source; f.quoteAt = Date.now();
   if (open != null) f.open = open;
   if (f.price == null) { f.price = price; seed(f); }
@@ -120,6 +121,8 @@ export function subscribe(i, cb) {
   if (f.hist.length) cb(f.hist[f.hist.length - 1]);
   return () => f.subs.delete(cb);
 }
+/** The market's own quotes (each change, not the eased screen price) over the last `seconds`. */
+export function quotes(i, seconds = 90) { const from = Date.now() - seconds * 1000; return (feeds[i].raw || []).filter(h => h.ts >= from); }
 export function history(i, seconds = 60) { const from = Date.now() - seconds * 1000; return feeds[i].hist.filter(h => h.ts >= from); }
 export const last = i => feeds[i].price;
 export const isOpen = i => feeds[i].open;
