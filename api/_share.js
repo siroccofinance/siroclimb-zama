@@ -61,11 +61,19 @@ export function headline(s) {
 
 /** What a share id shows: { kind: 'run', run, showSide } (read from the chain), { kind: 'game' } (a v1
  *  link, or a run that is not there), or null for an id that is not ours. */
-export async function resolve(id, verifiedRun) {
+// pending: a signed run the node does not show published yet (just recorded, or a node a block behind):
+// the generic card for now, never cached, so the run card replaces it on the next read
+export async function resolve(id, verifiedRun, atBlock = null) {
   if (id === 'game') return { kind: 'game' };
   const v = verify(id);
   if (!v) return null;
   if (v.legacy) return { kind: 'game' };
-  const run = await (v.legacyGame ? verifiedRun(v.runId, LEGACY_GAME) : verifiedRun(v.runId)).catch(() => null);
-  return run && run.published ? { kind: 'run', run: { ...run, showSide: v.showSide }, showSide: v.showSide } : { kind: 'game' };
+  const run = await (v.legacyGame ? verifiedRun(v.runId, LEGACY_GAME) : verifiedRun(v.runId, undefined, atBlock)).catch(() => null);
+  return run && run.published ? { kind: 'run', run: { ...run, showSide: v.showSide }, showSide: v.showSide } : { kind: 'game', pending: true };
+}
+
+// ?b=<block>: the block of the record, from the share route (a node behind it would not see it published)
+export function blockOf(req) {
+  const u = new URL(req.url, 'http://x'), b = Number(req.query?.b ?? u.searchParams.get('b'));
+  return Number.isInteger(b) && b > 0 ? b : null;
 }

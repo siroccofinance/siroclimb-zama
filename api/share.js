@@ -22,5 +22,5 @@ export default async function handler(req, res) {
   let id;
   try { id = sign({ runId, showSide: !!b.showSide }); } catch { return send(res, 503, { error: 'Sharing is not configured' }); }
   const o = origin(req);
-  send(res, 200, { id, url: `${o}/s/${id}`, image: `${o}/api/og?id=${encodeURIComponent(id)}`, run: { ...run, side: b.showSide ? run.side : null } });
+  send(res, 200, { id, url: `${o}/s/${id}`, image: `${o}/api/og?id=${encodeURIComponent(id)}${atBlock ? `&b=${atBlock}` : ''}`, run: { ...run, side: b.showSide ? run.side : null } });
 }
