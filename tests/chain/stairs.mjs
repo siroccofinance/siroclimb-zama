@@ -34,6 +34,7 @@ let prev = start;
 for (let s = 1; s <= secs; s++) {
   await wait(1000);
   if (s === Math.round(secs / 2)) await pg.screenshot({ path: `${out}/${market}-climb.png` });
+  if (s === secs - 2) await pg.screenshot({ path: `${out}/${market}-late.png` });
   if (process.env.FRAMES && s >= 10 && s < 20) await pg.screenshot({ path: `${out}/${market}-f${s}.png`, clip: { x: 300, y: 150, width: 1000, height: 600 } });
   shape.push(await sample());
   const now = await read();
@@ -53,4 +54,12 @@ const absMoves = st.moves.map(Math.abs), hist = {}; absMoves.forEach(n => { hist
 console.log(JSON.stringify({ market, seconds: secs, windows, total: tot, levelsPerQuote: hist, stepSizes: st.sizes, shapeCorr: corr(xs, ys) && +corr(xs, ys).toFixed(3), movesVsTypical: st.ratios }));
 await pg.click('#cash').catch(() => {});
 await wait(15000);
+// REPLAY=1: play again, the scene back at its base (lights, shadow) for a second climb
+if (process.env.REPLAY) {
+  await pg.click('#again').catch(() => {}); await wait(2500); await pg.screenshot({ path: `${out}/${market}-lobby-after.png` });
+  await pg.click('#go').catch(() => {});
+  for (let i = 0; i < 80 && await pg.evaluate(() => document.body.dataset.screen) !== 'game'; i++) await wait(500);
+  await wait(8000); await pg.screenshot({ path: `${out}/${market}-replay.png` });
+  await pg.click('#cash').catch(() => {}); await wait(15000);
+}
 await b.close();

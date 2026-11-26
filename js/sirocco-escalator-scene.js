@@ -194,6 +194,11 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
   const fill = new THREE.DirectionalLight(...TH.fill); fill.position.set(6, 4, 3);
   if (G) { fill.position.set(1.15 - 4, 0.3 + 1.5, 4); fill.target.position.set(1.15, 0.3, 0); scene.add(fill.target); }
   scene.add(key, key.target, fill);
+  // the lights (and so the shadow camera) ride up and down with the coin: a long climb carries the coin far
+  // above where the scene started, out of the shadow map, and its shadow on the treads would vanish
+  const rigs = [key, key.target, fill, fill.target, ...scene.children.filter((o) => o.isDirectionalLight && o !== key && o !== fill).flatMap((l) => [l, l.target])]
+    .filter((o, i, a) => a.indexOf(o) === i).map((o) => [o, o.position.y]);
+  function lightsAt(y) { for (const [o, y0] of rigs) o.position.y = y0 + y; }
 
   const camera = new THREE.PerspectiveCamera(22, 1, 0.1, 200);
   // frontal, slightly high, rolled (Dutch angle) like the reference: belt rises to the top-right
@@ -240,6 +245,7 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
     coinPivot.quaternion.setFromAxisAngle(AY, o.yaw).multiply(q1.setFromAxisAngle(AX, o.lean + (o.flip || 0)));
     coinPivot.scale.setScalar(cs);
     coinPivot.position.set(o.cx, RC * cs + (o.cy || 0), o.zig);
+    lightsAt(o.cy || 0);
     if (flash) {
       const fx = P.fx ?? -0.5, fy = P.fy ?? 0.5, fz = P.fz ?? 0.0, fd = P.fd ?? 1.5;
       v1.copy(camera.position).sub(v2.set(fx, fy, fz)).normalize(); v1.x = -v1.x; v1.z = -v1.z;
@@ -456,7 +462,7 @@ export function createEscalatorScene({ canvas, width, height, pixelRatio = 1, fr
     }
     T.flip = T.air && T.flipDir ? T.flipDir * TAU * ease.sm(clamp01((T.t - T.airT0) / (T.airDur * 0.92))) : 0;
     // the camera rides with the coin, a little behind
-    T.camY += (T.y - T.camY) * (1 - Math.exp(-dt * 3.2));
+    T.camY += (T.y - T.camY) * (1 - Math.exp(-dt * (3.2 + 3 * Math.abs(T.y - T.camY))));   // a tall step: catch up sooner
     // cash: once stopped and resting on its tread, the box pushes the coin up
     if (e && e.tossAt == null && T.t - e.at >= e.TB && !T.air && Math.abs(T.y - sup) < 1e-3) {
       e.rest = (e.rest || 0) + dt; if (e.rest >= 0.06) e.tossAt = T.t;

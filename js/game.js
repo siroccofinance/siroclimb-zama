@@ -2,7 +2,7 @@
 // The 3D scene is the hero's: in the lobby the belt loops; on start it brakes, the coin's box climbs one level
 // per leverage step; cash out tosses the coin (camera follows), a bust drops it.
 import * as api from './api.js';
-import { createEscalatorScene } from './sirocco-escalator-scene.js?v=10';
+import { createEscalatorScene } from './sirocco-escalator-scene.js?v=11';
 import { CARD, drawCard, loadLogo, toBlob } from './share-card.js?v=1';
 
 const $ = s => document.querySelector(s);
@@ -807,15 +807,14 @@ function countQuote() {
   const q = run && api.quote(run.assetId);
   if (q != null && q !== stairs.last) { if (stairs.last != null) stairs.quotes++; stairs.last = q; }
 }
-// every real move gives at least one step, and the size follows the move: one level = a small unit of this
-// market's typical quote change, so a small tick is one step and a big move jumps several levels (soft cap
-// near 10). The stairs keep the sparkline's shape: a spike up then back down is a big climb then a big drop.
-// Visual only: payouts follow the chain.
-const LV = { PER_TYPICAL: 2.5, KNEE: 6, CAP: 10 };
-function levelsFor(mv, unit) {
-  const raw = Math.abs(mv) / unit;
-  const soft = raw <= LV.KNEE ? raw : LV.KNEE + (LV.CAP - LV.KNEE) * (1 - Math.exp(-(raw - LV.KNEE) / (LV.CAP - LV.KNEE)));
-  return Math.sign(mv) * Math.max(1, Math.min(LV.CAP, Math.round(soft)));
+// every real move gives at least one step, and the size follows the move on a log scale against this
+// market's typical quote change: an ordinary tick one step, twice it three, four times five, eight times
+// seven (the most: taller walls hid the coin). The stairs keep the sparkline's shape: a spike up then back
+// down is a big climb then a big drop. Visual only: payouts follow the chain.
+const MAX_STEP = 7;
+function levelsFor(mv, typical) {
+  const size = Math.abs(mv) / typical;
+  return Math.sign(mv) * Math.max(1, Math.min(MAX_STEP, 1 + Math.round(2 * Math.log2(Math.max(1, size)))));
 }
 function levelFrom() {
   countQuote();
@@ -826,7 +825,7 @@ function levelFrom() {
   if (!mv) return;
   // the typical quote change: seeded from the market's recent ticks, then a slow average (a spike barely moves it)
   const typical = lvl.typical || Math.abs(mv);
-  const n = levelsFor(mv, typical / LV.PER_TYPICAL);
+  const n = levelsFor(mv, typical);
   lvl.typical = typical * 0.85 + Math.min(Math.abs(mv), 3 * typical) * 0.15;
   lvl.level += n;
   stairs.moves.push({ t: Date.now(), mv, n, level: lvl.level, r: +(Math.abs(mv) / typical).toFixed(2) }); if (stairs.moves.length > 400) stairs.moves.shift();
