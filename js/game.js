@@ -594,7 +594,7 @@ shEl.x.addEventListener('click', async e => {
     const { text, url } = shareText({ url: sh.link.url, run: sh.link.run, side: shEl.side.checked });
     try { await navigator.share({ files: [sh.file], text: `${text}\n${url}` }); closeSheet(); return; }
     catch (err) { if (err.name === 'AbortError') return; }
-    if (!window.open(shEl.x.href, '_blank', 'noopener')) location.href = shEl.x.href;   // share refused: the intent
+    openTab(shEl.x.href);   // share refused: the intent
   }
   setTimeout(closeSheet, 300);
 });
@@ -610,6 +610,9 @@ function showTip(copied, href) {
   t.hidden = false; requestAnimationFrame(() => t.classList.add('is-on'));
   clearTimeout(tipT); tipT = setTimeout(hideTip, 12000);
 }
+// a new tab for X, this one stays on the game: window.open with 'noopener' always returns null,
+// so it can't tell a blocked popup; open it plain, cut the opener by hand, and only fall back to this tab when blocked
+function openTab(href) { const w = window.open(href, '_blank'); if (w) { try { w.opener = null; } catch {} } else location.href = href; }
 function hideTip() { const t = $('#sharetip'); t.classList.remove('is-on'); clearTimeout(tipT); tipT = setTimeout(() => { t.hidden = true; }, 300); }
 $('#tipClose').onclick = hideTip;
 $('#share').onclick = () => {
@@ -623,7 +626,7 @@ $('#share').onclick = () => {
 async function legacyShare() {
   if (!ended) return;
   const { text, url } = shareText(), href = intent({ text, url });
-  if (card && card.page) { if (!window.open(href, '_blank', 'noopener')) location.href = href; return; }
+  if (card && card.page) { openTab(href); return; }
   const file = card && new File([card.blob], 'siroclimb.png', { type: 'image/png' });
   if (file && matchMedia('(pointer: coarse)').matches && navigator.canShare && navigator.canShare({ files: [file] })) {
     try { await navigator.share({ files: [file], text: `${text}\n${url}` }); return; }
