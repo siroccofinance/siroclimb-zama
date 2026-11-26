@@ -4,7 +4,9 @@
 // Nothing the browser sends ends up on the card. The id is HMAC-signed with a server secret so links
 // cannot be minted for runs whose player did not ask (the side flag is the player's choice).
 //
-// v3 id = x<runId>[s].<sig>      the current game; s: show the side (inferred from the published return, _run.js)
+// v4 id = y<runId>[s].<sig11>    the current game, short (the whole link stays under ~50 characters); a 66-bit
+//                                 tag: guessing one takes ~2^65 requests to the server, out of reach
+// v3 id = x<runId>[s].<sig>      the current game (older, 22-character tag), still read; s: show the side (inferred from the published return, _run.js)
 // v2 id = r<runId>[s].<sig>      the game before real positions (LEGACY_GAME), still read there
 // v1 ids (<market>_<status>_…, self-reported, before 2026-11-25) still open the game, with a generic card.
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -16,12 +18,12 @@ function secret() {
   if (process.env.VERCEL_ENV === 'production') return null;
   return 'siroclimb-dev-only-share-secret';                       // local dev and previews without the variable
 }
-const mac = (payload, key, v = 'v2') => createHmac('sha256', key).update(`siroclimb-share:${v}:` + payload).digest('base64url').slice(0, 22);
+const mac = (payload, key, v = 'v2') => createHmac('sha256', key).update(`siroclimb-share:${v}:` + payload).digest('base64url').slice(0, v === 'v4' ? 11 : 22);
 
 export function sign({ runId, showSide }) {
   const key = secret(); if (!key) throw new Error('SHARE_SECRET is not set');
-  const payload = `x${runId}${showSide ? 's' : ''}`;
-  return payload + '.' + mac(payload, key, 'v3');
+  const payload = `y${runId}${showSide ? 's' : ''}`;
+  return payload + '.' + mac(payload, key, 'v4');
 }
 
 /** id → { runId, showSide, legacyGame } (v3, v2), { legacy: true } (a valid v1 link), or null. */
@@ -30,8 +32,8 @@ export function verify(id) {
   const dot = id.lastIndexOf('.'); if (dot < 0) return null;
   const payload = id.slice(0, dot), sig = Buffer.from(id.slice(dot + 1));
   const ok = v => { const want = Buffer.from(mac(payload, key, v)); return sig.length === want.length && timingSafeEqual(sig, want); };
-  const m = /^([xr])(\d{1,9})(s?)$/.exec(payload);
-  if (m) return ok(m[1] === 'x' ? 'v3' : 'v2') ? { runId: Number(m[2]), showSide: m[3] === 's', legacyGame: m[1] === 'r' } : null;
+  const m = /^([xyr])(\d{1,9})(s?)$/.exec(payload);
+  if (m) return ok({ x: 'v3', y: 'v4', r: 'v2' }[m[1]]) ? { runId: Number(m[2]), showSide: m[3] === 's', legacyGame: m[1] === 'r' } : null;
   return payload.includes('_') && ok('v1') ? { legacy: true } : null;
 }
 
