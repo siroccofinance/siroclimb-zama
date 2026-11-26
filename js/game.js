@@ -595,6 +595,12 @@ shEl.x.addEventListener('click', async e => {
     try { await navigator.share({ files: [sh.file], text: `${text}\n${url}` }); closeSheet(); return; }
     catch (err) { if (err.name === 'AbortError') return; }
     openTab(shEl.x.href);   // share refused: the intent
+  } else if (sh.link && navigator.clipboard && window.ClipboardItem) {
+    // desktop: X can't take a picture from a web page, so the card goes to the clipboard inside the click
+    // (the anchor still opens the post in a new tab) and one paste adds it to the post
+    const png = fetch(sh.link.image).then(r => r.blob()).then(b => new Blob([b], { type: 'image/png' }));
+    navigator.clipboard.write([new ClipboardItem({ 'image/png': png })])
+      .then(() => toast(`Picture copied: press ${/Mac/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl'} V in your post to add it`, 15000), () => {});
   }
   setTimeout(closeSheet, 300);
 });
