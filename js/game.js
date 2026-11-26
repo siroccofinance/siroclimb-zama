@@ -550,6 +550,14 @@ async function refreshShare() {
     if (n !== sh.seq) return;
     shEl.dl.href = l.image; shEl.dl.download = `siroclimb-${label(byId[run.assetId])}.png`;
     shEl.x.href = intent(shareText({ url: l.url, run: l.run, side: shEl.side.checked }));
+    sh.file = null;
+    if (phoneShare) {                                   // the PNG ready before the tap (sharing needs the tap's activation)
+      fetch(l.image).then(r => (r.ok ? r.blob() : null)).then(b => {
+        if (!b || n !== sh.seq) return;
+        const f = new File([b], `siroclimb-${label(byId[run.assetId])}.png`, { type: 'image/png' });
+        if (navigator.canShare({ files: [f] })) sh.file = f;
+      }).catch(() => {});
+    }
     [shEl.dl, shEl.x].forEach(a => a.removeAttribute('aria-disabled'));
     shEl.card.classList.remove('is-loading');
   } catch (e) {
@@ -576,7 +584,20 @@ shEl.pub.onclick = async () => {
   finally { shEl.pub.disabled = false; }
 };
 shEl.side.addEventListener('change', () => { store.set('shareSide', shEl.side.checked); sound.tick(); refreshShare(); });
-shEl.x.addEventListener('click', () => { sound.tick(); setTimeout(closeSheet, 300); });
+// phones: the native share sheet with the card's PNG, the text and the link (X, Messages, anywhere);
+// desktop: the X intent, whose link unfolds into the same card
+const phoneShare = matchMedia('(pointer: coarse)').matches && !!navigator.canShare && !!window.File;
+shEl.x.addEventListener('click', async e => {
+  sound.tick();
+  if (sh.file && sh.link) {
+    e.preventDefault();
+    const { text, url } = shareText({ url: sh.link.url, run: sh.link.run, side: shEl.side.checked });
+    try { await navigator.share({ files: [sh.file], text: `${text}\n${url}` }); closeSheet(); return; }
+    catch (err) { if (err.name === 'AbortError') return; }
+    if (!window.open(shEl.x.href, '_blank', 'noopener')) location.href = shEl.x.href;   // share refused: the intent
+  }
+  setTimeout(closeSheet, 300);
+});
 shEl.copy.onclick = async () => { if (!sh.link) return; try { await navigator.clipboard.writeText(sh.link.url); toast('Link copied'); } catch { toast(sh.link.url); } };
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 let tipT = 0;
