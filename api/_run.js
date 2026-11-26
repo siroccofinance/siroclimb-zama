@@ -26,14 +26,14 @@ const contract = (address = ADDR.Siroclimb) => {
 
 const cache = new Map();   // game:runId -> verified run (a published run never changes)
 
-async function retry(fn, n = 3) { for (let i = 0; ; i++) { try { return await fn(); } catch (e) { if (i >= n) throw e; await new Promise(r => setTimeout(r, 1200)); } } }
+async function retry(fn, n = 6) { for (let i = 0; ; i++) { try { return await fn(); } catch (e) { if (i >= n) throw e; await new Promise(r => setTimeout(r, 1200)); } } }
 
 /** The published return of `runId` (pnl in millionths), or null when the run has not been published. */
-async function publishedPnl(g, runId) {
-  const n = Number(await retry(() => g.resultCount()));
+async function publishedPnl(g, runId, tag) {
+  const n = Number(await retry(() => g.resultCount(tag)));
   for (let to = n; to > 0; to -= 400) {
     const from = Math.max(0, to - 400);
-    const list = await retry(() => g.results(from, to - from));
+    const list = await retry(() => g.results(from, to - from, tag));
     for (let i = list.length - 1; i >= 0; i--) if (Number(list[i].runId) === runId) return Number(list[i].pnlPpm);
     if (n - from > 4000) break;                     // far enough back
   }
@@ -45,18 +45,19 @@ async function publishedPnl(g, runId) {
  * entryPrice, exitPrice, published, pnlPct, side } (pnlPct and side null until published),
  * or null when the run does not exist or is not over.
  */
-export async function verifiedRun(runId, game = ADDR.Siroclimb) {
+export async function verifiedRun(runId, game = ADDR.Siroclimb, atBlock = null) {
+  const tag = atBlock ? { blockTag: atBlock } : {};    // as of a block the caller knows holds the record
   runId = Number(runId);
   if (!Number.isInteger(runId) || runId < 0) return null;
   const key = `${game}:${runId}`;
   if (cache.has(key)) return cache.get(key);
   const g = contract(game);
-  if (runId >= Number(await retry(() => g.runCount()))) return null;
-  const r = await retry(() => g.getRun(BigInt(runId)));
+  if (runId >= Number(await retry(() => g.runCount(tag)))) return null;
+  const r = await retry(() => g.getRun(BigInt(runId), tag));
   if (Number(r.status) !== ENDED) return null;
   const m = MARKETS[Number(r.market)]; if (!m) return null;
   const duration = Number(r.endAt - r.startAt), mL = Number(r.multLong), mS = Number(r.multShort);
-  const pnl = r.published ? await publishedPnl(g, runId) : null;
+  const pnl = r.published ? await publishedPnl(g, runId, tag) : null;
   const mult = pnl == null ? null : pnl + SCALE;
   const side = mult == null || mL === mS ? null : mult === mL ? 'long' : mult === mS ? 'short' : null;
   const v = {

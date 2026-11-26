@@ -508,7 +508,7 @@ function veil(text, button = false) {
   [shEl.dl, shEl.x].forEach(a => a.setAttribute('aria-disabled', 'true'));
 }
 async function signShare(runId) {
-  const res = await fetch('/api/share', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ runId: Number(runId), showSide: shEl.side.checked }) });
+  const res = await fetch('/api/share', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ runId: Number(runId), showSide: shEl.side.checked, atBlock: sh.atBlock || undefined }) });
   const b = await res.json().catch(() => ({}));
   if (res.status === 409) return { unpublished: true };
   if (!res.ok) throw Object.assign(new Error(b.error || 'Share links unavailable'), { status: res.status });
@@ -535,16 +535,19 @@ async function refreshShare() {
     shEl.card.classList.remove('is-loading');
     if (e.status == null || e.status === 503) { closeSheet(true); legacyShare(); return; }   // no share server (static hosting)
     veil(e.message);
+    // just settled: the share server's node may be a block behind, ask again shortly
+    if (e.status === 404 || e.status === 502) { sh.retries = (sh.retries || 0) + 1; if (sh.retries <= 20) setTimeout(() => { if (n === sh.seq && openSheetEl?.id === 'shareSheet') refreshShare(); }, 3000); }
   }
 }
 shEl.pub.onclick = async () => {
   const id = chainRunId(); if (id == null) return;
   shEl.pub.disabled = true; veil('Publishing your return: one transaction, then the KMS proof…');
   try {
-    await api.publishRun(id);
+    const pub = await api.publishRun(id);
+    sh.atBlock = pub && pub.block ? pub.block : null;          // the share server reads the chain as of the record
     // the share server reads the chain on its own node, which may be a block behind: wait for it to see the record
     veil('Published. Building your card from the chain…');
-    for (let i = 0; i < 10 && (await signShare(id).catch(() => ({}))).unpublished; i++) await new Promise(r => setTimeout(r, 2500));
+    for (let i = 0; i < 24 && (await signShare(id).catch(() => ({}))).unpublished; i++) await new Promise(r => setTimeout(r, 2500));
     await refreshShare();
   }
   catch (e) { veil(`Could not publish: ${e.message}`, true); }
@@ -569,7 +572,7 @@ $('#tipClose').onclick = hideTip;
 $('#share').onclick = () => {
   if (!shareable()) return;
   sound.tick();
-  sh.link = null; shEl.img.removeAttribute('src');
+  sh.link = null; sh.retries = 0; shEl.img.removeAttribute('src');
   openSheet('shareSheet'); refreshShare();
 };
 // fallback: the post is written, the picture drawn in the browser goes to the clipboard (desktop) or the share sheet (phones)

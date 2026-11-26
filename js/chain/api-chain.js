@@ -550,10 +550,19 @@ export async function publishRun(id) {
   const s = await session();
   const r = await W.view(() => game.getRun(BigInt(id)));
   if (r.published) return true;
-  if (!r.publishRequested) await s.send(game, 'publishRun', [BigInt(id)], 0n, 'publishRun');   // a retry only records
-  const [, , , multH] = await game.runHandles(BigInt(id));
+  let multH = null;
+  if (!r.publishRequested) {                                       // a retry only records
+    const rc = await s.send(game, 'publishRun', [BigInt(id)], 0n, 'publishRun');
+    try { multH = parseEvent(rc, 'PublishRequested').multHandle; } catch {}
+  }
+  // the handle from the receipt; else read it, as of a node that has the run (a lagging one answers 0x0…0)
+  for (let i = 0; !multH || /^0x0+$/.test(multH); i++) {
+    if (i >= 15) throw new Error('Sepolia is still catching up, try again in a few seconds');
+    if (i) await sleep(2000);
+    multH = (await W.view(() => game.runHandles(BigInt(id))))[3];
+  }
   for (let i = 0; i < 10; i++) {
-    try { const { values, proof } = await publicDecrypt([multH]); await s.send(game, 'recordRun', [BigInt(id), values[0], proof], 0n, 'recordRun'); return true; }
+    try { const { values, proof } = await publicDecrypt([multH]); const rc = await s.send(game, 'recordRun', [BigInt(id), values[0], proof], 0n, 'recordRun'); return { block: rc.blockNumber }; }
     catch (e) { if (i === 9) throw e; await sleep(4000); }
   }
 }
