@@ -4,7 +4,7 @@
 // borrows the same quantity, sells it at the bid, buys it back at the ask and returns it. The loan,
 // (POSITION_LEVERAGE - 1) x the stake, pays the reserve's APR for the run's time.
 // Mirrors the contracts' integer math (6-decimal amounts, 10-decimal prices) so the screen shows what
-// the player decrypts. The payout itself follows the game ladder (moves x25); the difference between
+// the player decrypts. The payout itself follows the game ladder (moves x the market's boost); the difference between
 // the payout and this position is the "game boost", settled with the reserve.
 export const POSITION_LEVERAGE = 4;
 export const SPREAD_BPS = 10;
