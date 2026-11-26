@@ -12,15 +12,17 @@ from `js/chain/deployments.json` (written by `npm run export -- sepolia`).
 
 | Contract | Address | Role |
 | --- | --- | --- |
-| `Siroclimb` | [`0x95B271D1D751dfAA9E997caD0CE45B37B5ad242d`](https://sepolia.etherscan.io/address/0x95B271D1D751dfAA9E997caD0CE45B37B5ad242d) | Runs with an encrypted side and stake, a real position in the market token (4x the stake, 3x borrowed from the Sirocco Reserve) traded with the desk, the game boost settled with the reserve, encrypted payouts, KMS-verified posted results, packs, sessions (solo only) |
-| `SiroccoDesk` | [`0x80e8AD821E31f566A70D7C1B6a6d5E5418Bc6760`](https://sepolia.etherscan.io/address/0x80e8AD821E31f566A70D7C1B6a6d5E5418Bc6760) | The Sirocco desk: buys, sells, lends (to shorts) and takes back the markets' confidential tokens at the oracle price ± 10 bps, all legs encrypted |
-| `SiroccoReserve` | [`0x52589ca1590C6e8FDbB4d617906eEF8D1d8EB130`](https://sepolia.etherscan.io/address/0x52589ca1590C6e8FDbB4d617906eEF8D1d8EB130) | The Sirocco Reserve: confidential cUSDC lending pool, encrypted `rcUSDC` shares (ERC-7984), loans to runs, KMS-verified reveals of its totals |
+| `Siroclimb` | [`0x01f31425d6f4561532fAEd0b90d08c45000fDda2`](https://sepolia.etherscan.io/address/0x01f31425d6f4561532fAEd0b90d08c45000fDda2) | Runs with an encrypted side and stake, a real position in the market token (4x the stake, 3x borrowed from the Sirocco Reserve) traded with the desk, the game boost settled with the reserve, encrypted payouts, KMS-verified posted results, packs, sessions (solo only) |
+| `SiroccoDesk` | [`0xAb6CB483ffE8Bf794f5d6FF8c7Dbf33F8Ce8f979`](https://sepolia.etherscan.io/address/0xAb6CB483ffE8Bf794f5d6FF8c7Dbf33F8Ce8f979) | The Sirocco desk: buys, sells, lends (to shorts) and takes back the markets' confidential tokens at the oracle price ± 10 bps, all legs encrypted |
+| `SiroccoReserve` | [`0x8cf93E09436f2Dc1B0b6ECB42485a10E78F96a8f`](https://sepolia.etherscan.io/address/0x8cf93E09436f2Dc1B0b6ECB42485a10E78F96a8f) | The Sirocco Reserve: confidential cUSDC lending pool, encrypted `rcUSDC` shares (ERC-7984), loans to runs, KMS-verified reveals of its totals |
 | `ClimbPriceOracle` | [`0x9eAf890d59Bf5F38DE42FE92901E0F8607eFab07`](https://sepolia.etherscan.io/address/0x9eAf890d59Bf5F38DE42FE92901E0F8607eFab07) | Per-market price checkpoints: Pyth (trustless) or the bounded public fallback |
-| `ClimbLadder` | [`0x66119f55A4f7baC3c697684c114280917Cf0E366`](https://sepolia.etherscan.io/address/0x66119f55A4f7baC3c697684c114280917Cf0E366) | Run rules in clear: long and short multipliers on the oracle path (game scale 25x) |
+| `ClimbLadder` | [`0x19318826C0Df15dbD28b2eE56EC1A2652fe3221B`](https://sepolia.etherscan.io/address/0x19318826C0Df15dbD28b2eE56EC1A2652fe3221B) | Run rules in clear: long and short multipliers on the oracle path (game boost per market: ×90 TSLAx, AAPLx, AMZNx, ×25 NVDAx, ×60 XAUt, ×200 tGBP) |
 | `ClimbFaucet` | [`0x9a61CF739874c52785f923488F37ceF9817A3C10`](https://sepolia.etherscan.io/address/0x9a61CF739874c52785f923488F37ceF9817A3C10) | Mints USDCMock and wraps it into cUSDC for any account: 1,000 per claim, every 10 min |
 
 Earlier test deployments (made while fixing F10, F15, F24 and F44, and with keys shared with another
-project) are retired with nothing left open, and so is the game without real positions that ran until
+project) are retired with nothing left open, and so is the real-position game with a ×25 boost on every market that ran
+on 2026-11-25 and 26 (`Siroclimb` `0x95B2…242d`, desk `0x80e8…6760`, reserve `0x5258…B130`, ladder `0x6611…E366`:
+85 runs, the last two settled by the keeper at the switch; its share links (`/s/x…`, `/s/y…`) keep reading it), and so is the game without real positions that ran until
 2026-11-25 (`Siroclimb` `0x890b…03a0`: 91 runs, the last three settled by the keeper before the switch;
 its `SiroccoReserve` `0x0E59…0628` keeps its lenders' shares, withdrawable at any time), and so is the five-market game that ran before AMZNx was
 added (`Siroclimb` `0x92e5…7649`, oracle `0xFB3B…19b1`, ladder `0xd6E0…bc20`: 44 runs, 2 rounds, all
@@ -87,7 +89,7 @@ registration is owner-only. The first mirrors (until this change) used the plain
 | Ladder | 1x, 1.5x, 2x, 2.5x, 3x, 3.5x, 4x, one step every 6 s, 60 s runs |
 | Game scale | 25x: a 0.1 % move counts 2.5 % at 1x, 10 % at 4x |
 | Stake | Encrypted, clamped to 100 cUSDC on ciphertexts |
-| Leverage | Game ladder 1x to 4x (moves ×25). Real position: 4x the stake, 3x borrowed from the Sirocco Reserve for the whole run |
+| Leverage | Game ladder 1x to 4x (moves ×25 to ×200 by market). Real position: 4x the stake, 3x borrowed from the Sirocco Reserve for the whole run |
 | Desk | Oracle price ± 10 bps (`spreadBps`), a long buys at the ask and sells at the bid, a short borrows, sells at the bid, buys back at the ask |
 | Borrow APR | 20 % (`borrowAprBps` 2000, fixed at deployment); interest = paid x 2000 x (30 x seconds) / 3.1536e12 |
 | Liquidity per live run | 1,000 cUSDC lent into the game at the start (the public bound of a run), returned with the PnL at the end |

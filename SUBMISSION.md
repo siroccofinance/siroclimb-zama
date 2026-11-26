@@ -28,7 +28,7 @@ borrowed from the **Sirocco Reserve** (a cUSDC lending pool whose lenders hold e
 shares and earn 20 % APR) buys the market's confidential token at the **Sirocco desk**, at the oracle
 price plus or minus a spread (a long); or the token is borrowed from the desk's lending book and sold
 (a short). At cash out the desk takes the position back, the loan is repaid with interest. The game
-keeps its amplification on top, shown as such: every move counts ×25 on the stairs, and the part of
+keeps its amplification on top, shown as such: every move counts several times on the stairs (×25 to ×200 by market, bigger for quieter markets), and the part of
 the payout beyond the real position, the "game boost", is settled with the reserve, encrypted. The
 result screen splits the payout into the two.
 
@@ -71,8 +71,8 @@ short); posting a return reveals which one; a reserve reveal on a quiet testnet 
 > in one block, and my balance, encrypted on chain, is decrypted here, only for me. No more pop-ups."
 
 **0:45 to 1:35 · A run.** *cTSLAx, Short, 50, Start climbing. HUD: price from the 24/7 xStock, the
-gauge "Leverage · moves ×25", the line "Short 0.52 cTSLAx · borrowed 150.00 cUSDC from the Sirocco
-Reserve". Cash out. Result: "Real position (0.52 cTSLAx)" and "Game boost (moves ×25)".*
+gauge "Leverage · moves ×90", the line "Short 0.52 cTSLAx · borrowed 150.00 cUSDC from the Sirocco
+Reserve". Cash out. Result: "Real position (0.52 cTSLAx)" and "Game boost (moves ×90)".*
 > "My side and stake were encrypted while I picked them, so the climb starts at the click. xStocks
 > trade around the clock, and so do gold and the pound here, so every market is live at any hour. My
 > 50 plus 150 borrowed from the reserve sold real cTSLAx short at the Sirocco desk, and nobody can
@@ -102,7 +102,7 @@ nothing else.*
 > Siroclimb is live on @zama's FHEVM (Sepolia) 🪙
 >
 > Go long or short on real confidential xStocks, gold or GBP, 24/7: your stake + a loan from a
-> confidential lending pool buys the actual tokens. Moves count ×25 on the stairs. Side, stake,
+> confidential lending pool buys the actual tokens. Moves count ×25 to ×200 on the stairs, by market. Side, stake,
 > trades and payout stay encrypted on-chain (ERC-7984).
 >
 > One signature to play: climb.sirocco.finance

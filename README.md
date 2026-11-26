@@ -6,7 +6,7 @@ you want. Every run is solo, and it holds **real tokens**: your stake plus three
 borrowed from the **Sirocco Reserve**, a confidential cUSDC lending pool, buys the market's
 confidential token at the **Sirocco desk** (a long), or the token is borrowed from the desk and sold
 (a short). At the end the position is closed with the desk and the loan is repaid with interest.
-The game keeps its amplification on top: every price move counts **×25** on the stairs, and the
+The game keeps its amplification on top: every price move counts several times over on the stairs (the game boost, per market, bigger for quieter markets: **×90** Tesla, Apple, Amazon, **×25** NVIDIA, **×60** gold, **×200** the pound), and the
 part of the payout beyond the real position, the **game boost**, is settled with the reserve.
 Lenders earn the borrow interest and carry the players' gains and losses.
 
@@ -188,7 +188,7 @@ cUSDC and quotes at the oracle price plus or minus a 10 bps half spread.
   the bid. At the end it buys `qty` back at the ask and returns them.
 - **The real position at the end** = S + what came in - what went out - the loan's interest,
   floored at 0 (`positionHandles`, decryptable by the player). The **payout** follows the game ladder
-  (`stake x multiplier - interest`, moves ×25, leverage 1x to 4x on the stairs). The difference, the
+  (`stake x multiplier - interest`, moves × the market's boost, leverage 1x to 4x on the stairs). The difference, the
   **game boost**, positive or negative, is settled with the reserve in the same transaction: the game
   sends the reserve `stake + lent + cash in - cash out - payout`. The result screen shows both parts.
 - **Encrypted all the way.** Quantities are computed on ciphertexts at a public price
