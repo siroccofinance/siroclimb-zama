@@ -16,6 +16,8 @@ const LADDER = [1, 1.5, 2, 2.5, 3, 3.5, 4], SCALE = 1e6, RUN_SECONDS = 60, ENDED
 const RPC = process.env.CHAIN_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
 /** The game before real positions (2026-11-25): share links minted for its runs keep reading it. */
 export const LEGACY_GAME = '0x890b2bAb3f2EC280FcD4761cC0C655eaE13f03a0';
+/** The game with real positions at a x25 boost on every market (2026-11-25 to 2026-11-26): its x and y links keep reading it. */
+export const PREVIOUS_GAME = '0x95B271D1D751dfAA9E997caD0CE45B37B5ad242d';
 let provider = null;
 const games = new Map();
 const contract = (address = ADDR.Siroclimb) => {
