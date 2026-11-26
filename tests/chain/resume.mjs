@@ -26,7 +26,7 @@ const before = (await ui()).bal;
 await pg.click(`.market[data-v="${market}"]`); await pg.click('#stake button[data-v="10"]');
 await pg.click('#go');
 for (let i = 0; i < 80 && (await ui()).screen !== 'game'; i++) await wait(500);
-await wait(14000);   // the start is mined, the run is remembered
+await wait(Number(process.env.RELOAD_MS || 14000));   // RELOAD_MS=1500: before the start is even mined
 console.log(T(), 'before reload', JSON.stringify(await ui()), 'balance before the run', before);
 await pg.reload({ waitUntil: 'networkidle2' });
 let u;
