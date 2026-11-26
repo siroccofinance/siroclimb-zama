@@ -7,11 +7,15 @@
 // One source per market: a market priced by Pyth keeps Pyth through a missed poll (no switch to the
 // reference and back, which drew spikes), and a failed poll after a working one just waits.
 // Ticks are emitted every 250 ms, easing from the previous quote to the new one.
+//  - Hyperliquid's WebSocket first (2026-11-26): the browser subscribes to the best bid and offer ('bbo')
+//    of every market's xyz perp (several messages a second; the 'l2Book' channel only sent a few a minute)
+//    and takes the microprice of each (top of book, size-weighted), applied at most every 250 ms. The book moves several times a second, far more than a 1 s poll sees. A market whose socket
+//    went quiet for 3 s falls back to /api/prices (the server's own l2Book read) on the next poll.
 import { MARKETS, PRICE_DECIMALS } from './config.js';
 import { oracle } from './wallet.js';
 
-const TICK_MS = 250, POLL_MS = 1000, KEEP_MS = 15 * 60_000;
-const feeds = MARKETS.map(m => ({ id: m.id, price: null, from: null, to: null, t0: 0, hist: [], subs: new Set(), open: true, source: null, pyth: false, quoteAt: 0 }));
+const TICK_MS = 250, POLL_MS = 1000, KEEP_MS = 15 * 60_000, WS_APPLY_MS = 250, WS_FRESH_MS = 3000;
+const feeds = MARKETS.map(m => ({ id: m.id, price: null, from: null, to: null, t0: 0, dur: POLL_MS, hist: [], subs: new Set(), open: true, source: null, pyth: false, quoteAt: 0, ws: null, wsAt: 0 }));
 const metaSubs = new Set();
 export const pythPayload = { at: 0, body: null };
 let started = false, routeOk = null;
@@ -25,6 +29,7 @@ async function getJson(url) {
 function quote(i, price, source, open) {
   const f = feeds[i];
   if (!(price > 0)) return;
+  f.dur = Math.max(WS_APPLY_MS, Math.min(POLL_MS, Date.now() - (f.quoteAt || 0)));   // ease over the gap between quotes
   f.from = f.price ?? price; f.to = price; f.t0 = Date.now(); f.source = source; f.quoteAt = Date.now();
   if (open != null) f.open = open;
   if (f.price == null) { f.price = price; seed(f); }
@@ -47,7 +52,9 @@ async function poll() {
   if (ref.status === 'fulfilled' && ref.value.ok) {
     routeOk = true;
     for (const m of ref.value.markets) {
-      if (!covered.has(m.market)) quote(m.market, m.price, m.source, m.open);
+      const live = wsLive(m.market);
+      if (!covered.has(m.market) && !live) quote(m.market, m.price, m.source, m.open);
+      else if (live && m.open != null) feeds[m.market].open = m.open;
       else feeds[m.market].open = m.open || feeds[m.market].open;
       feeds[m.market].ref = m.price; feeds[m.market].session = m.session;
     }
@@ -65,7 +72,7 @@ function tick() {
   const now = Date.now();
   for (const f of feeds) {
     if (f.to == null) continue;
-    const k = Math.min(1, (now - f.t0) / POLL_MS);
+    const k = Math.min(1, (now - f.t0) / (f.dur || POLL_MS));
     f.price = f.from + (f.to - f.from) * (1 - (1 - k) ** 2);
     f.hist.push({ price: f.price, ts: now });
     while (f.hist.length && f.hist[0].ts < now - KEEP_MS) f.hist.shift();
@@ -74,9 +81,41 @@ function tick() {
   }
 }
 
+// ── Hyperliquid WebSocket (best bid and offer per market), reconnecting with a backoff
+const wsLive = i => Date.now() - feeds[i].wsAt < WS_FRESH_MS && feeds[i].ws > 0;
+const coinIdx = new Map(MARKETS.map((m, i) => [m.hyperliquid, i]).filter(([c]) => c));
+let sock = null, wsBackoff = 1000;
+function microOf(bbo) {
+  const b = bbo?.[0], a = bbo?.[1];
+  const bp = Number(b?.px), bs = Number(b?.sz), ap = Number(a?.px), as = Number(a?.sz);
+  return bp > 0 && ap >= bp && bs > 0 && as > 0 ? (bp * as + ap * bs) / (bs + as) : null;
+}
+function openSocket() {
+  if (!coinIdx.size || typeof WebSocket === 'undefined' || /[?&]nows\b/.test(location.search)) return;
+  try { sock = new WebSocket('wss://api.hyperliquid.xyz/ws'); } catch { return; }
+  sock.onopen = () => {
+    wsBackoff = 1000;
+    for (const coin of coinIdx.keys()) sock.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'bbo', coin } }));
+  };
+  sock.onmessage = ev => {
+    let d; try { d = JSON.parse(ev.data); } catch { return; }
+    if (d.channel !== 'bbo' || !d.data) return;
+    const i = coinIdx.get(d.data.coin), p = microOf(d.data.bbo);
+    if (i == null || !(p > 0)) return;
+    feeds[i].ws = p; feeds[i].wsAt = Date.now();
+  };
+  sock.onclose = () => { sock = null; setTimeout(openSocket, wsBackoff); wsBackoff = Math.min(30_000, wsBackoff * 2); };
+  sock.onerror = () => { try { sock.close(); } catch {} };
+}
+// the latest socket microprice becomes the quote at most every 250 ms (only when it changed)
+function applySocket() {
+  feeds.forEach((f, i) => { if (wsLive(i) && f.ws !== f.to && !f.pyth) quote(i, f.ws, 'hyperliquid-ws'); });
+}
+
 export function start() {
   if (started) return; started = true;
   poll(); setInterval(poll, POLL_MS); setInterval(tick, TICK_MS);
+  openSocket(); setInterval(applySocket, WS_APPLY_MS);
 }
 export function subscribe(i, cb) {
   start();
@@ -87,7 +126,13 @@ export function subscribe(i, cb) {
 export function history(i, seconds = 60) { const from = Date.now() - seconds * 1000; return feeds[i].hist.filter(h => h.ts >= from); }
 export const last = i => feeds[i].price;
 export const isOpen = i => feeds[i].open;
-export const refPrice = i => feeds[i].ref ?? feeds[i].price;
+// the checkpoint price: what the player sees (the socket's microprice) when it agrees with the server's own
+// fresh l2Book read (/api/prices) within 0.15 %; else the server's read. The oracle bounds every checkpoint.
+export const refPrice = i => {
+  const f = feeds[i], srv = f.ref ?? f.price;
+  if (wsLive(i) && srv > 0 && Math.abs(f.ws / srv - 1) <= 0.0015) return f.ws;
+  return srv;
+};
 export const isPyth = i => feeds[i].pyth;
 export const sourceOf = i => feeds[i].source;
 /** The latest quote itself (not the eased screen price): it changes only when the market does. */
