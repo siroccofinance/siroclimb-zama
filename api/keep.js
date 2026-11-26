@@ -1,7 +1,7 @@
 // GET /api/keep (Vercel cron, every minute): keeps every market's on-chain price fresh with no visitor.
 // The players' browsers write checkpoints while someone plays; with nobody on the site the oracle went stale
 // for hours (NVDAx 12 h, 1.1 % off), and the first run after that would have caught up 0.5 % per checkpoint
-// toward the real price (a free trend). This pushes the reference price (/api/prices, Kraken 24/7) as one
+// toward the real price (a free trend). This pushes the reference price (/api/prices, Hyperliquid 24/7) as one
 // bounded public checkpoint for every market that moved more than 0.05 % since its last checkpoint, or
 // whose checkpoint is older than 20 minutes: the same `pushPublic` anyone may call, clamped on chain to
 // +/-0.5 % of the last checkpoint. Key: KEEPER_KEY (server only). Authorization: CRON_SECRET (Vercel cron).

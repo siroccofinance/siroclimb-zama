@@ -7,7 +7,10 @@
 //  - gold (XAUt) and GBP/USD: Kraken spot XAUTUSD and GBPUSD, mid of the book, both trade around the
 //    clock (weekends included), so every market is open 24/7. Binance answers 451 from US hosting
 //    regions (Vercel), so it is not used.
-// One source per market, always the same one: no alternating feeds, no spikes.
+// Since 2026-11-26 every market is priced by Hyperliquid's trade.xyz perps (HIP-3 dex "xyz", one allMids
+// call: xyz:TSLA, NVDA, AAPL, AMZN, GOLD, GBP; GBP quoted in USD like Kraken's GBPUSD). They tick 24/7,
+// while Kraken's xStock books can sit still for minutes (US holidays). Kraken's mid (above) is only the
+// fallback when Hyperliquid fails or has no mid for the market. Bybit is not used (about 0.5 % off).
 // The browser posts these on chain with ClimbPriceOracle.pushPublic, which bounds every
 // checkpoint (+/-0.5 % per 10 s, +/-3 % from the last Pyth price) whenever Pyth has no fresh price.
 import { MARKETS, limited, send } from './_markets.js';
@@ -36,6 +39,15 @@ async function kraken(pair, aclass, mid = !!aclass) {
   }
 }
 
+let hlLast = null;   // { mids, at }: one allMids call serves every market; a failed call keeps it for 10 s
+async function hyperliquid() {
+  try {
+    const r = await fetch('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"type":"allMids","dex":"xyz"}', signal: AbortSignal.timeout(4000) });
+    if (!r.ok) throw new Error(`hyperliquid ${r.status}`);
+    const mids = await r.json(); if (!mids || typeof mids !== 'object') throw new Error('hyperliquid: no mids');
+    hlLast = { mids, at: Date.now() }; return mids;
+  } catch { return hlLast && Date.now() - hlLast.at < 10_000 ? hlLast.mids : null; }
+}
 async function binance(symbol) {
   const r = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`, { signal: AbortSignal.timeout(6000) });
   if (!r.ok) throw new Error(`binance ${r.status}`);
@@ -44,9 +56,12 @@ async function binance(symbol) {
 
 export async function prices() {
   if (cache && Date.now() - cache.at < CACHE_MS) return cache.body;
+  const hl = MARKETS.some(m => m.hyperliquid) ? hyperliquid() : Promise.resolve(null);
   const rows = await Promise.all(MARKETS.map(async (m, i) => {
     try {
       if (m.kraken) {
+        const mids = await hl, h = m.hyperliquid && mids ? Number(mids[m.hyperliquid]) : NaN;
+        if (h > 0) return { market: i, id: m.id, price: h, at: Date.now() / 1000, open: true, source: 'hyperliquid' };
         return { market: i, id: m.id, ...(await kraken(m.kraken, m.krakenClass, !!(m.krakenClass || m.krakenMid))), source: m.krakenClass ? 'kraken-xstock' : 'kraken' };
       }
       return { market: i, id: m.id, ...(await binance(m.binance)), source: 'binance' };
