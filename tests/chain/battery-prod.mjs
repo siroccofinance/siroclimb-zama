@@ -49,7 +49,7 @@ const ui = () => pg.evaluate(() => {
 // the coherence rules, checked on every poll
 let liveCap = null;   // during a run: the balance may not exceed what it was before minus the stake
 function check(u, where) {
-  if (liveCap != null && (u.screen === 'game' || u.screen === 'ending') && u.state === 'ready' && num(u.bal) > liveCap + 0.005)
+  if (liveCap != null && (u.screen === 'game' || u.screen === 'ending') && u.state === 'ready' && num(u.bal) > liveCap + 0.011)   // the pill rounds to cents
     issues.push(`${T()} ${where}: balance ${u.bal} during a run, above ${liveCap.toFixed(2)} (the stake came back before the payout)`);
   const shown = /\d/.test(u.bal || '');
   const decryptingText = /decrypt/i.test(`${u.line} ${u.toast}`);
