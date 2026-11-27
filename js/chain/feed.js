@@ -37,7 +37,8 @@ function quote(i, price, source, open) {
   if (f.price == null) { f.price = price; seed(f); }
 }
 // a short flat history so the first chart and step size have something to work with
-function seed(f) { const now = Date.now(); for (let k = 40; k > 0; k--) f.hist.push({ price: f.price, ts: now - k * 1000 }); }
+// (marked `seed`: the chart leaves them out and stretches the real history over its width instead)
+function seed(f) { const now = Date.now(); for (let k = 40; k > 0; k--) f.hist.push({ price: f.price, ts: now - k * 1000, seed: true }); }
 
 let pythOffUntil = 0;   // no entitled Pyth feed: ask again once a minute, not every poll
 async function poll() {
