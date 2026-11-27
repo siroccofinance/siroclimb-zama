@@ -269,6 +269,7 @@ body[data-screen="intro"] .stage::before { opacity: 0; }
 
 .cta--cash { min-width: 260px; height: 72px; font-size: 19px; gap: 14px; }
 .cta--cash b { font-weight: 600; padding-left: 14px; border-left: 1px solid rgba(43, 33, 26, .22); }
+.cta--cash.is-locking { opacity: .55; cursor: progress; }   /* the entry is not locked on chain yet */
 
 /* stairs game: leverage gauge on the side, floating step labels over the coin */
 .stairs .ladder { display: none; }

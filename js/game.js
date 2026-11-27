@@ -391,7 +391,10 @@ function hudFrame(dt) {
   const sf = $('#sBar').parentElement.parentElement;
   sf.classList.toggle('is-warn', D.danger >= 0.3 && D.danger < 0.6); sf.classList.toggle('is-hot', D.danger >= 0.6);
   // clock + next step progress, from the run's own clock
-  const tr = Math.min(run.duration, Math.max(0, (Date.now() - run.startedAt) / 1000));
+  // the climb starts when the chain locks the entry (the start block): until then the clock and the ladder wait
+  const locking = u ? !!u.pending : !!run.pending;
+  const tr = locking ? 0 : Math.min(run.duration, Math.max(0, (Date.now() - run.startedAt) / 1000));
+  $('#cash').classList.toggle('is-locking', locking);
   if (screen === 'game') {
     $('#clock').textContent = mmss(run.duration - tr);
     ringV.style.strokeDashoffset = String(RING * (tr / run.duration));
@@ -400,6 +403,7 @@ function hudFrame(dt) {
     rungs.forEach((li, i) => li.style.setProperty('--p', i === shownStep + 1 ? ((tr % run.stepEvery) / run.stepEvery).toFixed(3) : 0));
     if (!next) rungs.forEach(li => li.style.setProperty('--p', 0));
     gaugeFrame(tr);
+    if (locking) $('#gNext').textContent = 'Starts when your entry locks';
     const p = u ? u.price : run.entryPrice, ch = (p / run.entryPrice - 1) * 100;
     $('#hP').textContent = livePrice(p); const bst = byId[run.assetId]?.boost; $('#hC').textContent = pct(ch) + ' since entry' + (bst ? ` · moves ×${bst}` : '');
   }
@@ -407,6 +411,7 @@ function hudFrame(dt) {
 
 async function cash() {
   if (screen !== 'game' || !run || ended) return;
+  if (upd ? upd.pending : run.pending) { toast('Your entry is still locking on Sepolia: the climb starts in a few seconds'); return; }
   $('#cash').disabled = true;
   try { await api.cashOut(run.id); } catch (e) { toast(e.message); $('#cash').disabled = false; }
 }
