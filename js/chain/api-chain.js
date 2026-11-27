@@ -607,6 +607,12 @@ export async function publishRun(id) {
 }
 
 // ───────────────────────────── leaderboards (public results only: the runs players chose to post)
+// players' names, read once per address from the game contract
+async function loadNames(addrs) {
+  const missing = [...new Set(addrs.map(a => a.toLowerCase()))].filter(a => !names.has(a));
+  await Promise.all(missing.map(async a => { try { names.set(a, (await game.nameOf(a)) || ''); } catch { names.set(a, ''); } }));
+}
+const nameOf = a => names.get(a.toLowerCase()) || a.slice(0, 6) + '…' + a.slice(-4);
 export async function leaderboard(scope = 'today') {
   const n = Number(await game.resultCount());
   // plain objects: ethers' Result arrays are read-only, so sorting them throws
