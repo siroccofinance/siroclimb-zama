@@ -318,7 +318,8 @@ function chainValue(run, nowMs, live = pythNow(run.market), provisional = true, 
   if (live && live.mantissa != null && nowS > last.ts) pts.push({ ts: nowS, price: pythToFixed10(live.mantissa, live.expo) });
   // a checkpoint this browser sent and the chain has not shown yet: counted as landing now
   const sent = !live && provisional ? autopilot.pendingPrice(run.market) : null;
-  if (sent && sent.base === last.price && sent.units !== last.price) pts.push({ ts: Math.max(nowS, last.ts + 1), price: sent.units });
+  // it lands in the next slot after it left (Sepolia: a block every 12 s, timestamps on the 12 s grid)
+  if (sent && sent.base === last.price && sent.units !== last.price) pts.push({ ts: Math.max(last.ts + 1, Math.ceil((sent.at / 1000 + 2) / 12) * 12), price: sent.units });
   const tail = pts[pts.length - 1];
   if (!live && (provisional || exitPx != null)) { const pp = exitPx ?? provisionalPrice(run, tail.price); if (pp != null && pp !== tail.price) pts.push({ ts: Math.max(nowS, tail.ts + 1), price: pp }); }
   const m = multipliers(pts, Math.floor(run.startedAt / 1000), BOOST[run.market]);

@@ -23,7 +23,10 @@ async function pushIfStale(s, m, maxAge) {
   const p = push(s, m, maxAge, (units, base) => sentPx.set(m, { units, base, at: Date.now() }));
   // a cash out waits for this (at most 8 s on its side); the map forgets a push after 30 s whatever happens
   writing.set(m, Promise.race([p.catch(() => null), new Promise(r => setTimeout(() => r(null), 30_000))]));
-  const src = await p.finally(() => { if (writing.get(m)) writing.delete(m); sentPx.delete(m); });
+  // a mined checkpoint stays counted until the run's path shows it (the screen re-reads it a moment later):
+  // dropping it at the receipt left a gap where the screen had neither and a click then was paid otherwise
+  const src = await p.catch(e => { sentPx.delete(m); throw e; }).finally(() => { if (writing.get(m)) writing.delete(m); });
+  if (!src) sentPx.delete(m);
   if (src) api?.checkpointed?.(m);
   return src;
 }
