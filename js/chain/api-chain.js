@@ -491,7 +491,9 @@ async function sendCashOut(run, frozenPyth, after = null, frozen = null) {
   // a checkpoint this browser is writing on the market lands first: in the same block it would take
   // the cash out's place as the exit price and the paid value would differ from the frozen one
   // ...but never for long: a checkpoint stuck in this browser's keeper queue once held a cash out for 15 min (F63)
-  const landed = after ? await Promise.race([after, sleep(8000).then(() => null)]) : null;
+  // (up to 30 s: sent alongside it, a checkpoint in the same block would take the exit's place, and the
+  // contract could not write the shown price, one checkpoint per market and block; F98)
+  const landed = after ? await Promise.race([after, sleep(30_000).then(() => null)]) : null;
   let pyth = frozenPyth === undefined ? await pythFor(run.market) : frozenPyth;
   if (after && run.local && !run.chain && run.pull) {
     // re-check the value against the exact path the contract will read, with a signed price fresh
