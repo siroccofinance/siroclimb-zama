@@ -342,7 +342,8 @@ function enterGame(r) {
   Object.assign(D, { value: r.stake, pnl: 0, pct: 0, danger: 0 });
   if (sc && (!G || G.end)) park();                    // normally the coin is already parked from the lobby
   if (G) { G.steps = []; G.dangerTo = 0; G.end = null; G.go = (performance.now() - G.t0) / 1000; }
-  if (STAIRS) startTrack(r);
+  // the stairs start with the climb: while the entry is locking on chain the coin waits on its box
+  if (STAIRS && !r.pending) startTrack(r);
   const a = byId[r.assetId];
   $('#hT').textContent = label(a); $('#hN').textContent = a.name; $('#hSide').textContent = r.side === 'long' ? 'Long' : 'Short'; $('#hSide').className = 'pill is-' + r.side;
   buildLadder(r.ladder); rungs[0].classList.add('is-now');
@@ -359,6 +360,7 @@ function onUpdate(u) {
   run.entryPrice = spark.entry = runEntry();             // the chain's entry price snaps in when mined
   if (TK) lvl.entry = run.entryPrice;
   upd = u;
+  if (STAIRS && !TK && !u.pending && u.status === 'live') startTrack(run);   // entry locked: the coin sets off
   if (u.step > shownStep && u.status === 'live') {
     for (let s = shownStep + 1; s <= u.step; s++) G?.steps.push((performance.now() - G.t0) / 1000);
     shownStep = u.step;
