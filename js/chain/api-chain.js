@@ -24,7 +24,8 @@ export const rules = { ladder: LADDER, stepEvery: STEP_SECONDS, duration: RUN_SE
 export const chain = true;
 
 // ───────────────────────────── markets and prices
-export const listAssets = () => MARKETS.map(m => ({ id: m.id, name: m.name, ticker: m.ticker, kind: m.kind, token: m.token.symbol, boost: m.boost, open: feed.isOpen(m.index) }));
+// every market (a past run or a reload can name any); `listed` false = not offered in the lobby
+export const listAssets = () => MARKETS.map(m => ({ id: m.id, name: m.name, ticker: m.ticker, kind: m.kind, token: m.token.symbol, boost: m.boost, open: feed.isOpen(m.index), listed: m.listed !== false }));
 export const subscribePrice = (id, cb) => feed.subscribe(indexOf(id), cb);
 export const history = (id, seconds = 60) => feed.history(indexOf(id), seconds);
 export const quotes = (id, seconds = 90) => feed.quotes(indexOf(id), seconds);

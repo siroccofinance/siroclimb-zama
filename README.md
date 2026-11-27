@@ -12,7 +12,8 @@ Lenders earn the borrow interest and carry the players' gains and losses.
 
 Siroclimb is about real world assets, and you trade them as **confidential tokens** (ERC-7984):
 `cTSLAx`, `cNVDAx`, `cAAPLx` and `cAMZNx` (the Tesla, NVIDIA, Apple and Amazon xStocks), `cXAUt`
-(gold) and `ctGBP` (the British pound). Our four stock tokens run on the same contract as Zama's
+(gold) and `ctGBP` (the British pound, deployed but off the lobby since 2026-11-27: Hyperliquid's
+GBP book barely moves, so the climb sat still). Our four stock tokens run on the same contract as Zama's
 `ctGBPMock` and `cXAUtMock` (see DEPLOYMENTS.md). Stakes and payouts are in **Zama's confidential USDC**.
 
 Built on the **Zama Protocol (FHEVM)** on Sepolia for the Zama Developer Program, Season 5:
@@ -47,7 +48,7 @@ Contract addresses are in [DEPLOYMENTS.md](DEPLOYMENTS.md), bugs found on chain 
    browser where you connect the same wallet finds the same game account.
 3. Your balance is encrypted on chain. The game account signs a 7-day decryption grant locally, so
    the balance is decrypted in your browser automatically, and again after every payout.
-4. **Play**: pick a confidential token (cTSLAx, cNVDAx, cAAPLx, cAMZNx, cXAUt or ctGBP), long or
+4. **Play**: pick a confidential token (cTSLAx, cNVDAx, cAAPLx, cAMZNx or cXAUt), long or
    short, and a stake (10 to 100), then **Start climbing**. Your
    side and stake were already encrypted in the background when you picked them, so the climb starts
    at the click while the entry locks on Sepolia. The coin follows the live price and the leverage
