@@ -4,14 +4,16 @@
 // Nothing the browser sends ends up on the card. The id is HMAC-signed with a server secret so links
 // cannot be minted for runs whose player did not ask (the side flag is the player's choice).
 //
-// v5 id = g<runId>[s].<sig11>    the current game (per-market boosts), short like v4
+// v7 id = j<runId>[s].<sig11>    the current game (a run exits on the price its player was shown)
+// v6 id = h<runId>[s].<sig11>    a short-lived game before it (EXIT_GAME)
+// v5 id = g<runId>[s].<sig11>    the per-market-boost game before it (BOOST_GAME)
 // v4 id = y<runId>[s].<sig11>    the previous game (PREVIOUS_GAME, x25 everywhere), short (the whole link stays under ~50 characters); a 66-bit
 //                                 tag: guessing one takes ~2^65 requests to the server, out of reach
 // v3 id = x<runId>[s].<sig>      the previous game too (older, 22-character tag), still read; s: show the side (inferred from the published return, _run.js)
 // v2 id = r<runId>[s].<sig>      the game before real positions (LEGACY_GAME), still read there
 // v1 ids (<market>_<status>_…, self-reported, before 2026-11-25) still open the game, with a generic card.
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { LEGACY_GAME, PREVIOUS_GAME } from './_run.js';
+import { BOOST_GAME, EXIT_GAME, LEGACY_GAME, PREVIOUS_GAME } from './_run.js';
 
 function secret() {
   const s = process.env.SHARE_SECRET;
@@ -19,12 +21,12 @@ function secret() {
   if (process.env.VERCEL_ENV === 'production') return null;
   return 'siroclimb-dev-only-share-secret';                       // local dev and previews without the variable
 }
-const mac = (payload, key, v = 'v2') => createHmac('sha256', key).update(`siroclimb-share:${v}:` + payload).digest('base64url').slice(0, v === 'v4' || v === 'v5' ? 11 : 22);
+const mac = (payload, key, v = 'v2') => createHmac('sha256', key).update(`siroclimb-share:${v}:` + payload).digest('base64url').slice(0, ['v4', 'v5', 'v6', 'v7'].includes(v) ? 11 : 22);
 
 export function sign({ runId, showSide }) {
   const key = secret(); if (!key) throw new Error('SHARE_SECRET is not set');
-  const payload = `g${runId}${showSide ? 's' : ''}`;
-  return payload + '.' + mac(payload, key, 'v5');
+  const payload = `j${runId}${showSide ? 's' : ''}`;
+  return payload + '.' + mac(payload, key, 'v7');
 }
 
 /** id → { runId, showSide, game } (v5 … v2; game null = the current one), { legacy: true } (a valid v1 link), or null. */
@@ -33,9 +35,9 @@ export function verify(id) {
   const dot = id.lastIndexOf('.'); if (dot < 0) return null;
   const payload = id.slice(0, dot), sig = Buffer.from(id.slice(dot + 1));
   const ok = v => { const want = Buffer.from(mac(payload, key, v)); return sig.length === want.length && timingSafeEqual(sig, want); };
-  const m = /^([gxyr])(\d{1,9})(s?)$/.exec(payload);
-  const game = { g: null, x: PREVIOUS_GAME, y: PREVIOUS_GAME, r: LEGACY_GAME }[m?.[1]];
-  if (m) return ok({ g: 'v5', x: 'v3', y: 'v4', r: 'v2' }[m[1]]) ? { runId: Number(m[2]), showSide: m[3] === 's', game } : null;
+  const m = /^([jhgxyr])(\d{1,9})(s?)$/.exec(payload);
+  const game = { j: null, h: EXIT_GAME, g: BOOST_GAME, x: PREVIOUS_GAME, y: PREVIOUS_GAME, r: LEGACY_GAME }[m?.[1]];
+  if (m) return ok({ j: 'v7', h: 'v6', g: 'v5', x: 'v3', y: 'v4', r: 'v2' }[m[1]]) ? { runId: Number(m[2]), showSide: m[3] === 's', game } : null;
   return payload.includes('_') && ok('v1') ? { legacy: true } : null;
 }
 
