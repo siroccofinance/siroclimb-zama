@@ -378,7 +378,7 @@ function hudFrame(dt) {
   $('.pnl').classList.toggle('is-up', D.pnl > 0.005);
   $('#pP').textContent = pct(D.pct);
   $('#pL').textContent = levTxt(run.ladder[shownStep]);
-  $('#cashV').textContent = money(Math.max(0, D.value));
+  $('#cashV').textContent = money(Math.max(0, upd ? upd.value : D.value));   // the exact value a click freezes (the big number eases)
   $('#bV').textContent = money(u && u.borrowed != null ? u.borrowed : 0);
   if (u && u.qty != null) $('#bQ').textContent = `${u.qty.toFixed(u.qty < 1 ? 4 : 2)} ${label(byId[run.assetId])}`;
   $('#bS').textContent = run.side === 'short' ? 'Short' : 'Holding';

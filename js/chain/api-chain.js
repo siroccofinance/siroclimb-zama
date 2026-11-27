@@ -323,7 +323,8 @@ function chainValue(run, nowMs, live = pythNow(run.market), provisional = true, 
   if (!live && (provisional || exitPx != null)) { const pp = exitPx ?? provisionalPrice(run, tail.price); if (pp != null && pp !== tail.price) pts.push({ ts: Math.max(nowS, tail.ts + 1), price: pp }); }
   const m = multipliers(pts, Math.floor(run.startedAt / 1000), BOOST[run.market]);
   const mult = Number(run.side === 'long' ? m.long : m.short) / SCALE;
-  return { mult, exit: Number(pts[pts.length - 1].price) / 10 ** PRICE_DECIMALS };
+  const tip = pts[pts.length - 1];
+  return { mult, exit: Number(tip.price) / 10 ** PRICE_DECIMALS, exitUnits: tip.price, provisional: tip !== last };
 }
 function advance(run, price, ts) {
   if (run.status !== 'live') return;
@@ -333,7 +334,7 @@ function advance(run, price, ts) {
   const lev = LADDER[stepAt(t)];
   run.maxLev = Math.max(run.maxLev, lev);
   const cv = chainValue(run, ts), exact = chainValue(run, ts, undefined, false);
-  if (cv) run.acc = cv.mult - 1;
+  if (cv) { run.acc = cv.mult - 1; run.shown = cv; }       // the value on screen, the one a click freezes
   if (exact && exact.mult === 0) { run.acc = -1; endLocal(run, 'busted', ts); }   // a fall the checkpoints confirm
   else if (t >= run.duration) {
     // the 60th second: the value freezes on the price shown now, which the browser then writes as the exit
@@ -455,12 +456,12 @@ export async function cashOut(id) {
   if (run.pending) await new Promise(r => { const t = setInterval(() => { if (!run.pending || run.failed) { clearInterval(t); r(); } }, 200); });
   if (run.status !== 'live') return run.local;
   if (!run.cps && run.pull) await run.pull();                       // a run that was still locking its entry
-  const pyth = await pythFor(run.market).catch(() => null);
-  const now = Date.now(), live = pyth ? { mantissa: pyth.mantissa, expo: pyth.expo } : null;
-  const cv = chainValue(run, now, live);
-  // the price this cash out writes as its checkpoint (no signed Pyth price): the one its value was shown on
-  const lastCp = run.cps?.[run.cps.length - 1];
-  const pushPx = !pyth && lastCp ? provisionalPrice(run, lastCp.price) : null;
+  // the click freezes the very value on screen (no network call before it): its price becomes the exit
+  const now = Date.now(), lastCp = run.cps?.[run.cps.length - 1];
+  const pyth = feed.isPyth(run.market) ? await pythFor(run.market).catch(() => null) : null;
+  const live = pyth ? { mantissa: pyth.mantissa, expo: pyth.expo } : null;
+  const cv = (!pyth && run.shown) || chainValue(run, now, live);
+  const pushPx = !pyth && lastCp ? (cv.provisional ? cv.exitUnits : provisionalPrice(run, lastCp.price)) : null;
   // the result shows now; the transaction leaves now, or right after a checkpoint this browser is
   // still writing on the market; the value is then re-checked against the exact path the contract reads
   const after = autopilot.inflight(run.market);
