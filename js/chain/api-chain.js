@@ -322,7 +322,7 @@ function chainValue(run, nowMs, live = pythNow(run.market), provisional = true, 
   if (sent && sent.base === last.price && sent.units !== last.price) pts.push({ ts: Math.max(last.ts + 1, Math.ceil((sent.at / 1000 + 2) / 12) * 12), price: sent.units });
   const tail = pts[pts.length - 1];
   if (!live && (provisional || exitPx != null)) { const pp = exitPx ?? provisionalPrice(run, tail.price); if (pp != null && pp !== tail.price) pts.push({ ts: Math.max(nowS, tail.ts + 1), price: pp }); }
-  const m = multipliers(pts, Math.floor(run.startedAt / 1000), BOOST[run.market]);
+  const m = multipliers(pts, Math.floor(run.startedAt / 1000), BOOST[run.market], BigInt(run.capStep ?? LADDER.length - 1));
   const mult = Number(run.side === 'long' ? m.long : m.short) / SCALE;
   const tip = pts[pts.length - 1];
   return { mult, exit: Number(tip.price) / 10 ** PRICE_DECIMALS, exitUnits: tip.price, provisional: tip !== last };
@@ -333,7 +333,7 @@ function advance(run, price, ts) {
   run.last = price;
   if (run.pending || t < 0) { const u = update(run, ts); run.subs.forEach(cb => cb(u)); return; }
   const lev = LADDER[stepAt(t)];
-  run.maxLev = Math.max(run.maxLev, lev);
+  run.maxLev = Math.max(run.maxLev, run.capStep != null ? Math.min(lev, LADDER[run.capStep]) : lev);
   const cv = chainValue(run, ts), exact = chainValue(run, ts, undefined, false);
   if (cv) { run.acc = cv.mult - 1; run.shown = cv; }       // the value on screen, the one a click freezes
   if (exact && exact.mult === 0) { run.acc = -1; endLocal(run, 'busted', ts); }   // a fall the checkpoints confirm
@@ -346,7 +346,7 @@ function advance(run, price, ts) {
   const u = update(run, ts); run.subs.forEach(cb => cb(u));
 }
 function update(run, ts) {
-  const t = run.pending ? 0 : Math.max(0, (Math.min(ts, run.endedAt || ts) - run.startedAt) / 1000), step = stepAt(t);
+  const t = run.pending ? 0 : Math.max(0, (Math.min(ts, run.endedAt || ts) - run.startedAt) / 1000), step = Math.min(stepAt(t), run.capStep ?? LADDER.length - 1);
   const { value, interest } = net(run.stake, multOf(run.acc), t);
   return { t, price: run.last, step, leverage: LADDER[step], value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, risk: Math.min(1, Math.max(0, -run.acc)),
     borrowed: openPosition(run.stake, run.side === 'long', run.entryPrice).borrowed, qty: openPosition(run.stake, run.side === 'long', run.entryPrice).qty,
@@ -389,12 +389,15 @@ function takeEncryption(s, long, units) {
   return p;
 }
 
-export async function startRun({ assetId, side = 'long', stake }) {
+export async function startRun({ assetId, side = 'long', stake, pack = false }) {
   const m = indexOf(assetId);
   if (!feed.isOpen(m)) throw new Error(`${MARKETS[m].token.symbol} (${MARKETS[m].name}) has no live price right now. Try another market`);
   if (!(stake > 0) || stake > MAX_STAKE) throw new Error(`Stake between 1 and ${MAX_STAKE} cUSDC`);
   if (bal != null && stake > bal) throw new Error('Not enough cUSDC: use the faucet');
   const s = await session();
+  // a packed run: the pack drawn on chain caps its ladder (encrypted); this browser knows the tier it decrypted
+  const packed = pack ? await packStatus() : null;
+  if (pack && !packed?.ready) throw new Error('No leverage pack to play: open one first');
   // the game must be the account's ERC-7984 operator before the start pulls the stake: the approval is
   // queued first (broadcast-only, one nonce before the start, same block), never after it
   await W.ensureOperator(s);
@@ -406,13 +409,14 @@ export async function startRun({ assetId, side = 'long', stake }) {
   const fallback = pyth ? 0n : await fallbackFor(m);
   let sent;
   status({ kind: 'chain', text: 'Sending your encrypted start…' });
-  try { sent = await s.send(game, 'startRun', [m, enc.handles[0], enc.handles[1], enc.proof, false, pyth ? pyth.updateData : [], fallback], pyth ? pyth.fee : 0n, 'startRun', { fast: true }); }
+  try { sent = await s.send(game, 'startRun', [m, enc.handles[0], enc.handles[1], enc.proof, !!packed, pyth ? pyth.updateData : [], fallback], pyth ? pyth.fee : 0n, 'startRun', { fast: true }); }
   catch (e) { status(null); throw new Error(friendly(e)); }
   // the climb starts now; the chain's start time and entry price snap in when the block lands
   const run = makeRun({ id: `tx:${sent.hash}`, assetId, side, stake, startedAt: Date.now(), entryPrice: pyth ? pyth.price : feed.last(m) });
   run.tx = sent.hash;
+  if (packed) { run.pack = packed.ready; run.capStep = packed.ready.capStep; store.del(packKey()); }
   // remembered at once (a reload before the start is mined finds it through its transaction)
-  store.set(liveKey(), { tx: sent.hash, assetId, side, stake, startedAt: run.startedAt, entryPrice: run.entryPrice, game: ADDR.Siroclimb });
+  store.set(liveKey(), { tx: sent.hash, assetId, side, stake, startedAt: run.startedAt, entryPrice: run.entryPrice, game: ADDR.Siroclimb, pack: run.pack || null });
   status({ kind: 'chain', text: 'Locking your entry on Sepolia…' });
   moveBal(-stake, { pending: true });
   sent.mined.then(rc => {
@@ -420,7 +424,7 @@ export async function startRun({ assetId, side = 'long', stake }) {
     const ev = parseEvent(rc, 'RunStarted');
     Object.assign(run, { cid: String(ev.runId), startedAt: Number(ev.startAt) * 1000, entryPrice: Number(ev.entryPrice) / 10 ** PRICE_DECIMALS, pending: false });
     // remembered on this device: a reload during the run finds it again (side and stake stay off chain in clear)
-    store.set(liveKey(), { tx: sent.hash, cid: run.cid, assetId, side, stake, startedAt: run.startedAt, entryPrice: run.entryPrice, game: ADDR.Siroclimb });
+    store.set(liveKey(), { tx: sent.hash, cid: run.cid, assetId, side, stake, startedAt: run.startedAt, entryPrice: run.entryPrice, game: ADDR.Siroclimb, pack: run.pack || null });
     status(null);
     trackCheckpoints(run);
     autopilot.watchRun(run);
@@ -439,7 +443,7 @@ function parseEvent(rc, name) {
   for (const l of rc.logs) { try { const e = game.interface.parseLog(l); if (e?.name === name) return e.args; } catch {} }
   throw new Error(`no ${name} event`);
 }
-const publicRun = r => ({ id: r.id, assetId: r.assetId, side: r.side, stake: r.stake, entryPrice: r.entryPrice, startedAt: r.startedAt, ladder: r.ladder, stepEvery: r.stepEvery, duration: r.duration, tx: r.tx, pending: !!r.pending, chainId: r.cid });
+const publicRun = r => ({ pack: r.pack ? { tier: r.pack.tier, maxLeverage: r.pack.maxLeverage } : null, id: r.id, assetId: r.assetId, side: r.side, stake: r.stake, entryPrice: r.entryPrice, startedAt: r.startedAt, ladder: r.ladder, stepEvery: r.stepEvery, duration: r.duration, tx: r.tx, pending: !!r.pending, chainId: r.cid });
 export function onRun(id, cb) { const run = runs.get(String(id)); run.subs.add(cb); return () => run.subs.delete(cb); }
 export const runInfo = id => { const r = runs.get(String(id)); return r ? publicRun(r) : null; };
 export const runResult = id => { const r = runs.get(String(id)); return r?.chain || r?.local || null; };
@@ -528,14 +532,20 @@ async function settleOnce(run) {
     // a node behind the load balancer may not have the run's block yet (it reverts Panic 0x32): retried
     const r = await W.view(() => game.getRun(BigInt(run.cid), ...(run.txBlock ? [{ blockTag: run.txBlock }] : [])), 6);
     if (Number(r.status) === 2) {
-      const m = run.side === 'long' ? r.multLong : r.multShort, mult = Number(m) / SCALE;
+      let m = run.side === 'long' ? r.multLong : r.multShort;
+      // a packed run is paid on its capped path (selected on ciphertexts): the same ladder, capped at the tier
+      if (r.packed && run.capStep != null) {
+        const [cl, cs] = await W.view(() => W.ladder.multipliers(r.market, r.entryIndex, r.exitIndex, r.startAt, run.capStep));
+        m = run.side === 'long' ? cl : cs;
+      }
+      const mult = Number(m) / SCALE;
       const { value, interest } = net(run.stake, m, Number(r.endAt - r.startAt));
-      const step = Number(r.topStep);
+      const step = Math.min(Number(r.topStep), run.capStep ?? LADDER.length - 1);
       run.chain = { status: mult === 0 ? 'busted' : run.local?.status === 'busted' ? 'cashed' : run.local?.status || (Number(r.endAt) >= Number(r.startAt) + RUN_SECONDS ? 'expired' : 'cashed'),
         value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, maxLeverage: LADDER[step], duration: Number(r.endAt - r.startAt),
         interest, ...realPosition(run, Number(r.exitPrice) / 10 ** PRICE_DECIMALS, Number(r.endAt - r.startAt), value),
         entryPrice: Number(r.entryPrice) / 10 ** PRICE_DECIMALS, exitPrice: Number(r.exitPrice) / 10 ** PRICE_DECIMALS,
-        multLong: Number(r.multLong) / SCALE, multShort: Number(r.multShort) / SCALE, chain: true, runId: run.cid, tx: run.tx };
+        multLong: Number(r.multLong) / SCALE, multShort: Number(r.multShort) / SCALE, chain: true, runId: run.cid, tx: run.tx, pack: run.pack ? run.pack.tier : (r.packed ? 'encrypted' : null) };
       if (!run.local) { run.status = run.chain.status; run.local = run.chain; run.waiters.splice(0).forEach(f => f(run.chain)); }
       run.unsub?.();
       // the payout counts in the balance before the screen says "Settled" (no await in between)
@@ -582,6 +592,7 @@ export async function resumeRun() {
   const run = runs.get(`chain:${rec.cid}`) || makeRun({ id: `chain:${rec.cid}`, cid: rec.cid, assetId: rec.assetId, side: rec.side, stake: rec.stake,
     startedAt: Number(r.startAt) * 1000, entryPrice: Number(r.entryPrice) / 10 ** PRICE_DECIMALS });
   run.pending = false;
+  if (rec.pack && run.capStep == null) { run.pack = rec.pack; run.capStep = rec.pack.capStep; }
   if (status === 1 && Date.now() < run.startedAt + RUN_SECONDS * 1000) {
     trackCheckpoints(run); autopilot.watchRun(run);
     return { run: publicRun(run) };
@@ -710,18 +721,44 @@ export async function reserveWithdraw(amount) {
 
 export async function setName(name) { const s = await session(); await s.send(game, 'setName', [name.slice(0, 24)], 0n, 'setName'); names.set(W.player().toLowerCase(), name); }
 
-// ───────────────────────────── leverage packs (encrypted PRNG on chain). UI off for now.
+// ───────────────────────────── leverage packs (encrypted PRNG on chain)
+// Siroclimb.openPack draws a byte with FHE.randEuint8 and maps it on ciphertexts: below 115 Bronze, 115..186
+// Silver, 187..232 Gold, 233..255 Diamond (out of 256). The tier stays encrypted: only the player decrypts it.
+// A packed run caps its ladder at the tier's leverage, selected on ciphertexts (the cap never shows on chain).
 export const PACKS = [
-  { tier: 'Bronze', maxLeverage: 1.5, odds: 0.45 }, { tier: 'Silver', maxLeverage: 2, odds: 0.28 },
-  { tier: 'Gold', maxLeverage: 3, odds: 0.18 }, { tier: 'Diamond', maxLeverage: 4, odds: 0.09 },
-];
+  { tier: 'Bronze', maxLeverage: 1.5, capStep: 1, outOf256: 115 }, { tier: 'Silver', maxLeverage: 2, capStep: 2, outOf256: 72 },
+  { tier: 'Gold', maxLeverage: 3, capStep: 4, outOf256: 46 }, { tier: 'Diamond', maxLeverage: 4, capStep: 6, outOf256: 23 },
+].map(p => ({ ...p, odds: p.outOf256 / 256 }));
+const packKey = () => `pack:${ADDR.Siroclimb}:${(W.player() || '').toLowerCase()}`;
+/** { ready: { tier, maxLeverage, capStep, tx } | null, nextAt (s), cooldown (s) }: the pack waiting on chain and this browser's decryption of it. */
+export async function packStatus() {
+  const p = W.player(); if (!p) return { ready: null, nextAt: 0, cooldown: 600 };
+  const [has, last, cd] = await Promise.all([W.view(() => game.hasPack(p)), W.view(() => game.lastPackAt(p)), game.PACK_COOLDOWN().catch(() => 600n)]);
+  let mine = store.get(packKey(), null);
+  // a node a block behind does not show a pack just drawn yet: one drawn here in the last 2 minutes stays
+  if (!has && !(mine?.at && Date.now() - mine.at < 120_000)) { if (mine) store.del(packKey()); mine = null; }
+  else if (!mine) {                                         // opened on another device: decrypt it here
+    try {
+      const h = await W.view(() => game.packHandle(p));
+      const [tier] = await userDecrypt(p, W.signTyped, [{ handle: h, contract: ADDR.Siroclimb }]);
+      mine = { ...PACKS[Number(tier)], tx: null }; store.set(packKey(), mine);
+    } catch { mine = null; }
+  }
+  return { ready: mine, nextAt: Number(last) + Number(cd), cooldown: Number(cd) };
+}
 export async function openPack() {
   const s = await session();
-  const rc = await s.send(game, 'openPack', [], 0n, 'openPack');
-  const h = parseEvent(rc, 'PackOpened').tierHandle;
-  const [tier] = await userDecrypt(W.player(), W.signTyped, [{ handle: h, contract: ADDR.Siroclimb }]);
-  const p = PACKS[Number(tier)];
-  return { tier: p.tier, maxLeverage: p.maxLeverage, proof: rc.hash };
+  status({ kind: 'fhe', text: 'Drawing your pack with the encrypted PRNG…' });
+  try {
+    const rc = await s.send(game, 'openPack', [], 0n, 'openPack');
+    const h = parseEvent(rc, 'PackOpened').tierHandle;
+    status({ kind: 'fhe', text: 'Decrypting your tier (only you can)…' });
+    const [tier] = await userDecrypt(W.player(), W.signTyped, [{ handle: h, contract: ADDR.Siroclimb }]);
+    const p = { ...PACKS[Number(tier)], tx: rc.hash, url: txUrl(rc.hash), at: Date.now() };
+    store.set(packKey(), p);
+    return p;
+  } catch (e) { throw new Error(friendly(e)); }
+  finally { status(null); }
 }
 
 export async function shareCard() { return null; }
