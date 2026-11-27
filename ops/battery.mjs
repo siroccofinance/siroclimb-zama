@@ -65,7 +65,7 @@ async function settlerTick() {
     for (const id of [...expired]) {
       const r = await game.getRun(id);
       if (Number(r.status) === 2) { expired.delete(id); continue; }
-      if (Date.now() / 1000 > Number(r.startAt) + 62) await settler.send(game, 'settleRun', [id]).then(() => expired.delete(id)).catch(e => { if (!/WrongRunStatus/.test(errText(e))) log('keeper settle', id, errText(e)); });
+      if (Date.now() / 1000 > Number(r.startAt) + 62) await settler.send(game, 'settleRun', [id, 0]).then(() => expired.delete(id)).catch(e => { if (!/WrongRunStatus/.test(errText(e))) log('keeper settle', id, errText(e)); });
     }
   }
 }
@@ -109,7 +109,7 @@ async function soloRun(p, wave, delay = 0) {
   else {
     await sleep((8 + Math.random() * 40) * 1000);
     const py2 = await pythFor(market);
-    await p.send(game, 'cashOut', [id, py2 ? py2.updateData : []], py2 ? py2.fee : 0n).catch(e => { if (!/WrongRunStatus/.test(errText(e))) throw e; });
+    await p.send(game, 'cashOut', [id, py2 ? py2.updateData : [], 0], py2 ? py2.fee : 0n).catch(e => { if (!/WrongRunStatus/.test(errText(e))) throw e; });
   }
   // public RPC nodes lag: read the run until it shows as settled with its handles
   step('exit sent');

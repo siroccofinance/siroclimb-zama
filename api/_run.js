@@ -18,6 +18,10 @@ const RPC = process.env.CHAIN_RPC_URL || 'https://ethereum-sepolia-rpc.publicnod
 export const LEGACY_GAME = '0x890b2bAb3f2EC280FcD4761cC0C655eaE13f03a0';
 /** The game with real positions at a x25 boost on every market (2026-11-25 to 2026-11-26): its x and y links keep reading it. */
 export const PREVIOUS_GAME = '0x95B271D1D751dfAA9E997caD0CE45B37B5ad242d';
+/** The per-market-boost game before expiries exited on the shown price (2026-11-26 to 27): its g links keep reading it. */
+export const BOOST_GAME = '0x01f31425d6f4561532fAEd0b90d08c45000fDda2';
+/** A short-lived game (2026-11-27) whose exits still depended on public checkpoints: its h links keep reading it. */
+export const EXIT_GAME = '0x436B2Da8D4CddCC33920E27f53d1DFEc7A3a6088';
 let provider = null;
 const games = new Map();
 const contract = (address = ADDR.Siroclimb) => {

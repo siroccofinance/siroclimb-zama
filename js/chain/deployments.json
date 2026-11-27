@@ -1,12 +1,12 @@
 {
   "11155111": {
-    "Siroclimb": "0x01f31425d6f4561532fAEd0b90d08c45000fDda2",
-    "deployBlock": 12217763,
+    "Siroclimb": "0xba6f9ED5EaABaa330250A400add456f8FF569D98",
+    "deployBlock": 12223816,
     "ClimbPriceOracle": "0x9eAf890d59Bf5F38DE42FE92901E0F8607eFab07",
     "ClimbLadder": "0x19318826C0Df15dbD28b2eE56EC1A2652fe3221B",
     "ClimbFaucet": "0x9a61CF739874c52785f923488F37ceF9817A3C10",
-    "SiroccoReserve": "0x8cf93E09436f2Dc1B0b6ECB42485a10E78F96a8f",
-    "SiroccoDesk": "0xAb6CB483ffE8Bf794f5d6FF8c7Dbf33F8Ce8f979",
+    "SiroccoReserve": "0x99ca511F3b7245C864d837F3a410bddCC71D4df2",
+    "SiroccoDesk": "0x7F158170002EC8f1356a0ED72d00496a1D4366ee",
     "StakeToken": "0x7c5BF43B851c1dff1a4feE8dB225b87f2C223639",
     "Pyth": "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21",
     "tokens": {

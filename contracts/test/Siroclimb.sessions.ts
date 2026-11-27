@@ -38,7 +38,7 @@ describe("Siroclimb: sessions and packs", function () {
     const p1 = (BASE[NVDA] * 10_015n) / 10_000n;
     await price(f, NVDA, p1);
     await at(run.startAt, 15);
-    await f.game.connect(session).cashOut(id, []);
+    await f.game.connect(session).cashOut(id, [], 0);
     const m = model([{ t: 0, p: BASE[NVDA] }, { t: 14, p: p1 }]).long;
     expect(await balance(f, f.alice)).to.eq(before - 50n * USDC + payout(50n * USDC, m, 15));
     // the player (not the session) owns the run's ciphertexts
@@ -109,7 +109,7 @@ describe("Siroclimb: sessions and packs", function () {
     await at(run.startAt, 50); // step 8 -> capped
     await price(f, NVDA, p1);
     await at(run.startAt, 51);
-    await f.game.connect(f.alice).cashOut(id, []);
+    await f.game.connect(f.alice).cashOut(id, [], 0);
     const [, , , multH] = await f.game.runHandles(id);
     const got = await decrypt32(f, multH, f.alice);
     expect(got).to.eq(model([{ t: 0, p: BASE[NVDA] }, { t: 50, p: p1 }], cap).long);

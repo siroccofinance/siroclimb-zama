@@ -12,15 +12,19 @@ from `js/chain/deployments.json` (written by `npm run export -- sepolia`).
 
 | Contract | Address | Role |
 | --- | --- | --- |
-| `Siroclimb` | [`0x01f31425d6f4561532fAEd0b90d08c45000fDda2`](https://sepolia.etherscan.io/address/0x01f31425d6f4561532fAEd0b90d08c45000fDda2) | Runs with an encrypted side and stake, a real position in the market token (4x the stake, 3x borrowed from the Sirocco Reserve) traded with the desk, the game boost settled with the reserve, encrypted payouts, KMS-verified posted results, packs, sessions (solo only) |
-| `SiroccoDesk` | [`0xAb6CB483ffE8Bf794f5d6FF8c7Dbf33F8Ce8f979`](https://sepolia.etherscan.io/address/0xAb6CB483ffE8Bf794f5d6FF8c7Dbf33F8Ce8f979) | The Sirocco desk: buys, sells, lends (to shorts) and takes back the markets' confidential tokens at the oracle price ± 10 bps, all legs encrypted |
-| `SiroccoReserve` | [`0x8cf93E09436f2Dc1B0b6ECB42485a10E78F96a8f`](https://sepolia.etherscan.io/address/0x8cf93E09436f2Dc1B0b6ECB42485a10E78F96a8f) | The Sirocco Reserve: confidential cUSDC lending pool, encrypted `rcUSDC` shares (ERC-7984), loans to runs, KMS-verified reveals of its totals |
-| `ClimbPriceOracle` | [`0x9eAf890d59Bf5F38DE42FE92901E0F8607eFab07`](https://sepolia.etherscan.io/address/0x9eAf890d59Bf5F38DE42FE92901E0F8607eFab07) | Per-market price checkpoints: Pyth (trustless) or the bounded public fallback |
+| `Siroclimb` | [`0xba6f9ED5EaABaa330250A400add456f8FF569D98`](https://sepolia.etherscan.io/address/0xba6f9ED5EaABaa330250A400add456f8FF569D98) | Runs with an encrypted side and stake, a real position in the market token (4x the stake, 3x borrowed from the Sirocco Reserve) traded with the desk, the game boost settled with the reserve, encrypted payouts, KMS-verified posted results, packs, sessions (solo only) |
+| `SiroccoDesk` | [`0x7F158170002EC8f1356a0ED72d00496a1D4366ee`](https://sepolia.etherscan.io/address/0x7F158170002EC8f1356a0ED72d00496a1D4366ee) | The Sirocco desk: buys, sells, lends (to shorts) and takes back the markets' confidential tokens at the oracle price ± 10 bps, all legs encrypted |
+| `SiroccoReserve` | [`0x99ca511F3b7245C864d837F3a410bddCC71D4df2`](https://sepolia.etherscan.io/address/0x99ca511F3b7245C864d837F3a410bddCC71D4df2) | The Sirocco Reserve: confidential cUSDC lending pool, encrypted `rcUSDC` shares (ERC-7984), loans to runs, KMS-verified reveals of its totals |
+| `ClimbPriceOracle` | [`0x9eAf890d59Bf5F38DE42FE92901E0F8607eFab07`](https://sepolia.etherscan.io/address/0x9eAf890d59Bf5F38DE42FE92901E0F8607eFab07) | Per-market price checkpoints: Pyth (trustless), the bounded public fallback, and the exit price a player was shown, written by the game (an updater) within the same +/-0.49 % bound |
 | `ClimbLadder` | [`0x19318826C0Df15dbD28b2eE56EC1A2652fe3221B`](https://sepolia.etherscan.io/address/0x19318826C0Df15dbD28b2eE56EC1A2652fe3221B) | Run rules in clear: long and short multipliers on the oracle path (game boost per market: ×90 TSLAx, AAPLx, AMZNx, ×25 NVDAx, ×60 XAUt, ×200 tGBP) |
 | `ClimbFaucet` | [`0x9a61CF739874c52785f923488F37ceF9817A3C10`](https://sepolia.etherscan.io/address/0x9a61CF739874c52785f923488F37ceF9817A3C10) | Mints USDCMock and wraps it into cUSDC for any account: 1,000 per claim, every 10 min |
 
 Earlier test deployments (made while fixing F10, F15, F24 and F44, and with keys shared with another
-project) are retired with nothing left open, and so is the real-position game with a ×25 boost on every market that ran
+project) are retired with nothing left open, and so is a short-lived game whose exits still depended on public
+checkpoints (`Siroclimb` `0x436B…6088`, desk `0x8234…7c7F6a`, reserve `0x2D10…B5f5`, 2026-11-27, test runs only; `/s/h…`
+links keep reading it), and so is the per-market-boost game whose expired runs exited on the last
+checkpoint before their end (`Siroclimb` `0x01f3…Dda2`, desk `0xAb6C…f979`, reserve `0x8cf9…6a8f`, 2026-11-26 and 27; its
+share links (`/s/g…`) keep reading it), and so is the real-position game with a ×25 boost on every market that ran
 on 2026-11-25 and 26 (`Siroclimb` `0x95B2…242d`, desk `0x80e8…6760`, reserve `0x5258…B130`, ladder `0x6611…E366`:
 85 runs, the last two settled by the keeper at the switch; its share links (`/s/x…`, `/s/y…`) keep reading it), and so is the game without real positions that ran until
 2026-11-25 (`Siroclimb` `0x890b…03a0`: 91 runs, the last three settled by the keeper before the switch;

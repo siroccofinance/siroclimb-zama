@@ -42,8 +42,8 @@ describe("Siroclimb: HCU budget (worst cases)", function () {
       await at(run.startAt, k * 10);
       await price(f, NVDA, (BASE[NVDA] * BigInt(10_000 + k)) / 10_000n);
     }
-    await measure("cashOut (solo, encrypted payout)", f.game.connect(f.alice).cashOut(0, []));
-    await measure("cashOut (packed: 4 capped paths)", f.game.connect(f.bob).cashOut(1, []));
+    await measure("cashOut (solo, encrypted payout)", f.game.connect(f.alice).cashOut(0, [], 0));
+    await measure("cashOut (packed: 4 capped paths)", f.game.connect(f.bob).cashOut(1, [], 0));
     await measure("publishRun", f.game.connect(f.alice).publishRun(0));
   });
 

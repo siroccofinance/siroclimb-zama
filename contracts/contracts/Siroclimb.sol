@@ -48,6 +48,11 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
     uint8 public constant TOP_STEP = 6;
     uint64 public constant STEP_SECONDS = 6;
     uint64 public constant RUN_SECONDS = 60;
+    /// @notice A run that reaches its 60th second exits on the first checkpoint written in the
+    ///         `EXIT_GRACE` seconds after its end, if any (else the last one before it): the player's
+    ///         browser writes the price it showed at the 60th second, then settles, in the same block.
+    ///         Without it the exit was the last checkpoint before the end, seconds older than the screen.
+    uint64 public constant EXIT_GRACE = 30;
     /// @notice Multipliers are fixed point with 6 decimals: 1_000_000 = the stake back.
     uint32 public constant SCALE = 1_000_000;
     uint32 public constant MAX_MULT = 10 * SCALE;
@@ -346,22 +351,57 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
 
     /// @notice Ends the caller's run now and pays it in the same transaction. A signed Pyth
     ///         update can ride along so the exit is the freshest verified price.
-    function cashOut(uint256 runId, bytes[] calldata pythUpdate) external payable {
+    /// @param exitPrice the price the player's screen showed at the click (10 decimals; 0: none). Written as
+    ///        the market's checkpoint in this block, bounded like a public price (+/-0.49 % of the last
+    ///        checkpoint), and the run exits on it: the player is paid the value they clicked on.
+    function cashOut(uint256 runId, bytes[] calldata pythUpdate, uint64 exitPrice) external payable {
         Run storage r = _runs[runId];
         if (r.player != playerOf(msg.sender)) revert NotPlayer(runId);
         if (r.status != RunStatus.Live) revert WrongRunStatus(runId);
         uint64 end = r.startAt + RUN_SECONDS;
         if (pythUpdate.length != 0) oracle.pushPyth{value: msg.value}(pythUpdate);
-        _endRun(runId, block.timestamp < end ? uint64(block.timestamp) : end);
+        bool wrote = _writeExit(r.market, exitPrice);
+        if (block.timestamp < end) _endRun(runId, uint64(block.timestamp), uint64(block.timestamp), false);
+        else _endRun(runId, end, _expiryPriceAt(end), wrote && block.timestamp <= end + EXIT_GRACE);
     }
 
     /// @notice Permissionless: settles a run whose 60 seconds are over, at its last second.
-    function settleRun(uint256 runId) external {
+    ///         `exitPrice`: from the player (or their session) only, the price their screen showed at the 60th
+    ///         second, written as the exit checkpoint (bounded, see cashOut) when settled within `EXIT_GRACE`.
+    ///         Anyone else's call settles on the checkpoints as they are.
+    function settleRun(uint256 runId, uint64 exitPrice) external {
         Run storage r = _runs[runId];
         if (r.status != RunStatus.Live) revert WrongRunStatus(runId);
         uint64 end = r.startAt + RUN_SECONDS;
         if (block.timestamp < end) revert RunNotOver(runId, end);
-        _endRun(runId, end);
+        bool wrote = r.player == playerOf(msg.sender) && block.timestamp <= end + EXIT_GRACE && _writeExit(r.market, exitPrice);
+        _endRun(runId, end, _expiryPriceAt(end), wrote);
+    }
+
+    uint256 private constant EXIT_MAX_MOVE_BPS = 49;
+
+    /// @dev Writes the player's shown price as the market's checkpoint in this block, clamped to +/-0.49 % of
+    ///      the last one (the bound any public price has). Nothing when the block already has one.
+    function _writeExit(uint256 market, uint64 exitPrice) private returns (bool) {
+        if (exitPrice == 0) return false;
+        (, uint64 ts, uint64 last, ) = oracle.latest(market);
+        if (ts >= block.timestamp) return false;
+        uint256 lo = (uint256(last) * (10_000 - EXIT_MAX_MOVE_BPS)) / 10_000;
+        uint256 hi = (uint256(last) * (10_000 + EXIT_MAX_MOVE_BPS)) / 10_000;
+        uint256 p = exitPrice < lo ? lo : exitPrice > hi ? hi : exitPrice;
+        uint256[] memory ms = new uint256[](1);
+        uint64[] memory ps = new uint64[](1);
+        ms[0] = market;
+        ps[0] = uint64(p);
+        oracle.pushPrices(ms, ps);
+        return true;
+    }
+
+    /// @dev The time whose checkpoint prices an expired run: the first checkpoint after `end`, within the
+    ///      grace and already written, or else the last one at or before `end`.
+    function _expiryPriceAt(uint64 end) private view returns (uint64) {
+        uint64 limit = end + EXIT_GRACE;
+        return block.timestamp < limit ? uint64(block.timestamp) : limit;
     }
 
     /// @notice Owner of a finished run: reveal its result for the leaderboard. Makes the
@@ -469,10 +509,18 @@ contract Siroclimb is ZamaEthereumConfig, Ownable2Step {
 
     // ---------------------------------------------------------------- internals
 
-    function _endRun(uint256 runId, uint64 exitAt) private {
+    function _endRun(uint256 runId, uint64 exitAt, uint64 priceAt, bool playerExit) private {
         Run storage r = _runs[runId];
         Sealed storage s = _sealed[runId];
-        uint256 exitIndex = oracle.indexAtOrBefore(r.market, exitAt);
+        uint256 exitIndex = oracle.indexAtOrBefore(r.market, priceAt);
+        // an expiry takes the first checkpoint after the end (within the grace), not a later one; or the one
+        // its player just wrote in this transaction
+        if (playerExit) {
+            (exitIndex, , , ) = oracle.latest(r.market);
+        } else if (priceAt > exitAt) {
+            uint256 atEnd = oracle.indexAtOrBefore(r.market, exitAt);
+            if (exitIndex > atEnd) exitIndex = atEnd + 1;
+        }
         r.exitIndex = uint32(exitIndex);
         (uint32 ml, uint32 ms, uint64 exitPrice) = ladder.multipliers(r.market, r.entryIndex, exitIndex, r.startAt, TOP_STEP);
         r.status = RunStatus.Ended;

@@ -117,7 +117,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     await execute("SiroccoReserve", { from: deployer, log: true }, "depositUnderlying", RESERVE_SEED);
   }
 
-  const updaters = [deployer, ...(process.env.KEEPER_ADDRESS ? [process.env.KEEPER_ADDRESS] : [])];
+  // the game writes a player's shown exit price as a (bounded) checkpoint: it is an updater
+  const updaters = [deployer, game.address, ...(process.env.KEEPER_ADDRESS ? [process.env.KEEPER_ADDRESS] : [])];
   for (const u of updaters) {
     if (!(await read("ClimbPriceOracle", "isUpdater", u))) await execute("ClimbPriceOracle", { from: deployer, log: true }, "setUpdater", u, true);
   }
@@ -139,5 +140,5 @@ async function deployLocalToken(hre: HardhatRuntimeEnvironment, deployer: string
 }
 
 export default func;
-func.id = "siroclimb_game_v10_boosts";
+func.id = "siroclimb_game_v12_player_exit";
 func.tags = ["Siroclimb"];

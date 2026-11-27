@@ -76,7 +76,7 @@ describe("SiroccoDesk: every run holds real tokens", function () {
     await at(run.startAt, 13);
     await price(f, AAPL, p1);
     await at(run.startAt, 20);
-    await f.game.connect(f.alice).cashOut(id, []);
+    await f.game.connect(f.alice).cashOut(id, [], 0);
     const pos = position(stake, true, BASE[AAPL], p1, 20);
     const mult = model([{ t: 0, p: BASE[AAPL] }, { t: 13, p: p1 }], 6, MOVE_SCALES[AAPL]).long;
     // the payout keeps the game scale; the real position is reported next to it
@@ -107,7 +107,7 @@ describe("SiroccoDesk: every run holds real tokens", function () {
     await at(run.startAt, 8);
     await price(f, XAUT, p1);
     await at(run.startAt, 15);
-    await f.game.connect(f.alice).cashOut(id, []);
+    await f.game.connect(f.alice).cashOut(id, [], 0);
     const pos = position(stake, false, BASE[XAUT], p1, 15);
     const mult = model([{ t: 0, p: BASE[XAUT] }, { t: 8, p: p1 }], 6, MOVE_SCALES[XAUT]).short;
     expect(await balance(f, f.alice)).to.eq(before - stake + payout(stake, mult, 15));
@@ -127,8 +127,8 @@ describe("SiroccoDesk: every run holds real tokens", function () {
     expect(tL).to.deep.eq(tS);
     const run = await f.game.getRun(long);
     await at(run.startAt, 10);
-    const cL = await transfers(f, f.game.connect(f.alice).cashOut(long, []));
-    const cS = await transfers(f, f.game.connect(f.bob).cashOut(long + 1n, []));
+    const cL = await transfers(f, f.game.connect(f.alice).cashOut(long, [], 0));
+    const cS = await transfers(f, f.game.connect(f.bob).cashOut(long + 1n, [], 0));
     expect(cL).to.deep.eq(cS);
   });
 

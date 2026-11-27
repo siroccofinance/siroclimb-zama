@@ -9,7 +9,7 @@ let settled = 0, live = 0;
 for (let id = 0; id < n; id++) {
   const r = await view(() => game.getRun(id));
   if (Number(r.status) !== 1) continue;
-  if (now() > Number(r.startAt) + 61) { await k.send(game, 'settleRun', [id]).then(() => settled++).catch(e => console.log('settle', id, errText(e))); }
+  if (now() > Number(r.startAt) + 61) { await k.send(game, 'settleRun', [id, 0]).then(() => settled++).catch(e => console.log('settle', id, errText(e))); }
   else live++;
 }
 console.log(JSON.stringify({ runs: n, settled, stillLive: live }));
