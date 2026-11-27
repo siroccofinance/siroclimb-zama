@@ -374,26 +374,31 @@ function endLocal(run, st, ts = Date.now(), frozen = null) {
 //    lobby, so the click only sends the transaction (F45)
 const preEnc = new Map();
 const encKey = (long, units) => `s:${long}:${units}`;
-// a few picks in a row: only the last one is encrypted (300 ms after it; older waiting ones are dropped)
+// Every combination is encrypted ahead in the background (the input does not depend on the market: 2 sides x
+// the stakes offered), the pick on screen first; a start then only sends its transaction. One is used per start
+// and made again behind it.
+const STAKES = [10, 25, 50, 100];
 let prepT = null;
+function ahead(s, long, units, first) {
+  const k = `${s.address}:${encKey(long, units)}`;
+  if (preEnc.has(k)) return;
+  const p = encryptRun(s.address, long, units, { mode: first ? 'first' : 'later' });
+  p.then(() => { p.done = true; }, () => { if (preEnc.get(k) === p) preEnc.delete(k); });
+  preEnc.set(k, p);
+}
 export function prepare({ side = 'long', stake = 10 } = {}) {
   clearTimeout(prepT);
   prepT = setTimeout(() => {
     const s = W.currentSession(); if (!s) return;
-    const long = side === 'long', units = Math.round(stake * USDC), k = `${s.address}:${encKey(long, units)}`;
-    if (preEnc.has(k)) return;
-    for (const key of [...preEnc.keys()]) if (!preEnc.get(key).done) preEnc.delete(key);   // superseded (dropped in the queue)
-    const p = encryptRun(s.address, long, units, { speculative: true });
-    p.then(() => { p.done = true; }, () => { if (preEnc.get(k) === p) preEnc.delete(k); });
-    preEnc.set(k, p);
+    ahead(s, side === 'long', Math.round(stake * USDC), true);
+    for (const l of [side === 'long', side !== 'long']) for (const st of STAKES) ahead(s, l, Math.round(st * USDC), false);
   }, 300);
 }
 function takeEncryption(s, long, units) {
   const k = `${s.address}:${encKey(long, units)}`;
-  clearTimeout(prepT);
   const pre = preEnc.get(k);
-  // a pre-encryption still waiting or dropped falls back to a fresh one, which goes first in the queue
-  const p = pre ? pre.catch(() => encryptRun(s.address, long, units)) : encryptRun(s.address, long, units);
+  // ready ahead: instant; still on its way: whichever comes first of it and a fresh one in the start's own worker
+  const p = pre?.done ? pre : pre ? Promise.any([pre, encryptRun(s.address, long, units)]) : encryptRun(s.address, long, units);
   preEnc.delete(k);
   setTimeout(() => prepare({ side: long ? 'long' : 'short', stake: units / USDC }), 0);   // ready for the next one
   return p;
