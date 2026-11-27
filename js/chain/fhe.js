@@ -28,8 +28,37 @@ export function getFhe() {
   })().catch(e => { instance = null; throw e; });
   return instance;
 }
+// ── encryption in a worker (fhe-worker.js): the input proof is ~3.5 s of CPU that froze the 3D scene on
+//    this thread. The page's own SDK instance stays for decryptions (light) and as a fallback.
+let worker = null, workerReady = null, workerOff = false, seq = 0;
+const pending = new Map();
+function encWorker() {
+  if (workerOff || typeof Worker === 'undefined') return null;
+  if (!worker) {
+    try { worker = new Worker(new URL('./fhe-worker.js', import.meta.url)); } catch { workerOff = true; return null; }
+    worker.onmessage = ({ data }) => { const p = pending.get(data.id); if (!p) return; pending.delete(data.id); data.ok ? p.res(data.v) : p.rej(new Error(data.err)); };
+    worker.onerror = () => { workerOff = true; pending.forEach(p => p.rej(new Error('encryption worker failed'))); pending.clear(); };
+    workerReady = call('init', { url: RELAYER_SDK_URL, rpc: RPC_URL }).catch(e => { workerOff = true; throw e; });
+  }
+  return workerReady;
+}
+function call(op, args) { return new Promise((res, rej) => { const id = ++seq; pending.set(id, { res, rej }); worker.postMessage({ id, op, args }); }); }
+// { contract, user, bool?, u64? } → { handles, inputProof }: in the worker, else on this thread
+async function encryptInput(args) {
+  const w = encWorker();
+  if (w) {
+    try { await w; return await call('encrypt', { ...args, u64: args.u64 == null ? null : String(args.u64) }); }
+    catch (e) { if (!workerOff) throw e; }                       // the worker itself failed: this thread takes over
+  }
+  const fhe = await getFhe();
+  const input = fhe.createEncryptedInput(args.contract, args.user);
+  if (args.bool != null) input.addBool(args.bool);
+  if (args.u64 != null) input.add64(BigInt(args.u64));
+  return input.encrypt();
+}
+
 /** Starts loading the SDK and its WASM in the background (first encryption is then instant). */
-export const warmUp = () => getFhe().catch(() => {});
+export const warmUp = () => { encWorker()?.catch(() => {}); return getFhe().catch(() => {}); };
 
 /** A relayer request can hang without an answer: give up after `ms` and try again (3 attempts). */
 async function relayer(fn, ms, what) {
@@ -43,24 +72,13 @@ const hex = b => '0x' + Array.from(b, x => x.toString(16).padStart(2, '0')).join
 
 /** Encrypts a run's side (ebool) and optionally its stake (euint64, 6 decimals) for `sender`. */
 export async function encryptRun(sender, long, stakeUnits) {
-  const fhe = await getFhe();
-  const enc = await relayer(() => {
-    const input = fhe.createEncryptedInput(ADDR.Siroclimb, sender);
-    input.addBool(long);
-    if (stakeUnits != null) input.add64(BigInt(stakeUnits));
-    return input.encrypt();
-  }, 40_000, 'encryption');
+  const enc = await relayer(() => encryptInput({ contract: ADDR.Siroclimb, user: sender, bool: long, u64: stakeUnits }), 40_000, 'encryption');
   return { handles: enc.handles.map(hex), proof: hex(enc.inputProof) };
 }
 
 /** Encrypts one amount (euint64, 6 decimals) for `contract`, bound to `sender` (reserve deposits, withdrawals). */
 export async function encryptAmount(contract, sender, units) {
-  const fhe = await getFhe();
-  const enc = await relayer(() => {
-    const input = fhe.createEncryptedInput(contract, sender);
-    input.add64(BigInt(units));
-    return input.encrypt();
-  }, 40_000, 'encryption');
+  const enc = await relayer(() => encryptInput({ contract, user: sender, u64: units }), 40_000, 'encryption');
   return { handle: hex(enc.handles[0]), proof: hex(enc.inputProof) };
 }
 
