@@ -38,7 +38,7 @@ const shortAddr = a => a.slice(0, 4) + '…' + a.slice(-4);
 const assets = api.listAssets();
 const byId = Object.fromEntries(assets.map(a => [a.id, a]));
 const C = { asset: store.get('asset', 'TSLAx'), side: store.get('side', 'long'), stake: store.get('stake', 25) };
-if (!byId[C.asset]) C.asset = assets[0].id;
+if (!byId[C.asset] || !byId[C.asset].listed) C.asset = assets.find(a => a.listed).id;
 let screen = body.dataset.screen || 'intro', busy = false;
 let run = null, upd = null, shownStep = 0, ended = null;
 const D = { value: 0, pnl: 0, pct: 0, danger: 0 };           // displayed values, eased toward the feed every frame
@@ -222,7 +222,7 @@ const label = a => a.token || a.ticker;
 const marketsEl = $('#markets');
 const chip = {};
 const day = { ref: {}, at: 0 };   // 24 h reference price per market (api/change.js), before any price arrives
-for (const a of assets) {
+for (const a of assets.filter(x => x.listed)) {
   const b = document.createElement('button');
   b.className = 'market'; b.dataset.v = a.id;
   b.innerHTML = `<b>${label(a)}</b><span class="k">${KIND[a.kind] || a.kind}</span><span class="n">${a.name}</span><span class="p"></span><span class="c"></span>`;

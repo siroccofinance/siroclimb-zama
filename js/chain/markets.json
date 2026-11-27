@@ -119,6 +119,8 @@
     },
     {
       "id": "tGBP",
+      "listed": false,
+      "_listed": "off the lobby since 2026-11-27: Hyperliquid's xyz:GBP book barely moves (0 to 7 changes in 30 s, wide spread), so the climb sat still and its x200 boost amplified spread noise. Kept here: index = on-chain market id, past runs and share links still read it.",
       "boost": 200,
       "name": "British pound",
       "ticker": "GBP",
