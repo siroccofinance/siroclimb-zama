@@ -55,7 +55,7 @@ async function playRun(f: Fixture, stake: bigint) {
   await at(run.startAt, 14);
   await price(f, NVDA, p1);
   await at(run.startAt, 20);
-  await f.game.connect(f.alice).cashOut(id, []);
+  await f.game.connect(f.alice).cashOut(id, [], 0);
   return { id, mult: model([{ t: 0, p: BASE[NVDA] }, { t: 14, p: p1 }]).long };
 }
 
@@ -92,7 +92,7 @@ describe("SiroccoReserve: the lending pool behind the leverage", function () {
     await at(run.startAt, 14);
     await price(f, NVDA, p1);
     await at(run.startAt, 20);
-    await f.game.connect(f.alice).cashOut(id, []);
+    await f.game.connect(f.alice).cashOut(id, [], 0);
     const mult = model([{ t: 0, p: BASE[NVDA] }, { t: 14, p: p1 }]).long;
     const paid = payout(stake, mult, 20);
     const charged = interest(stake, 20);
@@ -174,7 +174,7 @@ describe("SiroccoReserve: the lending pool behind the leverage", function () {
     // the run is still fully funded and settles normally
     const run = await f.game.getRun(id);
     await at(run.startAt, 61);
-    await f.game.settleRun(id);
+    await f.game.settleRun(id, 0);
     expect(await f.reserve.lockedAssets()).to.eq(0n);
   });
 
@@ -221,7 +221,7 @@ describe("SiroccoReserve: the lending pool behind the leverage", function () {
     const id = await startRun(f, f.alice, NVDA, true, 30n * USDC, true);
     const run = await f.game.getRun(id);
     await at(run.startAt, 45);
-    await f.game.connect(f.alice).cashOut(id, []);
+    await f.game.connect(f.alice).cashOut(id, [], 0);
     const [, , , , , , interestH] = await f.game.runHandles(id);
     expect(cap).to.be.gte(1);
     expect(await decrypt64(f, interestH, f.alice)).to.eq(interest(30n * USDC, 45));

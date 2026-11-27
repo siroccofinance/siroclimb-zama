@@ -157,6 +157,7 @@ export async function deployFixture(opts: { fund?: number; seed?: bigint; desk?:
     await reserve.depositUnderlying(seed);
   }
   await oracle.setUpdater(deployer.address, true);
+  await oracle.setUpdater(await game.getAddress(), true); // the game writes a player's shown exit price (bounded)
   await oracle.pushPrices(MARKETS.map((_, i) => i), BASE);
 
   const gameAddress = await game.getAddress();

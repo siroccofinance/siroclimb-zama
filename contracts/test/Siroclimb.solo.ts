@@ -46,7 +46,7 @@ describe("Siroclimb: solo runs", function () {
       pts.push({ t, p });
     }
     await at(run.startAt, exit);
-    await f.game.connect(f.alice).cashOut(id, []);
+    await f.game.connect(f.alice).cashOut(id, [], 0);
     return { id, expected: model(pts), run: await f.game.getRun(id) };
   }
 
@@ -113,11 +113,11 @@ describe("Siroclimb: solo runs", function () {
     await at(run.startAt, 30);
     await price(f, NVDA, (BASE[NVDA] * 10_010n) / 10_000n);
     await at(run.startAt, 59);
-    await expect(f.game.connect(f.bob).settleRun(id)).to.be.revertedWithCustomError(f.game, "RunNotOver");
-    await at(run.startAt, 70);
-    await price(f, NVDA, (BASE[NVDA] * 9_000n) / 10_000n); // after the bell: must not count
+    await expect(f.game.connect(f.bob).settleRun(id, 0)).to.be.revertedWithCustomError(f.game, "RunNotOver");
+    await at(run.startAt, 95);
+    await price(f, NVDA, (BASE[NVDA] * 9_000n) / 10_000n); // past the exit grace (30 s after the bell): must not count
     await time.increase(100);
-    await f.game.connect(f.bob).settleRun(id);
+    await f.game.connect(f.bob).settleRun(id, 0);
     const end = await f.game.getRun(id);
     expect(end.endAt).to.eq(run.startAt + 60n);
     const expected = model([
@@ -126,7 +126,77 @@ describe("Siroclimb: solo runs", function () {
     ]);
     expect(end.multLong).to.eq(expected.long);
     expect(await balance(f, f.alice)).to.eq(before - stake + payout(stake, expected.long, 60));
-    await expect(f.game.settleRun(id)).to.be.revertedWithCustomError(f.game, "WrongRunStatus");
+    await expect(f.game.settleRun(id, 0)).to.be.revertedWithCustomError(f.game, "WrongRunStatus");
+  });
+
+  it("an expired run exits on the first checkpoint written just after its end (the price the screen showed)", async function () {
+    const stake = 20n * USDC;
+    const id = await startRun(f, f.alice, NVDA, true, stake);
+    const run = await f.game.getRun(id);
+    await at(run.startAt, 30);
+    await price(f, NVDA, (BASE[NVDA] * 10_010n) / 10_000n);
+    const shown = (BASE[NVDA] * 10_016n) / 10_000n;
+    await at(run.startAt, 61);
+    await price(f, NVDA, shown); // the browser writes the price it showed at the 60th second...
+    await at(run.startAt, 63);
+    await price(f, NVDA, (BASE[NVDA] * 9_000n) / 10_000n); // ...a later one does not count
+    await at(run.startAt, 64);
+    await f.game.connect(f.bob).settleRun(id, 0);
+    const end = await f.game.getRun(id);
+    expect(end.endAt).to.eq(run.startAt + 60n);
+    expect(end.exitPrice).to.eq(shown);
+    expect(end.multLong).to.eq(model([{ t: 0, p: BASE[NVDA] }, { t: 30, p: (BASE[NVDA] * 10_010n) / 10_000n }, { t: 61, p: shown }]).long);
+  });
+
+  it("a cash out exits on the price the player's screen showed, written in the same transaction (bounded)", async function () {
+    const id = await startRun(f, f.alice, NVDA, false, 20n * USDC);
+    const run = await f.game.getRun(id);
+    await at(run.startAt, 13);
+    await price(f, NVDA, (BASE[NVDA] * 10_010n) / 10_000n);
+    await at(run.startAt, 24); // the click: the screen shows a price no checkpoint has
+    const shown = (BASE[NVDA] * 10_004n) / 10_000n;
+    await f.game.connect(f.alice).cashOut(id, [], shown);
+    const end = await f.game.getRun(id);
+    expect(end.exitPrice).to.eq(shown);
+    expect(end.multShort).to.eq(model([{ t: 0, p: BASE[NVDA] }, { t: 13, p: (BASE[NVDA] * 10_010n) / 10_000n }, { t: 24, p: shown }]).short);
+    // bounded like any public price: +/-0.49 % of the last checkpoint
+    const id2 = await startRun(f, f.alice, NVDA, true, 20n * USDC);
+    const r2 = await f.game.getRun(id2);
+    await at(r2.startAt, 5);
+    const [, , last] = await f.oracle.latest(NVDA);
+    await f.game.connect(f.alice).cashOut(id2, [], last * 2n);
+    expect((await f.game.getRun(id2)).exitPrice).to.eq((last * 10_049n) / 10_000n);
+  });
+
+  it("the player's settlement at the 60th second exits on the price they were shown; anyone else's on the checkpoints", async function () {
+    const id = await startRun(f, f.alice, NVDA, true, 20n * USDC);
+    const run = await f.game.getRun(id);
+    await at(run.startAt, 30);
+    const p1 = (BASE[NVDA] * 10_010n) / 10_000n;
+    await price(f, NVDA, p1);
+    await at(run.startAt, 61);
+    await price(f, NVDA, (BASE[NVDA] * 9_990n) / 10_000n); // somebody wrote the first checkpoint after the end...
+    const shown = (BASE[NVDA] * 10_013n) / 10_000n;
+    await at(run.startAt, 63);
+    await f.game.connect(f.alice).settleRun(id, shown); // ...the player's shown price still wins
+    expect((await f.game.getRun(id)).exitPrice).to.eq(shown);
+    const id2 = await startRun(f, f.alice, NVDA, true, 20n * USDC);
+    const r2 = await f.game.getRun(id2);
+    await at(r2.startAt, 62);
+    const [, , before] = await f.oracle.latest(NVDA);
+    await f.game.connect(f.bob).settleRun(id2, (before * 10_040n) / 10_000n); // not the player: ignored
+    expect((await f.game.getRun(id2)).exitPrice).to.eq(before);
+  });
+
+  it("an expired run settled with nothing written after its end exits on the last checkpoint before it", async function () {
+    const id = await startRun(f, f.alice, NVDA, true, 20n * USDC);
+    const run = await f.game.getRun(id);
+    await at(run.startAt, 30);
+    const p1 = (BASE[NVDA] * 10_010n) / 10_000n;
+    await price(f, NVDA, p1);
+    await at(run.startAt, 62);
+    await f.game.connect(f.bob).settleRun(id, 0);
+    expect((await f.game.getRun(id)).exitPrice).to.eq(p1);
   });
 
   it("a checkpoint later in the block of a cash out does not change the recorded path", async function () {
@@ -137,7 +207,7 @@ describe("Siroclimb: solo runs", function () {
     await price(f, AAPL, (BASE[AAPL] * 10_010n) / 10_000n);
     // cash out, then another checkpoint in the same block
     await ethers.provider.send("evm_setAutomine", [false]);
-    const tx1 = await f.game.connect(f.alice).cashOut(id, [], { gasLimit: 8_000_000 });
+    const tx1 = await f.game.connect(f.alice).cashOut(id, [], 0, { gasLimit: 8_000_000 });
     const tx2 = await f.oracle.pushPrices([AAPL], [(BASE[AAPL] * 9_900n) / 10_000n], { gasLimit: 500_000 });
     await ethers.provider.send("evm_mine", []);
     await ethers.provider.send("evm_setAutomine", [true]);
@@ -151,7 +221,7 @@ describe("Siroclimb: solo runs", function () {
 
   it("only the player (or their session) cashes out", async function () {
     const id = await startRun(f, f.alice, AAPL, true, 10n * USDC);
-    await expect(f.game.connect(f.bob).cashOut(id, [])).to.be.revertedWithCustomError(f.game, "NotPlayer");
+    await expect(f.game.connect(f.bob).cashOut(id, [], 0)).to.be.revertedWithCustomError(f.game, "NotPlayer");
   });
 
   it("clamps the stake to 100 cUSDC on ciphertexts", async function () {
@@ -171,7 +241,7 @@ describe("Siroclimb: solo runs", function () {
     const run = await f.game.getRun(id);
     await at(run.startAt, 10);
     await price(f, AAPL, (BASE[AAPL] * 10_100n) / 10_000n);
-    await f.game.connect(poor).cashOut(id, []);
+    await f.game.connect(poor).cashOut(id, [], 0);
     expect(await balance(f, poor)).to.eq(0n);
   });
 
@@ -214,7 +284,7 @@ describe("Siroclimb: solo runs", function () {
     expect(run.entryPrice).to.eq(61_500n * 10n ** 10n);
     const upd2 = await f.pyth.createPriceFeedUpdateData(feed[AAPL], 61_530n * 10n ** 8n, 10n, -8, 61_530n * 10n ** 8n, 10n, now + 20, now + 1);
     await time.setNextBlockTimestamp(now + 20);
-    await f.game.connect(f.alice).cashOut(id, [upd2], { value: 1 });
+    await f.game.connect(f.alice).cashOut(id, [upd2], 0, { value: 1 });
     const end = await f.game.getRun(id);
     expect(end.exitPrice).to.eq(61_530n * 10n ** 10n);
     expect(end.multLong).to.eq(model([
@@ -247,7 +317,7 @@ describe("Siroclimb: solo runs", function () {
     await at(run.startAt, 20);
     await price(f, AMZN, p1);
     await at(run.startAt, 26);
-    await f.game.connect(f.alice).cashOut(id, []);
+    await f.game.connect(f.alice).cashOut(id, [], 0);
     const expected = model([{ t: 0, p: run.entryPrice }, { t: 20, p: p1 }]);
     expect(expected.short).to.be.gt(SCALE);
     expect((await f.game.getRun(id)).multShort).to.eq(expected.short);
