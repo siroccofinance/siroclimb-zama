@@ -871,28 +871,28 @@ function countQuote() {
   const q = run && api.quote(run.assetId);
   if (q != null && q !== stairs.last) { if (stairs.last != null) stairs.quotes++; stairs.last = q; }
 }
-// The coin's height IS the climb's value: the level is the value shown (what a cash out pays) counted in steps
-// of one typical price tick at 1x times the market's boost. So the coin goes up exactly when the number goes
-// up, by more at a higher leverage, and the two can never drift apart. A big jump is spread over updates, at
-// most seven steps at a time (taller walls hid the coin).
+// The coin moves with the climb's value (the number on screen, what a cash out pays): every change of the
+// value is a step the same way, sized against this climb's ordinary changes (a usual one 1 step, twice that 3,
+// four times 5, eight times or more 7: taller walls hid the coin). The coin can never go against the number.
 const MAX_STEP = 7;
+const stepsFor = size => Math.max(1, Math.min(MAX_STEP, 1 + Math.round(2 * Math.log2(Math.max(1, size)))));
 function levelFrom(u) {
   countQuote();
   if (!u || u.pending || !(run.stake > 0)) return;
   const acc = u.value / run.stake - 1;
-  if (lvl.acc0 == null) { lvl.acc0 = acc; return; }               // the value when the stairs started
-  const boost = byId[run.assetId]?.boost || 25;
-  if (!lvl.tick) { const d = Math.abs(acc - (lvl.lastAcc ?? lvl.acc0)); if (!d) return; lvl.tick = d / boost; }   // no history: the first change is the unit
+  if (lvl.lastAcc == null) { lvl.lastAcc = acc; return; }
+  const d = acc - lvl.lastAcc;
+  if (Math.abs(d) < 1e-7) return;                                  // unchanged: the stairs stay flat
   lvl.lastAcc = acc;
-  const target = Math.round((acc - lvl.acc0) / (lvl.tick * boost));
-  const n = Math.max(-MAX_STEP, Math.min(MAX_STEP, target - lvl.level));
-  if (!n) return;
+  const sizes = (lvl.sizes ||= []); sizes.push(Math.abs(d)); if (sizes.length > 40) sizes.shift();
+  const usual = [...sizes].sort((x, y) => x - y)[Math.floor(sizes.length / 2)];
+  const n = Math.sign(d) * stepsFor(Math.abs(d) / usual);
   lvl.level += n;
   stairs.moves.push({ t: Date.now(), acc: +acc.toFixed(5), n, level: lvl.level }); if (stairs.moves.length > 400) stairs.moves.shift();
 }
 function startTrack(r) {
   if (!sc || !G) return;
-  lvl.level = 0; lvl.entry = r.entryPrice; lvl.sign = r.side === 'short' ? -1 : 1; lvl.q = stepSize(r.assetId); lvl.acc0 = null; lvl.lastAcc = null; lvl.tick = typicalMove(r.assetId);
+  lvl.level = 0; lvl.entry = r.entryPrice; lvl.sign = r.side === 'short' ? -1 : 1; lvl.q = stepSize(r.assetId); lvl.lastAcc = null; lvl.sizes = []; lvl.tick = typicalMove(r.assetId);
   TK = sc.createTrack(G.plan); TK.dangerTo = 0;
   G = null;
   TK.onStep = (n, big) => {
