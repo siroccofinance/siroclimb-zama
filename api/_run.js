@@ -69,7 +69,8 @@ export async function verifiedRun(runId, game = ADDR.Siroclimb, atBlock = null) 
   const v = {
     runId, player: r.player, market: m.id, token: m.token?.symbol || m.ticker, name: m.name,
     status: mult === 0 ? 'busted' : duration >= RUN_SECONDS ? 'expired' : 'cashed',
-    maxLeverage: LADDER[Math.min(LADDER.length - 1, Number(r.topStep))], duration,
+    // a packed run's cap is encrypted: its leverage is not shown (the public step would overstate it, the cap would leak the tier)
+    packed: !!r.packed, maxLeverage: r.packed ? null : LADDER[Math.min(LADDER.length - 1, Number(r.topStep))], duration,
     entryPrice: Number(r.entryPrice) / 1e10, exitPrice: Number(r.exitPrice) / 1e10,
     published: pnl != null, pnlPct: pnl == null ? null : pnl / 1e4, side,
   };

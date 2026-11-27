@@ -62,6 +62,7 @@ export const fmt = {
 };
 export function headline(s) {
   const on = `${s.token}${s.showSide && s.side ? ' ' + s.side : ''}`;
+  if (s.packed) return s.status === 'busted' ? `The coin fell on ${on}, with a leverage pack` : `${fmt.pct(s.pnlPct)} on ${on}, with a leverage pack`;
   return s.status === 'busted' ? `The coin fell at ${fmt.lev(s.maxLeverage)} on ${on}` : `${fmt.pct(s.pnlPct)} on ${on}, climbed to ${fmt.lev(s.maxLeverage)}`;
 }
 

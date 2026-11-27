@@ -50,7 +50,7 @@ export function card(s) {
         h('div', { width: 10, height: 10, borderRadius: 5, background: '#22c55e' }), `Verified on Sepolia · run #${s.runId}`)),
     // stats and footer at fixed heights (satori resolves `bottom` against the content, not the 630 px frame)
     h('div', { position: 'absolute', left: 64, top: 462, gap: 48, alignItems: 'flex-end' },
-      stat('Top leverage', fmt.lev(s.maxLeverage)),
+      s.packed ? stat('Leverage pack', 'Cap encrypted') : stat('Top leverage', fmt.lev(s.maxLeverage)),
       h('div', { flexDirection: 'column', gap: 6 }, h('div', { fontSize: 19, fontWeight: 500, color: MUTE, letterSpacing: 0.3 }, 'Side'), side),
       stat('Token', s.token),
       stat('Time', `${Math.max(1, s.duration)}s`)),
