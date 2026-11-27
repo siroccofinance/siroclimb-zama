@@ -15,11 +15,15 @@ import { pushIfStale as push } from './prices.js';
 // counts exactly the checkpoints the contract will count (F44)
 const writing = new Map();
 export const inflight = m => writing.get(m) || Promise.resolve();
+// the price of a checkpoint this browser has sent but not seen mined yet, per market: the climb's value counts
+// it at once, as the contract will once it lands (else a click right then would be paid on a path it never showed)
+const sentPx = new Map();
+export const pendingPrice = m => sentPx.get(m) || null;
 async function pushIfStale(s, m, maxAge) {
-  const p = push(s, m, maxAge);
+  const p = push(s, m, maxAge, (units, base) => sentPx.set(m, { units, base, at: Date.now() }));
   // a cash out waits for this (at most 8 s on its side); the map forgets a push after 30 s whatever happens
   writing.set(m, Promise.race([p.catch(() => null), new Promise(r => setTimeout(() => r(null), 30_000))]));
-  const src = await p.finally(() => { if (writing.get(m)) writing.delete(m); });
+  const src = await p.finally(() => { if (writing.get(m)) writing.delete(m); sentPx.delete(m); });
   if (src) api?.checkpointed?.(m);
   return src;
 }
@@ -58,7 +62,7 @@ async function tick() {
         run.settling = true;
         // already settled (the cash out, another browser or the ops keeper): nothing to send
         const st = Number((await W.view(() => W.game.getRun(BigInt(run.cid))).catch(() => ({ status: 1 }))).status);
-        if (st === 1) await duty('settleRun', () => s.send(W.game, 'settleRun', [BigInt(run.cid)], 0n, 'settleRun', { wait: KEEPER_WAIT }));
+        if (st === 1) await duty('settleRun', () => s.send(W.game, 'settleRun', [BigInt(run.cid), 0], 0n, 'settleRun', { wait: KEEPER_WAIT }));
         api.settleFromChain(run).catch(() => { run.settling = false; });
       } else if (run.status === 'live') await duty(null, () => pushIfStale(s, m, 11));
     }

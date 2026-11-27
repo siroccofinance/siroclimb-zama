@@ -56,7 +56,8 @@ export async function fallbackFor(market, fresh = 0) {
 }
 
 /** Writes a checkpoint for `market` if the last one is older than `maxAge` seconds. Returns the source used or null. */
-export async function pushIfStale(sender, market, maxAge = 12) {
+// `onSend(units)`: called with the public price just before it is sent (the screen counts it at once)
+export async function pushIfStale(sender, market, maxAge = 12, onSend = null) {
   const [, ts, last] = await oracle.latest(market);
   const age = Date.now() / 1000 - Number(ts);
   if (age < maxAge) return null;
@@ -69,6 +70,7 @@ export async function pushIfStale(sender, market, maxAge = 12) {
   const lastP = Number(last) / 10 ** PRICE_DECIMALS;
   const clamped = Math.min(lastP * (1 + MAX_MOVE), Math.max(lastP * (1 - MAX_MOVE), ref));
   const units = BigInt(Math.round(clamped * 10 ** PRICE_DECIMALS));
+  onSend?.(units, last);
   const rc = await sender.send(oracle, 'pushPublic', [[market], [units]], 0n, 'pushPublic', { wait: 40_000 });
   return { src: 'public', block: rc.blockNumber };
 }

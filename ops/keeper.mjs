@@ -24,7 +24,7 @@ for (;;) {
     for (const [id, r] of live) {
       if (now < r.startAt - 15) continue;
       if (now > r.startAt + 62) {
-        await k.send(game, 'settleRun', [id]).then(() => log('settled run', id)).catch(e => { if (!IGNORE.test(errText(e))) log('settle', id, errText(e)); });
+        await k.send(game, 'settleRun', [id, 0]).then(() => log('settled run', id)).catch(e => { if (!IGNORE.test(errText(e))) log('settle', id, errText(e)); });
         live.delete(id); continue;
       }
       markets.add(r.market);

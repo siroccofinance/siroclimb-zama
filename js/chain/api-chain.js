@@ -311,12 +311,16 @@ function provisionalPrice(run, lastPrice) {
   const c = Math.min(lp * (1 + PUBLIC_MAX_MOVE), Math.max(lp * (1 - PUBLIC_MAX_MOVE), q));
   return BigInt(Math.round(c * 10 ** PRICE_DECIMALS));
 }
-function chainValue(run, nowMs, live = pythNow(run.market), provisional = true) {
+function chainValue(run, nowMs, live = pythNow(run.market), provisional = true, exitPx = null) {
   if (!run.cps || !run.cps.length) return null;
   const pts = run.cps.slice();
   const nowS = Math.floor(nowMs / 1000), last = pts[pts.length - 1];
   if (live && live.mantissa != null && nowS > last.ts) pts.push({ ts: nowS, price: pythToFixed10(live.mantissa, live.expo) });
-  else if (!live && provisional) { const pp = provisionalPrice(run, last.price); if (pp != null && pp !== last.price) pts.push({ ts: Math.max(nowS, last.ts + 1), price: pp }); }
+  // a checkpoint this browser sent and the chain has not shown yet: counted as landing now
+  const sent = !live && provisional ? autopilot.pendingPrice(run.market) : null;
+  if (sent && sent.base === last.price && sent.units !== last.price) pts.push({ ts: Math.max(nowS, last.ts + 1), price: sent.units });
+  const tail = pts[pts.length - 1];
+  if (!live && (provisional || exitPx != null)) { const pp = exitPx ?? provisionalPrice(run, tail.price); if (pp != null && pp !== tail.price) pts.push({ ts: Math.max(nowS, tail.ts + 1), price: pp }); }
   const m = multipliers(pts, Math.floor(run.startedAt / 1000), BOOST[run.market]);
   const mult = Number(run.side === 'long' ? m.long : m.short) / SCALE;
   return { mult, exit: Number(pts[pts.length - 1].price) / 10 ** PRICE_DECIMALS };
@@ -331,7 +335,12 @@ function advance(run, price, ts) {
   const cv = chainValue(run, ts), exact = chainValue(run, ts, undefined, false);
   if (cv) run.acc = cv.mult - 1;
   if (exact && exact.mult === 0) { run.acc = -1; endLocal(run, 'busted', ts); }   // a fall the checkpoints confirm
-  else if (t >= run.duration) endLocal(run, 'expired', ts);
+  else if (t >= run.duration) {
+    // the 60th second: the value freezes on the price shown now, which the browser then writes as the exit
+    // checkpoint (Siroclimb.EXIT_GRACE) and settles on, so the run is paid what the screen shows
+    const lastCp = run.cps?.[run.cps.length - 1];
+    endLocal(run, 'expired', run.startedAt + run.duration * 1000, { ...(cv || { mult: 1 + run.acc, exit: run.last }), pushPx: lastCp ? provisionalPrice(run, lastCp.price) : null, lastCpTs: lastCp?.ts });
+  }
   const u = update(run, ts); run.subs.forEach(cb => cb(u));
 }
 function update(run, ts) {
@@ -354,7 +363,7 @@ function endLocal(run, st, ts = Date.now(), frozen = null) {
   run.local = { status: st, value, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, maxLeverage: run.maxLev, duration, interest, ...realPosition(run, frozen?.exit ?? run.last, duration, value),
     entryPrice: run.entryPrice, exitPrice: frozen?.exit ?? run.last, pending: true, runId: run.cid ?? run.id };
   run.waiters.splice(0).forEach(r => r(run.local));
-  if (st === 'expired') autopilot.kick();            // anyone may settle at the 60th second; this browser does it now
+  if (st === 'expired') settleExpired(run, frozen).catch(() => { run.settling = false; autopilot.kick(); });   // else the autopilot settles it
   else sendCashOut(run, frozen?.pyth, frozen?.after, frozen).catch(e => status({ kind: 'error', text: `Cash out: ${friendly(e)}` }));
 }
 
@@ -458,25 +467,21 @@ export async function cashOut(id) {
   endLocal(run, 'cashed', now, { ...(cv || { mult: 1 + run.acc, exit: run.last }), pyth, after, pushPx, lastCpTs: lastCp?.ts });
   return run.local;
 }
+// An expired run: once the chain's clock passed its end, settleRun with the price frozen on screen at the 60th
+// second; the contract writes it as the exit checkpoint (bounded) and the run is paid the value shown.
+async function settleExpired(run, frozen) {
+  run.settling = true;                                            // the autopilot leaves this one to us
+  const s = await session();
+  const endS = Math.floor(run.startedAt / 1000) + run.duration;
+  while (Date.now() / 1000 < endS + 1) await sleep(250);
+  try { await s.send(game, 'settleRun', [BigInt(run.cid), frozen?.pushPx ?? 0n], 0n, 'settleRun'); }
+  catch (e) { if (!/WrongRunStatus/.test(W.errText(e))) throw e; }
+  await settleFromChain(run);
+}
 async function sendCashOut(run, frozenPyth, after = null, frozen = null) {
   const s = await session();
-  // the shown price becomes the exit checkpoint: once the public spacing allows it (at most ~10 s), pushed
-  // right before the cash out (next nonce, same block in general). If someone else wrote a checkpoint
-  // meanwhile, that one is the exit and the value is re-checked below.
-  if (frozen?.pushPx != null && !frozenPyth) {
-    try {
-      for (let i = 0; i < 24; i++) {
-        const [, ts] = await W.oracle.latest(run.market);
-        if (Number(ts) > (frozen.lastCpTs ?? 0)) { after = after || Promise.resolve({ block: null }); break; }   // a newer checkpoint landed
-        if (Date.now() / 1000 - Number(ts) >= 11) {
-          await s.send(W.oracle, 'pushPublic', [[run.market], [frozen.pushPx]], 0n, 'pushPublic', { fast: true });
-          after = null; break;
-        }
-        status({ kind: 'chain', text: 'Writing your exit price on Sepolia…' });
-        await sleep(500);
-      }
-    } catch {}
-  }
+  // the price shown at the click rides along: the contract writes it as the exit checkpoint (bounded)
+  if (frozen?.pushPx != null && !frozenPyth) run.exitPx = frozen.pushPx;
   // a checkpoint this browser is writing on the market lands first: in the same block it would take
   // the cash out's place as the exit price and the paid value would differ from the frozen one
   // ...but never for long: a checkpoint stuck in this browser's keeper queue once held a cash out for 15 min (F63)
@@ -488,7 +493,7 @@ async function sendCashOut(run, frozenPyth, after = null, frozen = null) {
     // the frozen signed price stays, unless it would be too old for the oracle when the block lands
     if (pyth && Date.now() / 1000 - pyth.publishTime > 15) pyth = (await pythFor(run.market).catch(() => null)) ?? pyth;
     await run.pull(true, landed?.block ?? null);
-    const exact = chainValue(run, Date.now(), pyth ? { mantissa: pyth.mantissa, expo: pyth.expo } : null, false);
+    const exact = chainValue(run, Date.now(), pyth ? { mantissa: pyth.mantissa, expo: pyth.expo } : null, false, pyth ? null : run.exitPx ?? null);
     if (exact) {
       const { value, interest } = net(run.stake, multOf(exact.mult - 1), run.local.duration);
       Object.assign(run.local, { value, interest, pnl: value - run.stake, pnlPct: (value / run.stake - 1) * 100, exitPrice: exact.exit });
@@ -497,7 +502,7 @@ async function sendCashOut(run, frozenPyth, after = null, frozen = null) {
   }
   status({ kind: 'chain', text: 'Cashing out: encrypted payout on Sepolia…' });
   try {
-    const rc = await s.send(game, 'cashOut', [BigInt(run.cid), pyth ? pyth.updateData : []], pyth ? pyth.fee : 0n, 'cashOut');
+    const rc = await s.send(game, 'cashOut', [BigInt(run.cid), pyth ? pyth.updateData : [], pyth ? 0n : run.exitPx ?? 0n], pyth ? pyth.fee : 0n, 'cashOut');
     run.tx = rc.hash;
     run.txBlock = rc.blockNumber;
   } catch (e) {
