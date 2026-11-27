@@ -282,6 +282,7 @@ if (window.ResizeObserver) { const ro = new ResizeObserver(thumbs); segs.forEach
 document.fonts && document.fonts.ready.then(thumbs);
 
 function renderLobby() {
+  if (!packBusy) refreshPack();
   press($('#side'), C.side); press($('#stake'), C.stake);
   body.dataset.side = C.side; thumbs();
   for (const [id, c] of Object.entries(chip)) c.b.setAttribute('aria-pressed', String(id === C.asset));
@@ -461,6 +462,7 @@ function showResult(res) {
   // the payout = the real position (tokens bought or borrowed at the real price) + the game boost (moves x the market's boost)
   if (res.position != null) stats.push([`Real position (${res.qty != null ? `${res.qty.toFixed(res.qty < 1 ? 4 : 2)} ` : ''}${res.token || label(a)})`, `${money(res.position)} cUSDC`],
     [`Game boost (moves ×${byId[run.assetId]?.boost || 25})`, `${signed(res.boost)} cUSDC`]);
+  if (res.pack) stats.push(['Leverage pack', res.pack === 'encrypted' ? 'cap encrypted on chain' : `${res.pack}: cap encrypted on chain, known to you`]);
   if (res.interest != null) stats.push(['Borrowed', `${money(res.borrowed || 0)} cUSDC`], ['Interest paid', `${tiny(res.interest)} cUSDC`]);
   $('#rS').innerHTML = stats.map(([k, v], i) => `<div${i ? '' : ` class="is-key${res.pnlPct > 0.005 ? ' is-up' : ''}"`}><dt>${k}</dt><dd>${v}</dd></div>`).join('');
   const rr = $('#rR'); rr.hidden = !res.pending;
@@ -513,7 +515,12 @@ function shareText(o = {}) {
   const on = `${side ? ` going ${side}` : ''} on ${label(a)}`;
   const zama = v ? "My stake stayed encrypted on-chain with @zama's FHE, confidential tokens (ERC-7984); the result is verified on Sepolia."
     : "My side and stake stayed encrypted on-chain with @zama's FHE, confidential tokens (ERC-7984).";
-  const text = r.status === 'busted'
+  // a packed run: the cap stays encrypted, the post never names a leverage (it would leak the tier)
+  const packed = r.packed || r.pack;
+  const lev = x => (packed ? ' with a leverage pack (cap encrypted on chain)' : ` at ${levTxt(x)}`);
+  const text = packed ? (r.status === 'busted' ? `My coin fell off the stairs${on}${lev()} 🪙 Rematch incoming.\n\n${zama}\n\nCan you climb higher?`
+      : `Cashed out ${pct(r.pnlPct)}${on}${lev()} 🪙\n\n${zama}\n\nYour turn on Siroclimb:`)
+    : r.status === 'busted'
     ? `My coin fell off the stairs at ${levTxt(r.maxLeverage)}${on} 🪙 Rematch incoming.\n\n${zama}\n\nCan you climb higher?`
     : r.pnlPct > 0.005 ? `Climbed to ${levTxt(r.maxLeverage)}${on} and cashed out ${pct(r.pnlPct)} 🪙📈\n\n${zama}\n\nYour turn on Siroclimb:`
     : `Cashed out at ${levTxt(r.maxLeverage)}${on} (${pct(r.pnlPct)}) before the stairs gave way 🪙\n\n${zama}\n\nYour turn on Siroclimb:`;
@@ -672,6 +679,7 @@ function openSheet(id) {
   el.querySelector('.sheet__card').focus({ preventScroll: true });
   if (id === 'board') loadBoard(store.get('board', 'today') === 'all' ? 'all' : 'today');
   if (id === 'reserve') loadReserve();
+  if (id === 'packSheet') renderPack(true);
 }
 function closeSheet(now) {
   const el = openSheetEl; if (!el) return; openSheetEl = null;
@@ -785,6 +793,47 @@ addEventListener('popstate', () => {
   const wash = $('#wash'); wash.classList.add('is-on');
   setTimeout(() => { G = null; setScreen('intro'); requestAnimationFrame(() => wash.classList.remove('is-on')); }, 430);
 });
+
+// ── leverage packs: Zama's encrypted PRNG draws the tier on chain (FHE.randEuint8); only the player decrypts it.
+//    A packed run caps its ladder at the tier, selected on ciphertexts: nobody else ever sees the cap.
+const packBtn = $('#packBtn');
+let packBusy = false, packInfo = { ready: null, nextAt: 0, cooldown: 600 }, packLink = '';
+async function refreshPack() {
+  if (api.mode !== 'chain' || !api.account()) { packBtn.hidden = true; return; }
+  try { packInfo = await api.packStatus(); } catch {}
+  renderPack();
+}
+function renderPack(inSheet) {
+  packBtn.hidden = api.mode !== 'chain' || !api.account();
+  const ready = packInfo.ready;
+  packBtn.textContent = ready ? `${ready.tier} pack ready` : 'Leverage pack';
+  packBtn.classList.toggle('is-ready', !!ready);
+  if (!inSheet && $('#packSheet').hidden) return;
+  const wait = Math.max(0, packInfo.nextAt - Date.now() / 1000), won = ready ? ready.tier : null;
+  $('#packBody').innerHTML = `<p>Zama's encrypted random generator draws a tier on chain. It stays encrypted: only you can decrypt it. Your next run with it climbs at most to that leverage, and the cap is applied on ciphertexts, so nobody else can tell how high you may go.</p>
+    <div class="pack__tiers">${api.PACKS.map(p => `<div class="${p.tier === won ? 'is-won' : ''} ${packBusy && !ready ? 'is-rolling' : ''}"><b>${p.tier}</b><span>up to ${levTxt(p.maxLeverage)}</span><br><span class="pack__p">${(p.odds * 100).toFixed(1)}%</span><br><span>${p.outOf256} in 256</span></div>`).join('')}</div>
+    <p class="fine">The odds are the contract's: <code>openPack</code> draws a byte with <code>FHE.randEuint8</code> and maps it on ciphertexts (below 115 Bronze, below 187 Silver, below 233 Gold, else Diamond). One pack every ${Math.round(packInfo.cooldown / 60)} minutes; it is used by your next run, which stakes as usual.${packLink ? ` <a href="${packLink}" target="_blank" rel="noopener">The draw on Etherscan</a>.` : ''}</p>`;
+  const go = $('#packGo');
+  go.disabled = packBusy || (!ready && wait > 0);
+  go.textContent = packBusy ? (ready ? 'Starting…' : 'Drawing…') : ready ? `Climb with it: ${C.stake} cUSDC on ${label(byId[C.asset])} ${C.side}` : wait > 0 ? `Next pack in ${Math.ceil(wait / 60)} min` : 'Open a pack';
+}
+$('#packGo').onclick = async () => {
+  if (packBusy) return;
+  if (!(await connect(true))) return;
+  const ready = packInfo.ready;
+  if (ready) {
+    if (!api.marketOpen(C.asset)) { toast(`${label(byId[C.asset])} has no live price right now`); return; }
+    packBusy = true; renderPack(true);
+    try { const r = await api.startRun({ assetId: C.asset, side: C.side, stake: C.stake, pack: true }); packInfo.ready = null; closeSheet(true); enterGame(r); }
+    catch (e) { toast(e.message); }
+    finally { packBusy = false; renderPack(); }
+    return;
+  }
+  packBusy = true; renderPack(true);
+  try { const p = await api.openPack(); packLink = p.url || ''; packInfo.ready = p; sound.cash(); toast(`${p.tier} pack: your next climb goes up to ${levTxt(p.maxLeverage)}, and only you know it`); }
+  catch (e) { toast(e.message); }
+  finally { packBusy = false; refreshPack().then(() => renderPack(true)); }
+};
 
 // ── stairs game: the path follows the price. One step = a typical half-second move of this market,
 //    measured from its own recent ticks, so calm and wild markets both climb at a readable pace.

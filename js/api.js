@@ -73,6 +73,7 @@ export const onSetup = cb => (impl.onSetup ? impl.onSetup(cb) : noop());
 export const decryptBalance = () => (impl.decryptBalance ? impl.decryptBalance() : Promise.resolve(impl.balance()));
 export const faucet = () => impl.faucet();
 export const openPack = () => impl.openPack();
+export const packStatus = () => (impl.packStatus ? impl.packStatus() : Promise.resolve({ ready: null, nextAt: 0, cooldown: 0 }));
 export const shareCard = (png, r) => impl.shareCard(png, r);
 export const reserveStats = f => impl.reserveStats(f);
 export const reservePosition = atBlock => impl.reservePosition(atBlock);

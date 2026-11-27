@@ -251,6 +251,31 @@ cUSDC and quotes at the oracle price plus or minus a 10 bps half spread.
 - **No rounds.** Rounds (player against player pots) would not borrow; they were removed when the
   game became solo only (F49), so the reserve has a single path.
 
+## Leverage packs: encrypted on-chain randomness
+
+Odds that are provable, results that stay private. The **Leverage pack** button in the lobby draws a pack on
+chain: `Siroclimb.openPack` takes a byte from Zama's encrypted PRNG (`FHE.randEuint8`) and maps it on
+ciphertexts with `FHE.lt` / `FHE.select`:
+
+| Tier | Run's top leverage | Bytes (of 256) | Odds |
+|---|---|---|---|
+| Bronze | 1.5x | 0 to 114 | 115/256 = 44.9 % |
+| Silver | 2x | 115 to 186 | 72/256 = 28.1 % |
+| Gold | 3x | 187 to 232 | 46/256 = 18.0 % |
+| Diamond | 4x | 233 to 255 | 23/256 = 9.0 % |
+
+- **Fair:** the odds are in the verified contract code (anyone can read the thresholds on Sourcify); the
+  randomness comes from the FHEVM coprocessor, not from the player, the front or us. The draw is a public
+  transaction (the sheet links it on Etherscan) that emits only the tier's encrypted handle.
+- **Private:** the tier is an `euint8` only the player may decrypt (ACL), which the browser does with a
+  user decryption right after the draw. The next run started with it (`usePack`) caps its ladder at the
+  tier, selected on ciphertexts (`FHE.eq` on the encrypted cap, the payout picks among the capped paths):
+  the cap never shows on chain. The result screen tells the player their tier; a shared card or post says
+  "with a leverage pack" and names no leverage (the public time step would overstate it, the cap would
+  leak the tier).
+- **Rules:** one pack every 10 minutes per player (`PACK_COOLDOWN`); it waits for the player's next run,
+  which stakes as usual. A packed run borrows the same way; it can only climb less high.
+
 ## Prices: 24/7 xStocks, Pyth where it is live, bounded checkpoints
 
 Every run is settled on `ClimbPriceOracle` checkpoints. Each checkpoint is tagged with its source,

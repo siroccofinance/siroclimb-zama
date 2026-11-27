@@ -19,6 +19,7 @@ rpcRequest.setThrottleParams({ maxAttempts: 3, slotInterval: 500 });
 export const rpc = new JsonRpcProvider(rpcRequest, CHAIN_ID, { staticNetwork: true, batchMaxCount: 1, cacheTimeout: -1, pollingInterval: 1000 });
 export const game = new Contract(ADDR.Siroclimb, ABI.Siroclimb, rpc);
 export const oracle = new Contract(ADDR.ClimbPriceOracle, ABI.ClimbPriceOracle, rpc);
+export const ladder = new Contract(ADDR.ClimbLadder, ABI.ClimbLadder, rpc);
 export const token = new Contract(ADDR.StakeToken, ABI.ERC7984, rpc);
 export const faucet = new Contract(ADDR.ClimbFaucet, ABI.ClimbFaucet, rpc);
 export const reserve = new Contract(ADDR.SiroccoReserve, ABI.SiroccoReserve, rpc);
