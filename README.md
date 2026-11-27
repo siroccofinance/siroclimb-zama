@@ -78,6 +78,11 @@ browser does each one itself (autopilot):
 
 - price checkpoints;
 - settling a run at its 60th second;
+
+What the screen shows is what is paid: the climb's value is the on-chain checkpoints plus the live price as the
+next one. A cash out sends the price shown at the click, and the player's own settlement at the 60th second the
+price frozen on screen at that second; the contract writes it as the exit checkpoint (bounded like any public
+price, +/-0.49 % of the last checkpoint, within `EXIT_GRACE`) and the run exits on it.
 - revealing the Sirocco Reserve's totals every 10 minutes (`requestSync`, then the KMS decrypts them
   and `finalizeSync` checks the proof).
 
