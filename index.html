@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="play.css?v=13">
+  <link rel="stylesheet" href="play.css?v=14">
 </head>
 <body data-screen="intro">
   <div class="stage" id="stage" aria-hidden="true">
@@ -101,7 +101,10 @@
 
     <div class="go">
       <p class="go__meta" id="goMeta"></p>
-      <button class="cta" id="go">Start climbing</button>
+      <div class="go__row">
+        <button class="ghost ghost--pack" id="packBtn" data-open="packSheet" hidden>Leverage pack</button>
+        <button class="cta" id="go">Start climbing</button>
+      </div>
     </div>
   </section>
 
@@ -200,6 +203,15 @@
     </div>
   </div>
 
+  <div class="sheet" id="packSheet" role="dialog" aria-modal="true" aria-labelledby="pack-title" hidden>
+    <div class="sheet__card" tabindex="-1">
+      <button class="icon sheet__x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <h2 id="pack-title">Leverage pack</h2>
+      <div class="pack" id="packBody"></div>
+      <button class="cta sheet__ok" id="packGo">Open a pack</button>
+    </div>
+  </div>
+
   <div class="sheet" id="shareSheet" role="dialog" aria-modal="true" aria-labelledby="share-title" hidden>
     <div class="sheet__card share" tabindex="-1">
       <button class="icon sheet__x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -236,6 +248,6 @@
   </script>
 
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
-  <script type="module" src="js/game.js?v=54"></script>
+  <script type="module" src="js/game.js?v=55"></script>
 </body>
 </html>
