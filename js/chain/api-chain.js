@@ -374,17 +374,26 @@ function endLocal(run, st, ts = Date.now(), frozen = null) {
 //    lobby, so the click only sends the transaction (F45)
 const preEnc = new Map();
 const encKey = (long, units) => `s:${long}:${units}`;
+// a few picks in a row: only the last one is encrypted (300 ms after it; older waiting ones are dropped)
+let prepT = null;
 export function prepare({ side = 'long', stake = 10 } = {}) {
-  const s = W.currentSession(); if (!s) return;
-  const long = side === 'long', units = Math.round(stake * USDC), k = `${s.address}:${encKey(long, units)}`;
-  if (preEnc.has(k)) return;
-  const p = encryptRun(s.address, long, units);
-  p.catch(() => preEnc.delete(k));
-  preEnc.set(k, p);
+  clearTimeout(prepT);
+  prepT = setTimeout(() => {
+    const s = W.currentSession(); if (!s) return;
+    const long = side === 'long', units = Math.round(stake * USDC), k = `${s.address}:${encKey(long, units)}`;
+    if (preEnc.has(k)) return;
+    for (const key of [...preEnc.keys()]) if (!preEnc.get(key).done) preEnc.delete(key);   // superseded (dropped in the queue)
+    const p = encryptRun(s.address, long, units, { speculative: true });
+    p.then(() => { p.done = true; }, () => { if (preEnc.get(k) === p) preEnc.delete(k); });
+    preEnc.set(k, p);
+  }, 300);
 }
 function takeEncryption(s, long, units) {
   const k = `${s.address}:${encKey(long, units)}`;
-  const p = preEnc.get(k) || encryptRun(s.address, long, units);
+  clearTimeout(prepT);
+  const pre = preEnc.get(k);
+  // a pre-encryption still waiting or dropped falls back to a fresh one, which goes first in the queue
+  const p = pre ? pre.catch(() => encryptRun(s.address, long, units)) : encryptRun(s.address, long, units);
   preEnc.delete(k);
   setTimeout(() => prepare({ side: long ? 'long' : 'short', stake: units / USDC }), 0);   // ready for the next one
   return p;
@@ -403,7 +412,8 @@ export async function startRun({ assetId, side = 'long', stake, pack = false }) 
   // queued first (broadcast-only, one nonce before the start, same block), never after it
   await W.ensureOperator(s);
   const units = Math.round(stake * USDC);
-  if (!preEnc.has(`${s.address}:${encKey(side === 'long', units)}`)) status({ kind: 'fhe', text: 'Encrypting your side and stake…' });
+  // the encryption takes ~4 s when it was not done ahead (a pick just made): say so rather than a silent wait
+  if (!preEnc.get(`${s.address}:${encKey(side === 'long', units)}`)?.done) status({ kind: 'fhe', text: 'Encrypting your side and stake…' });
   const enc = await takeEncryption(s, side === 'long', units);
   // entry price, in the same transaction: a fresh signed Pyth price, or a bounded public one
   const pyth = await pythFor(m);

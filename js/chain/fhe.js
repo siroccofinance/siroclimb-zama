@@ -43,12 +43,29 @@ function encWorker() {
   return workerReady;
 }
 function call(op, args) { return new Promise((res, rej) => { const id = ++seq; pending.set(id, { res, rej }); worker.postMessage({ id, op, args }); }); }
+// One encryption at a time (~4 s each). Lobby picks are speculative: a newer pick drops the older ones still
+// waiting, so a player who tries a few sides and stakes never queues seconds of stale work; a start goes first.
+const jobs = []; let running = false;
+export class Superseded extends Error {}
+function pump() {
+  if (running || !jobs.length) return;
+  const j = jobs.shift(); running = true;
+  call('encrypt', j.args).then(j.res, j.rej).finally(() => { running = false; pump(); });
+}
+function queue(args, speculative) {
+  return new Promise((res, rej) => {
+    if (speculative) for (let i = jobs.length - 1; i >= 0; i--) if (jobs[i].speculative) jobs.splice(i, 1)[0].rej(new Superseded('superseded'));
+    const j = { args, speculative, res, rej };
+    speculative ? jobs.push(j) : jobs.unshift(j);
+    pump();
+  });
+}
 // { contract, user, bool?, u64? } → { handles, inputProof }: in the worker, else on this thread
-async function encryptInput(args) {
+async function encryptInput(args, speculative = false) {
   const w = encWorker();
   if (w) {
-    try { await w; return await call('encrypt', { ...args, u64: args.u64 == null ? null : String(args.u64) }); }
-    catch (e) { if (!workerOff) throw e; }                       // the worker itself failed: this thread takes over
+    try { await w; return await queue({ ...args, u64: args.u64 == null ? null : String(args.u64) }, speculative); }
+    catch (e) { if (e instanceof Superseded || !workerOff) throw e; }   // the worker itself failed: this thread takes over
   }
   const fhe = await getFhe();
   const input = fhe.createEncryptedInput(args.contract, args.user);
@@ -71,8 +88,9 @@ async function relayer(fn, ms, what) {
 const hex = b => '0x' + Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
 
 /** Encrypts a run's side (ebool) and optionally its stake (euint64, 6 decimals) for `sender`. */
-export async function encryptRun(sender, long, stakeUnits) {
-  const enc = await relayer(() => encryptInput({ contract: ADDR.Siroclimb, user: sender, bool: long, u64: stakeUnits }), 40_000, 'encryption');
+export async function encryptRun(sender, long, stakeUnits, { speculative = false } = {}) {
+  const run = () => encryptInput({ contract: ADDR.Siroclimb, user: sender, bool: long, u64: stakeUnits }, speculative);
+  const enc = speculative ? await run() : await relayer(run, 40_000, 'encryption');
   return { handles: enc.handles.map(hex), proof: hex(enc.inputProof) };
 }
 
