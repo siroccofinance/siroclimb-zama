@@ -19,7 +19,9 @@ const ORACLE_ABI = [
   'function latestAll() view returns (uint64[] timestamps, uint64[] prices, uint8[] sources)',
   'function pushPublic(uint256[] markets, uint64[] prices)',
 ];
-const MOVE = 0.0005, MAX_AGE = 20 * 60, MIN_SPACING = 11, CLAMP = 0.0049, WARN_ETH = 0.05;
+// MIN_SPACING 45 s: a market being climbed gets a checkpoint every ~11 s from the player's browser, and its cash
+// out writes the shown price as the exit in its own block: a cron checkpoint in that block took its place (F97)
+const MOVE = 0.0005, MAX_AGE = 20 * 60, MIN_SPACING = 45, CLAMP = 0.0049, WARN_ETH = 0.05;
 
 function key() {
   if (process.env.KEEPER_KEY) return process.env.KEEPER_KEY.trim();
