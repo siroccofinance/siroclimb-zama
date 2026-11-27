@@ -665,8 +665,10 @@ function drawSpark() {
   const w = c.offsetWidth, h = c.offsetHeight, r = Math.min(devicePixelRatio || 1, 2);
   if (c.width !== w * r) { c.width = w * r; c.height = h * r; }
   const x = c.getContext('2d'); x.setTransform(r, 0, 0, r, 0, 0); x.clearRect(0, 0, w, h);
-  const span = 45, pts = api.history(spark.asset, span + 1); if (pts.length < 2) return;
-  const now = Date.now();
+  // the last 45 s; right after the page opened there is less real history: it fills the width (no flat lead-in)
+  const all = api.history(spark.asset, 46), real = all.filter(p => !p.seed), now = Date.now();
+  const pts = real.length >= 2 ? real : all; if (pts.length < 2) return;
+  const span = Math.min(45, Math.max(5, (now - pts[0].ts) / 1000));
   let lo = Infinity, hi = -Infinity; for (const p of pts) { lo = Math.min(lo, p.price); hi = Math.max(hi, p.price); }
   if (spark.entry) { lo = Math.min(lo, spark.entry); hi = Math.max(hi, spark.entry); }
   const pad = (hi - lo) * 0.15 || hi * 0.0005; lo -= pad; hi += pad;
