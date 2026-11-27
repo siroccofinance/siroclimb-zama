@@ -36,14 +36,13 @@ export function stop() { clearInterval(timer); timer = null; }
 export function kick() { setTimeout(tick, 50); }
 export function watchRun(run) { watched.add(run.id); kick(); }
 
-const say = t => api?.status(t ? { kind: 'keeper', text: t } : null);
-
-// a duty never holds the autopilot (or its status line) longer than 45 s, whatever its transaction does
+// a duty never holds the autopilot longer than 45 s, whatever its transaction does; it runs silently
+// (the result screen already says when the run is settled on chain)
 async function duty(label, fn) {
   let t;
-  try { say(label); await Promise.race([fn(), new Promise((_, no) => { t = setTimeout(() => no(new Error('duty timed out')), DUTY_MS); })]); }
+  try { await Promise.race([fn(), new Promise((_, no) => { t = setTimeout(() => no(new Error('duty timed out')), DUTY_MS); })]); }
   catch (e) { const t = W.errText(e); if (!IGNORE.test(t)) console.warn('autopilot', label, t); }
-  finally { clearTimeout(t); say(null); }
+  finally { clearTimeout(t); }
 }
 
 async function tick() {
@@ -59,7 +58,7 @@ async function tick() {
         run.settling = true;
         // already settled (the cash out, another browser or the ops keeper): nothing to send
         const st = Number((await W.view(() => W.game.getRun(BigInt(run.cid))).catch(() => ({ status: 1 }))).status);
-        if (st === 1) await duty('Settling your run at the 60th second…', () => s.send(W.game, 'settleRun', [BigInt(run.cid)], 0n, 'settleRun', { wait: KEEPER_WAIT }));
+        if (st === 1) await duty('settleRun', () => s.send(W.game, 'settleRun', [BigInt(run.cid)], 0n, 'settleRun', { wait: KEEPER_WAIT }));
         api.settleFromChain(run).catch(() => { run.settling = false; });
       } else if (run.status === 'live') await duty(null, () => pushIfStale(s, m, 11));
     }
