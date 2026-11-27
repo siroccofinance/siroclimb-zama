@@ -11,11 +11,11 @@
 //    of every market's xyz perp (several messages a second; the 'l2Book' channel only sent a few a minute)
 //    and applies the microprice (top of book, size-weighted) of every message as it arrives (about 7 a
 //    second on NVDA); the screen eases between them and the stairs queue their steps. The book moves several times a second, far more than a 1 s poll sees. A market whose socket
-//    went quiet for 3 s falls back to /api/prices (the server's own l2Book read) on the next poll.
+//    closed, or stayed silent a full minute, falls back to /api/prices (the server's own l2Book read) on the next poll.
 import { MARKETS, PRICE_DECIMALS } from './config.js';
 import { oracle } from './wallet.js';
 
-const TICK_MS = 100, POLL_MS = 1000, KEEP_MS = 15 * 60_000, WS_FRESH_MS = 3000;
+const TICK_MS = 100, POLL_MS = 1000, KEEP_MS = 15 * 60_000, WS_FRESH_MS = 60_000;
 const feeds = MARKETS.map(m => ({ id: m.id, price: null, from: null, to: null, t0: 0, dur: POLL_MS, hist: [], subs: new Set(), open: true, source: null, pyth: false, quoteAt: 0, ws: null, wsAt: 0 }));
 const metaSubs = new Set();
 export const pythPayload = { at: 0, body: null };
@@ -84,7 +84,10 @@ function tick() {
 }
 
 // ── Hyperliquid WebSocket (best bid and offer per market), reconnecting with a backoff
-const wsLive = i => Date.now() - feeds[i].wsAt < WS_FRESH_MS && feeds[i].ws > 0;
+// 'bbo' only sends when the book changes: a quiet market (GBP sends every few seconds) is not a dead socket.
+// The socket's price stands while the socket is open and the market spoke within a minute; only then does
+// the server's read take over (it lags the book and drew square spikes when the two alternated).
+const wsLive = i => sock?.readyState === 1 && Date.now() - feeds[i].wsAt < WS_FRESH_MS && feeds[i].ws > 0;
 const coinIdx = new Map(MARKETS.map((m, i) => [m.hyperliquid, i]).filter(([c]) => c));
 let sock = null, wsBackoff = 1000;
 function microOf(bbo) {
