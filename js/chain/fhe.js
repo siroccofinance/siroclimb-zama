@@ -30,42 +30,41 @@ export function getFhe() {
 }
 // ── encryption in a worker (fhe-worker.js): the input proof is ~3.5 s of CPU that froze the 3D scene on
 //    this thread. The page's own SDK instance stays for decryptions (light) and as a fallback.
-let worker = null, workerReady = null, workerOff = false, seq = 0;
-const pending = new Map();
-function encWorker() {
+// Two workers: `ahead` pre-encrypts the lobby's combinations one at a time (~4 s each), `now` serves a start
+// that finds nothing ready, so it never waits behind work done ahead.
+let workerOff = false, seq = 0;
+const pending = new Map(), workers = {};
+function encWorker(kind = 'ahead') {
   if (workerOff || typeof Worker === 'undefined') return null;
-  if (!worker) {
-    try { worker = new Worker(new URL('./fhe-worker.js', import.meta.url)); } catch { workerOff = true; return null; }
-    worker.onmessage = ({ data }) => { const p = pending.get(data.id); if (!p) return; pending.delete(data.id); data.ok ? p.res(data.v) : p.rej(new Error(data.err)); };
-    worker.onerror = () => { workerOff = true; pending.forEach(p => p.rej(new Error('encryption worker failed'))); pending.clear(); };
-    workerReady = call('init', { url: RELAYER_SDK_URL, rpc: RPC_URL }).catch(e => { workerOff = true; throw e; });
+  let w = workers[kind];
+  if (!w) {
+    w = workers[kind] = {};
+    try { w.worker = new Worker(new URL('./fhe-worker.js', import.meta.url)); } catch { workerOff = true; return null; }
+    w.worker.onmessage = ({ data }) => { const p = pending.get(data.id); if (!p) return; pending.delete(data.id); data.ok ? p.res(data.v) : p.rej(new Error(data.err)); };
+    w.worker.onerror = () => { workerOff = true; pending.forEach(p => p.rej(new Error('encryption worker failed'))); pending.clear(); };
+    w.ready = call(w, 'init', { url: RELAYER_SDK_URL, rpc: RPC_URL }).catch(e => { workerOff = true; throw e; });
   }
-  return workerReady;
+  return w;
 }
-function call(op, args) { return new Promise((res, rej) => { const id = ++seq; pending.set(id, { res, rej }); worker.postMessage({ id, op, args }); }); }
-// One encryption at a time (~4 s each). Lobby picks are speculative: a newer pick drops the older ones still
-// waiting, so a player who tries a few sides and stakes never queues seconds of stale work; a start goes first.
+function call(w, op, args) { return new Promise((res, rej) => { const id = ++seq; pending.set(id, { res, rej }); w.worker.postMessage({ id, op, args }); }); }
+// the `ahead` worker's queue: `first` jobs (the pick on screen) go before the background ones
 const jobs = []; let running = false;
-export class Superseded extends Error {}
-function pump() {
+function pump(w) {
   if (running || !jobs.length) return;
   const j = jobs.shift(); running = true;
-  call('encrypt', j.args).then(j.res, j.rej).finally(() => { running = false; pump(); });
+  call(w, 'encrypt', j.args).then(j.res, j.rej).finally(() => { running = false; pump(w); });
 }
-function queue(args, speculative) {
-  return new Promise((res, rej) => {
-    if (speculative) for (let i = jobs.length - 1; i >= 0; i--) if (jobs[i].speculative) jobs.splice(i, 1)[0].rej(new Superseded('superseded'));
-    const j = { args, speculative, res, rej };
-    speculative ? jobs.push(j) : jobs.unshift(j);
-    pump();
-  });
+function queue(w, args, first) {
+  return new Promise((res, rej) => { const j = { args, res, rej }; first ? jobs.unshift(j) : jobs.push(j); pump(w); });
 }
 // { contract, user, bool?, u64? } → { handles, inputProof }: in the worker, else on this thread
-async function encryptInput(args, speculative = false) {
-  const w = encWorker();
+// mode: 'now' (a start: its own worker), 'first' or 'later' (ahead of time, in the background worker's queue)
+async function encryptInput(args, mode = 'now') {
+  const w = encWorker(mode === 'now' ? 'now' : 'ahead');
   if (w) {
-    try { await w; return await queue({ ...args, u64: args.u64 == null ? null : String(args.u64) }, speculative); }
-    catch (e) { if (e instanceof Superseded || !workerOff) throw e; }   // the worker itself failed: this thread takes over
+    const a = { ...args, u64: args.u64 == null ? null : String(args.u64) };
+    try { await w.ready; return await (mode === 'now' ? call(w, 'encrypt', a) : queue(w, a, mode === 'first')); }
+    catch (e) { if (!workerOff) throw e; }                       // the worker itself failed: this thread takes over
   }
   const fhe = await getFhe();
   const input = fhe.createEncryptedInput(args.contract, args.user);
@@ -75,7 +74,7 @@ async function encryptInput(args, speculative = false) {
 }
 
 /** Starts loading the SDK and its WASM in the background (first encryption is then instant). */
-export const warmUp = () => { encWorker()?.catch(() => {}); return getFhe().catch(() => {}); };
+export const warmUp = () => { encWorker('ahead')?.ready.catch(() => {}); encWorker('now')?.ready.catch(() => {}); return getFhe().catch(() => {}); };
 
 /** A relayer request can hang without an answer: give up after `ms` and try again (3 attempts). */
 async function relayer(fn, ms, what) {
@@ -88,9 +87,9 @@ async function relayer(fn, ms, what) {
 const hex = b => '0x' + Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
 
 /** Encrypts a run's side (ebool) and optionally its stake (euint64, 6 decimals) for `sender`. */
-export async function encryptRun(sender, long, stakeUnits, { speculative = false } = {}) {
-  const run = () => encryptInput({ contract: ADDR.Siroclimb, user: sender, bool: long, u64: stakeUnits }, speculative);
-  const enc = speculative ? await run() : await relayer(run, 40_000, 'encryption');
+export async function encryptRun(sender, long, stakeUnits, { mode = 'now' } = {}) {
+  const run = () => encryptInput({ contract: ADDR.Siroclimb, user: sender, bool: long, u64: stakeUnits }, mode);
+  const enc = mode === 'now' ? await relayer(run, 40_000, 'encryption') : await run();
   return { handles: enc.handles.map(hex), proof: hex(enc.inputProof) };
 }
 
