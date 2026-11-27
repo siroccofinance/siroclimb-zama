@@ -325,13 +325,15 @@ function buildLadder(l) {
 let gTicks = [];
 function gaugeFrame(tr) {
   const n = run.ladder.length - 1, k = shownStep, last = k >= n;
-  const p = last ? 0 : (tr % run.stepEvery) / run.stepEvery;
+  // a packed run stops at its tier: the bar does not fill toward a step it will never reach
+  const capped = !last && run.pack?.maxLeverage && run.ladder[k] >= run.pack.maxLeverage;
+  const p = last || capped ? 0 : (tr % run.stepEvery) / run.stepEvery;
   const f = Math.min(1, (k + p) / n);
   $('#gFill').style.transform = `scaleY(${f.toFixed(4)})`;
   $('#gKnob').style.bottom = (k / n * 100).toFixed(2) + '%';        // the cursor sits on the current level, the bar fills toward the next
   $('#gNow').textContent = levTxt(run.ladder[k]);
   gTicks.forEach((li, i) => { li.classList.toggle('is-done', i < k); li.classList.toggle('is-now', i === k); });
-  $('#gNext').textContent = last ? 'Max leverage' : `Next ${levTxt(run.ladder[k + 1])} in ${Math.max(1, Math.ceil(run.stepEvery * (1 - p)))}s`;
+  $('#gNext').textContent = last ? 'Max leverage' : capped ? `${run.pack.tier} pack max` : `Next ${levTxt(run.ladder[k + 1])} in ${Math.max(1, Math.ceil(run.stepEvery * (1 - p)))}s`;
 }
 function enterGame(r) {
   if (!r || run) return;
